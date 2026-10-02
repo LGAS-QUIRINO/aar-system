@@ -50,7 +50,7 @@ export async function setup(refs, params) {
   function officialsRows() {
     return s.officials.map((o, i) => `<div class="t-row off-row">
       <select class="input ${ch(i, 'title')}" style="grid-area:title" data-o="${i}" data-k="title" aria-label="Title" ${dis}>${TITLES.map((t) => `<option ${o.title === t ? 'selected' : ''} value="${t}">${t || '–'}</option>`).join('')}</select>
-      <input class="input ${ch(i, 'name')}" style="grid-area:name" data-o="${i}" data-k="name" value="${esc(o.name)}" placeholder="e.g. Walter S. Miguel" aria-label="Full Name" ${dis}>
+      <input class="input ${ch(i, 'name')}" style="grid-area:name" data-o="${i}" data-k="name" value="${esc(o.name)}" aria-label="Full Name" ${dis}>
       ${editable ? `<button class="x" style="grid-area:del" data-del="${i}" aria-label="Remove ${esc(o.pos || 'official')}" title="Remove">×</button>` : ''}
       <label class="check" style="grid-area:act" title="Acting / OIC"><input type="checkbox" data-o="${i}" data-k="acting" ${o.acting ? 'checked' : ''} ${dis}>Acting</label>
       <input class="input ${ch(i, 'pos')}" style="grid-area:pos" data-o="${i}" data-k="pos" value="${esc(o.pos)}" placeholder="Position" aria-label="Position" ${dis}>
@@ -125,10 +125,10 @@ export async function setup(refs, params) {
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">3</span><h2>Officials for the AOM</h2></div><span class="hint" id="carry"></span></div>
         <div class="t-head off-row"><span style="grid-area:title">Title</span><span style="grid-area:name">Full Name · Position</span><span style="grid-area:role">AOM Role</span></div>
         <div id="officials">${officialsRows()}</div>
-        ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div><span class="hint">Type names in normal letters, as they should appear in the Notes (e.g. Walter S. Miguel). AOMs print them in capitals automatically. Add others when an AOM is addressed to them, e.g. the BAC Chairperson. Highlighted fields changed from the previous audit.</span></div>' : ''}
+        ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div><span class="hint">Type names in normal letters, as they should appear in the Notes (e.g. Juan A. Cruz). AOMs print them in capitals automatically. Add others when an AOM is addressed to them, e.g. the BAC Chairperson. Highlighted fields changed from the previous audit.</span></div>' : ''}
       </section>
-      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the officials list in the Notes to Financial Statements</span></div>
-        <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" placeholder="e.g. Edgar Ranche" ${dis}></div>`).join('')}</div></div></section>
+      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the officials list in the Notes to Financial Statements (e.g. Juan A. Cruz)</span></div>
+        <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}></div>`).join('')}</div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">5</span><h2>Audit Team</h2></div></div><div class="panel-body" id="teampanel">${teamPanel()}</div></section>
       ${editable ? `<div class="panel" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;bottom:12px;z-index:5">
         <span class="save-state saved"><span class="d"></span>All Changes Saved</span>
