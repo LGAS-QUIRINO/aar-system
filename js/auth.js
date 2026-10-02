@@ -1,0 +1,67 @@
+// Sign-in. Real mode uses Google Sign-In (ID token). Demo Mode picks a demo user.
+import { CONFIG, DEMO } from './config.js';
+import { db } from './db.js';
+
+let session = null;          // { email, token, exp }
+let waiting = [];
+
+function decode(jwt) {
+  const p = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(decodeURIComponent(escape(atob(p))));
+}
+
+function onCredential(resp) {
+  const info = decode(resp.credential);
+  session = { email: String(info.email).toLowerCase(), token: resp.credential, exp: info.exp * 1000, name: info.name, picture: info.picture };
+  db.put('meta', session, 'session');
+  waiting.forEach((w) => w.resolve(session.token)); waiting = [];
+  window.dispatchEvent(new CustomEvent('signed-in', { detail: session }));
+}
+
+let gisReady = null;
+function loadGis() {
+  if (gisReady) return gisReady;
+  gisReady = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = () => {
+      window.google.accounts.id.initialize({ client_id: CONFIG.CLIENT_ID, callback: onCredential, auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
+      resolve(window.google);
+    };
+    s.onerror = () => { gisReady = null; reject(new Error('Google Sign-In could not load. Check the internet connection.')); };
+    document.head.appendChild(s);
+  });
+  return gisReady;
+}
+
+export const auth = {
+  async restore() { session = (await db.get('meta', 'session')) || null; return session; },
+  get email() { return session && session.email; },
+  get session() { return session; },
+  async renderButton(el) {
+    const g = await loadGis();
+    g.accounts.id.renderButton(el, { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'rectangular', width: 300 });
+    g.accounts.id.prompt();
+  },
+  async demoSignIn(email) {
+    session = { email, token: 'demo', exp: Date.now() + 3650 * 864e5 };
+    await db.put('meta', session, 'session');
+  },
+  // A fresh token for the server. Throws SIGNIN_NEEDED when Google needs the user to click again.
+  async getToken() {
+    if (DEMO) return 'demo';
+    if (session && session.token && session.exp > Date.now() + 60000) return session.token;
+    if (!navigator.onLine) throw new Error('OFFLINE');
+    const g = await loadGis();
+    return new Promise((resolve, reject) => {
+      const t = setTimeout(() => { waiting = waiting.filter((w) => w.resolve !== resolve); reject(new Error('SIGNIN_NEEDED')); }, 10000);
+      waiting.push({ resolve: (v) => { clearTimeout(t); resolve(v); } });
+      g.accounts.id.prompt();
+    });
+  },
+  async signOut() {
+    session = null;
+    await db.del('meta', 'session');
+    if (!DEMO && window.google) window.google.accounts.id.disableAutoSelect();
+  }
+};
