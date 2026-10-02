@@ -7,7 +7,7 @@ const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', '
 const PERMS = [
   ['Encode setup, findings, AOM drafts', 1, 1, 1, 0], ['Forward to Audit Team Leader', 1, 0, 0, 0], ['Review, correct, return', 0, 1, 1, 0],
   ['Approve and forward to Supervising Auditor', 0, 1, 0, 0], ['Final approval, lock numbers', 0, 0, 1, 0], ['Reopen a final document', 0, 0, 1, 0],
-  ['Print final copies', 1, 1, 1, 0], ['Approve AOM Pool updates', 0, 0, 1, 1], ['Manage users and LGU list', 0, 0, 0, 1]
+  ['Print final copies', 1, 1, 1, 0], ['Approve AOM Library updates', 0, 0, 1, 1], ['Manage users and LGU list', 0, 0, 0, 1]
 ];
 
 export async function users(refs) {

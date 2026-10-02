@@ -1,6 +1,6 @@
 import { syncState, syncNow } from './sync.js';
 import { ROLE_NAMES, nice, initials, timeAgo } from './format.js';
-import { DEMO } from './config.js';
+import { DEMO, CONFIG } from './config.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const $ = (sel, root = document) => root.querySelector(sel);
@@ -55,10 +55,11 @@ export const confirmBox = (title, text, okLabel = 'OK', cls = 'primary') =>
 const NAV = [
   { href: '#/dashboard', label: 'Dashboard', icon: '▦' },
   { href: '#/audits', label: 'My Audit', icon: '▤' },
-  { label: 'AOM Drafts', icon: '✎', phase: 2 },
+  { href: '#/drafts', label: 'AOM Drafts', icon: '✎', count: 'drafts' },
+  { href: '#/review', label: 'For My Review', icon: '✓', count: 'review', reviewer: true },
   { label: 'SAOR', icon: '☰', phase: 3 },
   { label: 'BAAR Reports', icon: '▣', phase: 4 },
-  { label: 'AOM Pool', icon: '❏', phase: 2 }
+  { href: '#/library', label: 'AOM Library', icon: '❏' }
 ];
 const ADMIN_NAV = [
   { href: '#/users', label: 'Users & Roles', icon: '◉' },
@@ -72,10 +73,11 @@ export function roleLine(me) {
   return [me.position, [main, r.includes('admin') ? 'Admin' : ''].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
 }
 
-export function shell({ me, team, active, crumbs, body }) {
+export function shell({ me, team, active, crumbs, body, counts = {} }) {
   const isAdmin = (me.roles || []).includes('admin');
-  const link = (n) => n.href
-    ? `<a href="${n.href}" class="${active === n.href ? 'active' : ''}"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}</a>`
+  const reviewer = (me.roles || []).some((r) => r === 'atl' || r === 'sa');
+  const link = (n) => n.reviewer && !reviewer ? '' : n.href
+    ? `<a href="${n.href}" class="${active === n.href ? 'active' : ''}"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}${n.count && counts[n.count] ? `<span class="count">${counts[n.count]}</span>` : ''}</a>`
     : `<a class="disabled" aria-disabled="true"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}<span class="soon">Phase ${n.phase}</span></a>`;
   return `<div class="layout">
     <aside class="side">
@@ -88,7 +90,7 @@ export function shell({ me, team, active, crumbs, body }) {
       <header class="topbar">
         <div class="crumbs">${crumbs}</div>
         <div class="me">
-          ${DEMO ? '<span class="pill violet">Demo Mode</span>' : ''}
+          ${DEMO ? '<span class="pill violet">Demo Mode</span>' : ''}${CONFIG.LABEL ? `<span class="pill warn">${esc(CONFIG.LABEL)}</span>` : ''}
           <div class="avatar" aria-hidden="true">${esc(initials(me.name))}</div>
           <div class="who"><b>${esc(nice(me.name))}</b><span>${esc(roleLine(me))}</span></div>
           <button class="btn ghost sm" id="sign-out">Sign Out</button>

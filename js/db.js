@@ -1,5 +1,7 @@
 // Local storage on this device (IndexedDB). Falls back to memory if the browser blocks it.
-const NAME = 'aar-system', VER = 1;
+// Each copy of the app (e.g. /aar-system/ and /aar-training/) keeps its own data on the computer.
+const SCOPE = (location.pathname.split('/')[1] || '').replace(/[^a-z0-9-]/gi, '');
+const NAME = !SCOPE || SCOPE === 'aar-system' ? 'aar-system' : 'aar-system-' + SCOPE, VER = 1;
 let dbp = null, mem = null;
 
 function open() {

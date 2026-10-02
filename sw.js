@@ -1,12 +1,16 @@
 // Keeps the app working offline. Bump VERSION on every release so devices pick up the new files.
-const VERSION = 'aar-v1.0.0';
+const RELEASE = 'v2.0.0';
+const VERSION = 'aar|' + self.registration.scope + '|' + RELEASE;   // each copy of the app has its own cache
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/coa-logo.png', 'img/icon-192.png', 'img/icon-512.png', 'data-coa.json',
   'js/app.js', 'js/config.js', 'js/db.js', 'js/store.js', 'js/sync.js', 'js/api.js', 'js/auth.js', 'js/demo-server.js', 'js/seed.js', 'js/ui.js', 'js/format.js', 'js/refs.js',
-  'js/views/login.js', 'js/views/dashboard.js', 'js/views/audits.js', 'js/views/setup.js', 'js/views/users.js', 'js/views/lgus.js'];
+  'js/views/login.js', 'js/views/dashboard.js', 'js/views/audits.js', 'js/views/setup.js', 'js/views/users.js', 'js/views/lgus.js',
+  'js/aom.js', 'js/auditctx.js', 'js/blockeditor.js', 'js/docx-aom.js', 'js/wp.js', 'js/library-seed.js',
+  'js/views/findings.js', 'js/views/aoms.js', 'js/views/print.js', 'js/views/review.js', 'js/views/library.js', 'js/views/drafts.js',
+  'img/letterhead.jpg', 'lib/xlsx.full.min.js', 'lib/docx.min.js'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
-  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION && (k.startsWith('aar|' + self.registration.scope + '|') || k.startsWith('aar-v'))).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);

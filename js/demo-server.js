@@ -3,8 +3,9 @@
 import { db } from './db.js';
 import { seedData, DEMO_USERS } from './seed.js';
 
-const TABLES = ['users', 'teams', 'lgus', 'audits', 'auditlog'];
-const REFERENCE = ['users', 'teams', 'lgus'];
+const TABLES = ['users', 'teams', 'lgus', 'audits', 'auditlog', 'aom_library', 'aoms'];
+const REFERENCE = ['users', 'teams', 'lgus', 'aom_library'];
+const ADMIN_ONLY = ['users', 'teams', 'lgus'];
 let clock = 0;
 const now = () => { const t = Math.max(Date.now(), clock + 1); clock = t; return new Date(t).toISOString(); };
 
@@ -33,6 +34,7 @@ async function load() {
     state.audits['audit-demo-cabaruan-2025'].scope = 'team-2';
     await db.put('demo', state, 'state');
   }
+  TABLES.forEach((t) => { if (!state[t]) state[t] = {}; });
   return state;
 }
 
@@ -62,7 +64,8 @@ export const demoServer = {
       const results = (payload.changes || []).map((c) => {
         try {
           if (!TABLES.includes(c.table)) throw new Error('Unknown table');
-          if (REFERENCE.includes(c.table) && !roles(user).includes('admin')) throw new Error('Only the Admin can change ' + c.table + '.');
+          if (ADMIN_ONLY.includes(c.table) && !roles(user).includes('admin')) throw new Error('Only the Admin can change ' + c.table + '.');
+          if (c.table === 'aom_library' && !roles(user).some((r) => r === 'admin' || r === 'sa')) throw new Error('Only the Supervising Auditor or Admin can change the AOM Library.');
           const scope = REFERENCE.includes(c.table) ? '*' : String((c.data && c.data.teamId) || '');
           if (scope !== '*' && !seesAll(user) && !(user.data.teamIds || []).includes(scope)) throw new Error('This record belongs to another team.');
           const cur = state[c.table][c.id];

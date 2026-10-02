@@ -1,4 +1,5 @@
 import { store } from '../store.js';
+import { ST } from '../aom.js';
 import { esc, pill } from '../ui.js';
 import { has, myTeamIds } from '../refs.js';
 import { periodPhrase, timeAgo, nice } from '../format.js';
@@ -20,12 +21,13 @@ export function auditTable(rows, refs, limit) {
     ${rows.slice(0, limit || rows.length).map(({ rec, lgu, mun }) => {
       const d = rec.data;
       const stageIdx = Math.max(0, STAGES.indexOf(d.stage || 'Setup'));
-      return `<div class="t-row click" style="${cols}" data-go="#/audits/${esc(rec.id)}/setup" tabindex="0" role="link">
+      const go = d.stage === 'Setup' || !d.stage ? 'setup' : d.stage === 'Findings and AOMs' ? 'findings' : 'aoms';
+      return `<div class="t-row click" style="${cols}" data-go="#/audits/${esc(rec.id)}/${go}" tabindex="0" role="link">
         <span><b>${esc(lgu ? lgu.data.name : '?')}</b><br><small style="color:var(--muted)">${esc(mun ? mun.data.name : '')} · ${esc(d.auditYear)}</small></span>
         <span>${esc(periodPhrase(d.periodFrom, d.periodTo))}</span>
         <span><div class="steps" aria-label="Stage ${stageIdx + 1} of 6">${STAGES.map((_, i) => `<i class="${i < stageIdx ? 'done' : i === stageIdx ? 'now' : ''}"></i>`).join('')}</div><small>${esc(d.stage || 'Setup')}</small></span>
         <span>${rec.pending ? pill('On Device', 'warn') : pill(d.status || 'In Progress', d.status === 'Final' ? 'ok' : 'grey')}</span>
-        <span><button class="btn sm ghost" data-go="#/audits/${esc(rec.id)}/setup">${d.stage === 'Setup' || !d.stage ? 'Finish Setup' : 'Open'} →</button></span>
+        <span><button class="btn sm ghost" data-go="#/audits/${esc(rec.id)}/${go}">${go === 'setup' ? 'Finish Setup' : go === 'findings' ? 'Select Findings' : 'Open AOMs'} →</button></span>
       </div>`;
     }).join('')}`;
 }
@@ -40,6 +42,11 @@ export async function dashboard(refs) {
   const thisYear = rows.filter((r) => Number(r.rec.data.auditYear) === year);
   const pendingSetup = rows.filter((r) => (r.rec.data.stage || 'Setup') === 'Setup').length;
   const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa');
+  const ids = new Set(rows.map((r) => r.rec.id));
+  const am = (await store.list('aoms')).filter((a) => ids.has(a.data.auditId));
+  const cnt = (f) => am.filter(f).length;
+  const nDraft = cnt((a) => (a.data.status || ST.DRAFT) === ST.DRAFT), nRet = cnt((a) => a.data.status === ST.RETURNED);
+  const nAtl = cnt((a) => [ST.WITH_ATL, ST.ATL].includes(a.data.status)), nSa = cnt((a) => [ST.WITH_SA, ST.SA].includes(a.data.status));
   return {
     active: '#/dashboard', crumbs: '<b>Dashboard</b>',
     body: `<div class="page-head"><div><h1>${greet}, ${esc(first)}</h1>
@@ -49,8 +56,8 @@ export async function dashboard(refs) {
       <div class="grid-4">
         <div class="panel kpi"><span>Barangay Audits</span><b>${thisYear.length}</b><small>Audit Year ${year}</small></div>
         <div class="panel kpi ${pendingSetup ? 'warn' : ''}"><span>Setup to Finish</span><b>${pendingSetup}</b><small>officials and period to confirm</small></div>
-        <div class="panel kpi"><span>AOM Drafts</span><b>–</b><small>available in Phase 2</small></div>
-        <div class="panel kpi"><span>Final BAARs</span><b>${rows.filter((r) => r.rec.data.status === 'Final').length}</b><small>of ${thisYear.length}</small></div>
+        <div class="panel kpi"><span>AOM Drafts in Progress</span><b>${nDraft}</b><small>${nAtl + nSa} with ATL / SA for review</small></div>
+        <div class="panel kpi ${nRet ? 'warn' : ''}"><span>Returned</span><b>${nRet}</b><small>with reviewer comments to address</small></div>
       </div>
       <div class="split">
         <section class="panel"><div class="panel-head"><h2>My Barangay Audits</h2><a class="btn sm ghost" href="#/audits">View All Audits</a></div>${auditTable(rows, refs, 8)}</section>

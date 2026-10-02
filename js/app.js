@@ -12,8 +12,16 @@ import { audits } from './views/audits.js';
 import { setup } from './views/setup.js';
 import { users } from './views/users.js';
 import { lgus } from './views/lgus.js';
+import { findings } from './views/findings.js';
+import { aoms } from './views/aoms.js';
+import { print } from './views/print.js';
+import { review, reviewList, reviewQueue } from './views/review.js';
+import { pool } from './views/library.js';
+import { drafts } from './views/drafts.js';
+import { ST } from './aom.js';
 
 const app = document.getElementById('app');
+let lastRoute = '';
 let started = false, lastHash = location.hash, skipGuard = false, renderTimer = null;
 
 function route(hash) {
@@ -22,6 +30,13 @@ function route(hash) {
   const p = path.split('/').filter(Boolean);
   if (p[0] === 'audits' && p[1] === 'new') return [setup, {}, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'setup') return [setup, { id: p[1] }, q];
+  if (p[0] === 'audits' && p[1] && p[2] === 'findings') return [findings, { id: p[1] }, q];
+  if (p[0] === 'audits' && p[1] && p[2] === 'aoms') return [aoms, { id: p[1] }, q];
+  if (p[0] === 'audits' && p[1] && p[2] === 'print') return [print, { id: p[1] }, q];
+  if (p[0] === 'review' && p[1]) return [review, { id: p[1] }, q];
+  if (p[0] === 'review') return [reviewList, {}, q];
+  if (p[0] === 'library') return [pool, {}, q];
+  if (p[0] === 'drafts') return [drafts, {}, q];
   if (p[0] === 'audits') return [audits, {}, q];
   if (p[0] === 'users') return [users, {}, q];
   if (p[0] === 'lgus') return [lgus, {}, q];
@@ -32,16 +47,25 @@ async function render() {
   const refs = await loadRefs();
   if (!refs.me) return showLogin('Your Gmail is not in the user list on this device yet. Connect to the internet and sign in again.');
   const [view, params, q] = route(location.hash);
+  const sameRoute = lastRoute === location.hash.split('?')[0];
   const team = refs.team[(refs.me.teamIds || [])[0]];
   const v = await view(refs, params, q);
   const y = window.scrollY;
-  app.innerHTML = shell({ me: refs.me, team, active: v.active, crumbs: v.crumbs, body: v.body });
+  const counts = await navCounts(refs);
+  app.innerHTML = shell({ me: refs.me, team, active: v.active, crumbs: v.crumbs, body: v.body, counts });
   guard.dirty = false; guard.save = null;
   wireShell(signOut);
   app.addEventListener('click', clickGo);
   if (v.mount) v.mount($('#page'));
-  if (v.keepScroll) window.scrollTo(0, y);
+  if (v.keepScroll || sameRoute) window.scrollTo(0, y);
+  lastRoute = location.hash.split('?')[0];
   const h = $('#page h1'); document.title = (h ? h.textContent + ' · ' : '') + 'Annual Audit Report System';
+}
+async function navCounts(refs) {
+  const all = await store.list('aoms');
+  const mine = all.filter((a) => (a.data.memberId === refs.me.id) && [ST.DRAFT, ST.RETURNED].includes(a.data.status || ST.DRAFT));
+  const q = await reviewQueue(refs);
+  return { drafts: mine.length, review: q.reduce((n, x) => n + x.list.length, 0) };
 }
 function clickGo(e) {
   const t = e.target.closest('[data-go]');
@@ -101,7 +125,8 @@ window.addEventListener('need-signin', async () => {
 });
 
 async function signOut() {
-  const n = await store.pendingCount();
+  let n = await store.pendingCount();
+  if (n && navigator.onLine) { toast('Syncing your saved work before signing out…'); await syncNow(); n = await store.pendingCount(); }
   if (n && !(await confirmBox('Sign Out', `${n} saved change${n > 1 ? 's have' : ' has'} not reached the server yet. Signing out removes ${n > 1 ? 'them' : 'it'} from this device. Sync first if you can.`, 'Sign Out Anyway', 'primary'))) return;
   if (guard.dirty && !(await confirmBox('Unsaved Changes', 'You have unsaved changes on this screen. Sign out anyway?', 'Sign Out'))) return;
   setDirty(false);
