@@ -237,13 +237,13 @@ export function buildLetter(info) {
   const rangeText = first === last ? aomNo(audit.auditYear, first, audit.periodFrom, audit.periodTo) : aomRange(audit.auditYear, first, last, audit.periodFrom, audit.periodTo);
   const addr = `${upper(lgu.name)}, ${upper(mun.name)}, QUIRINO`;
   const body = [];
-  body.push({ kind: 'image', src: 'img/letterhead.jpg', w: 4.18, h: 1.07 });
+  body.push({ kind: 'image', src: 'img/letterhead.jpg', w: 3.42, h: 0.9 });
   body.push(P('REGIONAL OFFICE NO. II', { bold: true, align: 'center' }));
   body.push(P('PROVINCE OF QUIRINO', { align: 'center' }));
   body.push(P('PROVINCIAL SATELLITE AUDITING OFFICE', { align: 'center' }));
   body.push(P('Capitol Hills, Cabarroguis, Quirino', { align: 'center', size: 18 }));
   body.push(BL());
-  body.push(P('Office of the Auditor' + (team && team.officeCode ? ' – ' + team.officeCode : ''), { bold: true, align: 'center' }));
+  body.push(P('Office of the Auditor' + (team && team.officeCode ? ' – ' + team.officeCode : ''), { bold: true, align: 'center', ruleBelow: true }));
   body.push(BL());
   body.push(P('AOM No. ' + rangeText, { ind: { left: 4770 } }));
   body.push(P('Date:  ' + (longDate(audit.aomDate) || '__________'), { ind: { left: 4770 } }));
@@ -352,7 +352,7 @@ export function paraHTML(p, mark = true) {
   if (ind.hanging) st.push(`text-indent:-${tw(ind.hanging)}`);
   if (p.align) st.push(`text-align:${p.align === 'both' ? 'justify' : p.align}`);
   if (p.size) st.push(`font-size:${p.size / 2}pt`);
-  const cls = [p.bold ? 'b' : '', p.italic ? 'i' : ''].join(' ');
+  const cls = [p.bold ? 'b' : '', p.italic ? 'i' : '', p.ruleBelow ? 'rule-below' : ''].join(' ');
   let runs = p.runs, labelText = p.label;
   const tab = runs.findIndex((r) => r.t === '\t');
   if (tab >= 0 && ind.hanging) { labelText = runs.slice(0, tab).map((r) => r.t).join(''); runs = runs.slice(tab + 1); }
@@ -383,7 +383,10 @@ export const DOC_CSS = `
 .aom-doc p.b{font-weight:700}.aom-doc p.i{font-style:italic}
 .aom-doc .lbl{display:inline-block;text-indent:0}
 .aom-doc .tab{display:inline-block;width:1in}
-.aom-doc .lh{text-align:center}
+.aom-doc .lh{text-align:center;line-height:0}
+.aom-doc .lh img{display:inline-block}
+.aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
+.aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
 .aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
 .aom-t th{font-weight:700;text-align:center}

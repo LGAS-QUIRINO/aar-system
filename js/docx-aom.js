@@ -5,7 +5,7 @@ const isNum = (s) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 export async function downloadWord(doc) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule } = D;
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule, BorderStyle } = D;
   const FONT = 'Times New Roman';
   const run = (r, p) => new TextRun({ text: r.t, bold: !!(p.bold || r.b), italics: !!p.italic, font: FONT, size: p.size || 24 });
   const align = (a) => ({ both: AlignmentType.JUSTIFIED, center: AlignmentType.CENTER, right: AlignmentType.RIGHT }[a] || AlignmentType.LEFT);
@@ -21,7 +21,8 @@ export async function downloadWord(doc) {
     return new Paragraph({
       children: kids, alignment: align(p.align),
       indent: { left: ind.left || 0, right: ind.right || 0, hanging: ind.hanging || undefined, firstLine: ind.firstLine || undefined },
-      spacing: { after: 0, line: 240 }
+      spacing: { after: 0, line: 240 },
+      border: p.ruleBelow ? { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 24, color: '000000', space: 4 } } : undefined
     });
   };
   const cellP = (text, o = {}) => new Paragraph({ alignment: o.align || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(text || ''), bold: !!o.bold, font: FONT, size: o.size || 22 })] });
@@ -55,7 +56,7 @@ export async function downloadWord(doc) {
     if (p.kind === 'table') return table(p);
     if (p.kind === 'image') {
       if (!letterhead) return new Paragraph({ children: [] });
-      return new Paragraph({ alignment: AlignmentType.CENTER, children: [new ImageRun({ type: 'jpg', data: letterhead, transformation: { width: Math.round(p.w * 96), height: Math.round(p.h * 96) } })] });
+      return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new ImageRun({ type: 'jpg', data: letterhead, transformation: { width: Math.round(p.w * 96), height: Math.round(p.h * 96) } })] });
     }
     return para(p);
   });

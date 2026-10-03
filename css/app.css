@@ -232,7 +232,10 @@ a.t-row:focus-visible, .t-row:focus-visible, .btn:focus-visible { outline: 2px s
 .aom-doc p.b{font-weight:700}.aom-doc p.i{font-style:italic}
 .aom-doc .lbl{display:inline-block;text-indent:0}
 .aom-doc .tab{display:inline-block;width:1in}
-.aom-doc .lh{text-align:center}
+.aom-doc .lh{text-align:center;line-height:0}
+.aom-doc .lh img{display:inline-block}
+.aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
+.aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
 .aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
 .aom-t th{font-weight:700;text-align:center}
