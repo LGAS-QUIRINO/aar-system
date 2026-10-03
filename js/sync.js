@@ -32,6 +32,7 @@ async function doSync() {
       if (r.status === 'ok') {
         if (untouched) { await db.del('outbox', [r.table, r.id]); await db.put('records', { table: r.table, ...r.record, pending: false }); }
         else if (still) { still.baseVersion = r.record.version; await db.put('outbox', still); }
+        continue;            // our own change reached the server: nothing new to show on screen
       } else {
         // Keep a copy of the change that could not be saved, so nothing typed is lost.
         const kept = (await db.get('meta', 'rejected')) || [];
@@ -55,6 +56,8 @@ async function doSync() {
   for (const [table, recs] of Object.entries(res.records)) {
     for (const rec of recs) {
       if (queued.has(table + '|' + rec.id)) continue;         // local unsaved-to-server change wins until it is pushed
+      const local = await db.get('records', [table, rec.id]);
+      if (local && !local.pending && local.version === rec.version) continue;   // already have this copy (often our own save)
       await db.put('records', { table, ...rec, pending: false });
       changed = true;
     }

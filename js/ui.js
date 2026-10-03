@@ -7,9 +7,12 @@ export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
 /* ── Unsaved changes guard ── */
-export const guard = { dirty: false, save: null };
+// dirty: this screen has unsaved changes and knows how to save them (guard.save).
+// touched: something was typed or ticked on this screen that is not saved yet (any field, on every screen).
+export const guard = { dirty: false, save: null, touched: false };
 export function setDirty(on, saveFn) {
   guard.dirty = on; if (saveFn !== undefined) guard.save = saveFn;
+  if (!on) guard.touched = false;
   $$('.save-state').forEach((el) => {
     el.className = 'save-state ' + (on ? 'dirty' : 'saved');
     el.innerHTML = on ? '<span class="d"></span>Unsaved Changes' : '<span class="d"></span>All Changes Saved';

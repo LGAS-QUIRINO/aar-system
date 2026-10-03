@@ -53,7 +53,7 @@ async function render() {
   const y = window.scrollY;
   const counts = await navCounts(refs);
   app.innerHTML = shell({ me: refs.me, team, active: v.active, crumbs: v.crumbs, body: v.body, counts });
-  guard.dirty = false; guard.save = null;
+  guard.dirty = false; guard.save = null; guard.touched = false;
   wireShell(signOut);
   app.addEventListener('click', clickGo);
   if (v.mount) v.mount($('#page'));
@@ -72,29 +72,85 @@ function clickGo(e) {
   if (t && !e.target.closest('a[href]:not([data-go]), button:not([data-go]), select, input')) location.hash = t.dataset.go;
 }
 
-window.addEventListener('hashchange', async () => {
-  if (skipGuard) { skipGuard = false; lastHash = location.hash; return; }
+/* ── Never lose what the person is typing (every screen, every phase) ── */
+// Anything typed or ticked on a screen marks it as touched until it is saved or the screen is redrawn.
+// Search boxes don't count. A field can opt out with data-transient.
+function markTouched(e) {
+  const t = e.target;
+  if (!t || !t.closest || !t.closest('#page') || t.closest('[data-transient]') || /find|search/i.test(t.id || '')) return;
+  guard.touched = true;
+}
+app.addEventListener('input', markTouched, true);
+app.addEventListener('change', markTouched, true);
+
+// Busy = redrawing now would wipe or interrupt something.
+function isBusy() {
+  if (guard.dirty || guard.touched || document.querySelector('.modal-bg')) return true;
+  const a = document.activeElement;
+  if (a && a.closest && a.closest('#page') && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || a.isContentEditable || (a.tagName === 'INPUT' && !['checkbox', 'radio', 'button', 'submit'].includes(a.type)))) return true;
+  const sel = window.getSelection();
+  return !!(sel && !sel.isCollapsed && sel.anchorNode && app.contains(sel.anchorNode));
+}
+
+// Ask before unsaved work is lost. verb: 'Leave' or 'Refresh'. Returns true to go ahead.
+async function okToDrop(verb) {
   if (guard.dirty) {
-    const target = location.hash;
-    skipGuard = true; location.hash = lastHash;           // stay until the user decides
     const choice = await modal({
       title: 'Unsaved Changes',
-      body: '<p style="margin:0;font-size:15px">You have changes that are not saved yet. Save them before leaving?</p>',
-      buttons: [{ label: 'Stay', cls: 'ghost', value: 'stay' }, { label: 'Leave Without Saving', cls: 'ghost', value: 'leave' }, { label: 'Save and Leave', cls: 'primary', value: 'save' }]
+      body: `<p style="margin:0;font-size:15px">You have changes that are not saved yet. Save them first?</p>`,
+      buttons: [{ label: 'Stay', cls: 'ghost', value: 'stay' }, { label: `${verb} Without Saving`, cls: 'ghost', value: 'drop' }, { label: `Save and ${verb}`, cls: 'primary', value: 'save' }]
     });
-    if (choice === 'save' && guard.save) { const ok = await guard.save(); if (ok === false) return; }
-    if (choice === 'save' || choice === 'leave') { guard.dirty = false; location.hash = target; }
+    if (choice === 'save') { if (guard.save) { const ok = await guard.save(); if (ok === false) return false; } }
+    else if (choice !== 'drop') return false;
+  } else if (guard.touched) {
+    const choice = await modal({
+      title: 'Not Saved Yet',
+      body: `<p style="margin:0;font-size:15px">Something you typed or ticked on this screen is not saved yet. ${verb === 'Leave' ? 'Leave' : 'Refresh'} anyway?</p>`,
+      buttons: [{ label: 'Stay', cls: 'primary', value: 'stay' }, { label: `${verb} Anyway`, cls: 'ghost', value: 'drop' }]
+    });
+    if (choice !== 'drop') return false;
+  }
+  guard.dirty = false; guard.touched = false;
+  return true;
+}
+
+// Updates from others arrived while the person was busy: show a bar instead of redrawing under them.
+function showUpdatesBar() {
+  if (document.getElementById('upd-bar')) return;
+  const page = document.getElementById('page'); if (!page) return;
+  const bar = document.createElement('div');
+  bar.id = 'upd-bar'; bar.className = 'upd-bar'; bar.setAttribute('role', 'status');
+  bar.innerHTML = '<span><b>New updates are ready.</b> Refresh when you\'re done.</span><button class="btn sm primary" type="button">Refresh</button>';
+  bar.querySelector('button').onclick = async () => { if (await okToDrop('Refresh')) render(); };
+  page.prepend(bar);
+}
+
+window.addEventListener('hashchange', async () => {
+  if (skipGuard) { skipGuard = false; lastHash = location.hash; return; }
+  if (guard.dirty || guard.touched) {
+    const target = location.hash;
+    skipGuard = true; location.hash = lastHash;           // stay until the user decides
+    if (await okToDrop('Leave')) location.hash = target;
     return;
   }
   lastHash = location.hash;
   window.scrollTo(0, 0);
   render();
 });
-window.addEventListener('beforeunload', (e) => { if (guard.dirty) { e.preventDefault(); e.returnValue = ''; } });
+window.addEventListener('beforeunload', (e) => { if (guard.dirty || guard.touched) { e.preventDefault(); e.returnValue = ''; } });
 
-onChange(() => {
+// Redraw when data changes. The person's own saves ('local') redraw right away unless they still have unsaved
+// changes; changes from syncing redraw only when the person is not in the middle of something.
+let localChange = false;
+onChange((src) => {
+  if (src === 'local') localChange = true;
   clearTimeout(renderTimer);
-  renderTimer = setTimeout(() => { if (started && !guard.dirty && !document.querySelector('.modal-bg')) render().then(() => {}); }, 150);
+  renderTimer = setTimeout(() => {
+    const mine = localChange; localChange = false;
+    if (!started) return;
+    if (mine ? (guard.dirty || document.querySelector('.modal-bg')) : isBusy()) { if (!mine || guard.dirty) showUpdatesBar(); return; }
+    render().then(() => {});
+  }, 150);
 });
 
 /* ── Sign in / out ── */

@@ -1,7 +1,7 @@
 // Review View: the AOM shown like a Word document with tracked changes, and comments in the margin.
 // Used by the member (returned AOMs) and by the ATL and SA (during review).
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
-import { store } from './store.js';
+import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
 import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain } from './aom.js';
 import { initials, nice } from './format.js';
@@ -22,7 +22,7 @@ function partsOf(b) {
   if (b.type === 'criteria') return b.quoted ? [{ k: 'lead', cls: 'body' }, { k: 'text', cls: 'quote' }] : [{ k: 'text', cls: 'body' }];
   if (b.type === 'recommendation') return (b.items || []).length ? [{ k: 'lead', cls: 'rec' }, ...b.items.map((_, i) => ({ k: 'item' + i, cls: 'item', letter: letterOf(i) + '.' }))] : [{ k: 'text', cls: 'body' }];
   if (b.type === 'subheading') return [{ k: 'text', cls: 'sub' }];
-  if (b.type === 'table') return [{ k: 'caption', cls: 'body tbl', pre: `[AOM Table ${b.n || 1}${b.annex ? ', as an annex' : ''}] ` }];
+  if (b.type === 'table') return [{ k: 'caption', cls: 'body tcap' }];
   return [{ k: 'text', cls: 'body' }];
 }
 const partVal = (b, k) => (!b ? '' : k.startsWith('item') ? (b.items || [])[+k.slice(4)] || '' : b[k] || '');
@@ -58,6 +58,7 @@ export function mountReview(host, opts) {
   const nameOf = (email) => (email === me.email ? 'You' : nice(userOf(email).name || email));
   const iniOf = (who) => (!who ? '' : who.includes('@') ? initials(userOf(who).name || who) : who);
   const fill = (t) => fillText(t || '', vars);
+  const tableOf = (b) => ((data.wpData && data.wpData.tables) || {})[b.n || 1] || null;
 
   function render() {
     const base = (data.submitted && data.submitted.blocks) || null;
@@ -70,6 +71,24 @@ export function mountReview(host, opts) {
     const found = {};
 
     const partHTML = (blockId, before, after, k, cls, pre, letter, ini) => {
+      const html = inner(blockId, before, after, k);
+      const changed = before !== after;
+      return `<p class="${cls}" data-b="${blockId}" data-part="${k}">${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
+    };
+    // The working-paper table, cell by cell, so a number or a name in any cell can be commented on.
+    const tableHTML = (b, id) => {
+      const t = tableOf(b);
+      const head = `<div class="rv-thead"><span>AOM Table ${esc(b.n || 1)}${b.annex ? ' · printed as an annex' : ''}${t ? ' · from sheet “' + esc(t.sheet || '') + '”' : ''}</span>
+        ${opts.canAct && t ? `<button class="btn sm ghost" data-act="tblc" data-b="${id}">💬 Comment on this table</button>` : ''}</div>`;
+      if (!t) return head + '<p class="tbl">[Not imported yet. Import the working paper on the Findings screen.]</p>';
+      const num = (c) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(c).trim());
+      return head + `<div class="rv-tablewrap"><table class="rv-table">${t.rows.map((r, ri) => {
+        const total = ri > 0 && /total/i.test(r.join(' '));
+        return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? ''); const tag = ri === 0 ? 'th' : 'td';
+          return `<${tag} class="${ri && num(v) ? 'num' : ''}" data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</${tag}>`; }).join('')}</tr>`;
+      }).join('')}</table></div>`;
+    };
+    const inner = (blockId, before, after, k) => {
       const marks = [];
       (byBlock[blockId] || []).filter((c) => c.part === k && c.quote).forEach((c) => {
         const s = after.indexOf(c.quote);
@@ -92,8 +111,7 @@ export function mountReview(host, opts) {
           html += h;
         }
       }
-      const changed = before !== after;
-      return `<p class="${cls}" data-b="${blockId}" data-part="${k}">${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
+      return html;
     };
 
     const correctionCard = (id, label, before, after, kind) => {
@@ -117,7 +135,8 @@ export function mountReview(host, opts) {
       const showBox = opts.canAct && !c.resolved && (focus === 'c:' + c.id || (!ans && !mine) || typed[c.id]);
       cards.push(`<div class="rv-card cmt ${c.resolved ? 'resolved' : ''} ${focus === 'c:' + c.id ? 'on' : ''}" data-key="c:${c.id}" tabindex="0">
         <div class="who"><span class="ini">${esc(iniOf(c.by))}</span><b>${esc(nameOf(c.by))}</b><span>· ${esc(when(c.at))}</span></div>
-        ${c.quote ? `<div class="quote">“${esc(short(c.quote, 120))}”${found[c.id] === undefined && c.blockId ? ' <small>(these words were changed)</small>' : ''}</div>` : c.onCorrection ? '<div class="quote">On a correction</div>' : ''}
+        ${c.part === 'table' ? `<div class="quote">${esc(c.quote)}</div>`
+          : c.quote ? `<div class="quote">${c.where ? esc(c.where) + ': ' : ''}“${esc(short(c.quote, 120))}”${found[c.id] === undefined && c.blockId ? ' <small>(these words were changed)</small>' : ''}</div>` : c.onCorrection ? '<div class="quote">On a correction</div>' : ''}
         <div class="txt">${br(esc(c.text))}</div>
         ${(c.replies || []).map((r) => `<div class="reply"><div class="who"><span class="ini">${esc(iniOf(r.by))}</span><b>${esc(nameOf(r.by))}</b><span>· ${esc(when(r.at))}</span></div><div class="txt">${br(esc(r.text))}</div></div>`).join('')}
         ${c.resolved ? `<div class="acts"><span class="pill grey">Resolved by ${esc(nameOf(c.resolvedBy))}</span>${opts.canAct ? `<button class="btn sm ghost" data-act="reopen" data-c="${c.id}">Reopen</button>` : ''}</div>`
@@ -154,7 +173,8 @@ export function mountReview(host, opts) {
       const keys = partsOf(b);
       if (cur && old && cur.type === 'recommendation') partsOf(old).forEach((p) => { if (!keys.some((x) => x.k === p.k)) keys.push(p); });
       let html = '';
-      keys.forEach((p) => { html += partHTML(id, fill(partVal(old, p.k)), cur ? fill(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
+      keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; html += partHTML(id, fill(partVal(old, p.k)), cur ? fill(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
+      if (b.type === 'table') html += tableHTML(b, id);
       docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${html}</div>`);
       const label = BLOCK_LABELS[b.type] || 'Block';
       if (base && (!old || !cur || blockPlain(old) !== blockPlain(cur))) correctionCard(id, label, fill(old ? blockPlain(old) : ''), fill(cur ? blockPlain(cur) : ''), !old ? 'added' : !cur ? 'removed' : '');
@@ -164,7 +184,7 @@ export function mountReview(host, opts) {
     cs.filter((c) => !c.blockId || (c.blockId !== '_title' && !order.some((o) => o.id === c.blockId))).forEach(commentCard);
 
     const newCard = draft && !draft.corr ? `<div class="rv-card cmt on new" data-key="_new"><div class="who"><span class="ini">${esc(initials(me.name))}</span><b>New Comment</b></div>
-      <div class="quote">“${esc(short(draft.quote, 120))}”</div>${draftBox('Type your comment')}</div>` : '';
+      <div class="quote">${draft.part === 'table' ? esc(draft.quote) : `${draft.where ? esc(draft.where) + ': ' : ''}“${esc(short(draft.quote, 120))}”`}</div>${draftBox('Type your comment')}</div>` : '';
 
     host.innerHTML = `<div class="rv-work">
       <div class="rv-doc" id="rv-doc">${docParts.join('')}
@@ -194,6 +214,9 @@ export function mountReview(host, opts) {
     const marks = [...host.querySelectorAll(kind === 'c' ? `mark[data-c="${id}"]` : `[data-x="${id}"]`)];
     if (card) card.classList.add('on');
     marks.forEach((m) => m.classList.add('on'));
+    host.querySelectorAll('.on-tbl').forEach((e) => e.classList.remove('on-tbl'));
+    const cm = kind === 'c' ? (data.comments || []).find((c) => c.id === id) : null;
+    if (cm && cm.part === 'table') host.querySelector(`[data-block="${cm.blockId}"]`)?.classList.add('on-tbl');
     navUpdate();
     if (!scroll) return;
     const target = marks[0] || host.querySelector(`[data-block="${kind === 'c' ? (data.comments.find((c) => c.id === id) || {}).blockId : id}"]`);
@@ -213,6 +236,8 @@ export function mountReview(host, opts) {
     dirtyCheck();
     render();
     if (opts.onChange) opts.onChange(d);
+    // Redraw the page from the saved copy too, in case a sync redrew it from an older copy a moment ago.
+    emitChange('local');
   }
   function dirtyCheck() {
     const any = (draft && (draft.text || '').trim()) || Object.values(typed).some((t) => t && t.trim());
@@ -227,7 +252,7 @@ export function mountReview(host, opts) {
     await act((d) => {
       replies.forEach(([cid, t]) => { const c = d.comments.find((x) => x.id === cid); if (c) c.replies = [...(c.replies || []), { by: me.email, at: now, text: t.trim() }]; });
       if (dr) d.comments = [...(d.comments || []), dr.corr ? { id: 'c' + Date.now().toString(36), by: me.email, at: now, text: dr.text.trim(), blockId: dr.corr, onCorrection: true, replies: [], resolved: false }
-        : { id: 'c' + Date.now().toString(36), by: me.email, at: now, text: dr.text.trim(), quote: dr.quote, blockId: dr.blockId, part: dr.part, replies: [], resolved: false }];
+        : { id: 'c' + Date.now().toString(36), by: me.email, at: now, text: dr.text.trim(), quote: dr.quote, blockId: dr.blockId, part: dr.part, ...(dr.where ? { where: dr.where } : {}), replies: [], resolved: false }];
       replies.forEach(([cid]) => delete typed[cid]);
       draft = null;
     });
@@ -271,6 +296,7 @@ export function mountReview(host, opts) {
           toast('Original wording restored.', 'ok'); return;
         }
         case 'replyx': draft = { corr: b, text: '' }; focus = 'x:' + b; render(); return;
+        case 'tblc': { const tb = data.blocks.find((x) => x.id === b); draft = { blockId: b, part: 'table', quote: `AOM Table ${tb ? tb.n || 1 : ''} (whole table)`, text: '' }; focus = '_new'; render(); return; }
         case 'adddraft': if (!(draft && (draft.text || '').trim())) { toast('Type your comment first.', 'warn'); return; } await flush(); toast('Comment added.', 'ok'); return;
         case 'canceldraft': draft = null; dirtyCheck(); render(); return;
       }
@@ -326,10 +352,17 @@ export function mountReview(host, opts) {
     let quote = frag.textContent.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 300);
     const blockId = startEl.dataset.b, part = startEl.dataset.part;
     const curB = blockId === '_title' ? null : data.blocks.find((b) => b.id === blockId);
-    const full = blockId === '_title' ? fill(data.title) : curB ? fill(partVal(curB, part)) : '';
+    let where = '';
+    let full;
+    if (part.startsWith('cell:')) {
+      const [, ri, ci] = part.split(':').map(Number); const t = curB ? tableOf(curB) : null;
+      full = t ? String((t.rows[ri] || [])[ci] ?? '') : '';
+      const label = t ? String((t.rows[ri] || [])[0] ?? '').trim() : '';
+      where = `Table ${curB.n || 1}, ${ri === 0 ? 'heading' : `row “${short(label, 40)}”`}${ci && t ? `, column “${short(String(t.rows[0][ci] ?? ''), 30)}”` : ''}`;
+    } else full = blockId === '_title' ? fill(data.title) : curB ? fill(partVal(curB, part)) : '';
     if (!quote || !full) { fl.hidden = true; return; }
     if (full.indexOf(quote) < 0) { const q2 = full.replace(/\s+/g, ' '); if (q2.indexOf(quote) < 0) { fl.hidden = true; return; } }
-    picked = { blockId, part, quote };
+    picked = { blockId, part, quote, ...(where ? { where } : {}) };
     const box = r.getBoundingClientRect(), dbox = docEl.getBoundingClientRect();
     fl.style.top = (box.bottom - dbox.top + 6) + 'px';
     fl.style.left = Math.max(8, Math.min(dbox.width - 130, box.left - dbox.left)) + 'px';
