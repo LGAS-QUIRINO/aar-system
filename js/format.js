@@ -6,9 +6,12 @@ export const aomNo = (auditYear, n, from, to) => `${auditYear}-${pad3(n)} (${per
 // "2026-001 to 010 (2023-2025)"
 export const aomRange = (auditYear, a, b, from, to) => `${auditYear}-${pad3(a)} to ${b ? pad3(b) : '___'} (${periodYears(from, to)})`;
 // "For the Years 2023 to 2025" / "For the Year 2025"; mid-sentence form is lower case.
+// The audit period in words. In a sentence (mid = true): "for the calendar years 2023 to 2025" / "for the calendar year 2025".
+// As a title or heading: "For the Calendar Years 2023 to 2025" / "For the Calendar Year 2025".
 export function periodPhrase(from, to, mid = false) {
-  const s = Number(from) === Number(to) ? `For the Year ${to}` : `For the Years ${from} to ${to}`;
-  return mid ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+  const one = Number(from) === Number(to);
+  const yrs = one ? String(to) : `${from} to ${to}`;
+  return mid ? `for the calendar year${one ? '' : 's'} ${yrs}` : `For the Calendar Year${one ? '' : 's'} ${yrs}`;
 }
 export const upper = (s) => String(s || '').toLocaleUpperCase('en-PH');
 export const fullName = (o) => [upper(o.title), upper(o.name)].filter(Boolean).join(' ');

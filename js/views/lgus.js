@@ -37,6 +37,11 @@ export async function lgus(refs, params, q) {
           : `<div class="empty">No barangays yet for ${esc(mun?.data.name || '')}.${isAdmin ? ' Use <b>Add Barangays from Official List</b> or <b>+ Add Barangay</b>.' : ''}</div>`}</div>
       </section>
       <div style="display:flex;flex-direction:column;gap:20px">
+      ${mun ? `<section class="panel" id="m-panel"><div class="panel-head"><h2>Municipality of ${esc(mun.data.name)}</h2></div><div class="panel-body">
+        <div class="grid-2"><div class="field"><label class="label" for="m-abc">ABC President</label><input class="input" id="m-abc" value="${esc(mun.data.abcPresident || '')}" placeholder="e.g. Hon. Juan A. Dela Cruz" ${dis}></div>
+          <div class="field"><label class="label" for="m-sal">Salutation</label><select class="input" id="m-sal" ${dis}><option ${mun.data.abcSalutation !== 'Dear Madam:' ? 'selected' : ''}>Dear Sir:</option><option ${mun.data.abcSalutation === 'Dear Madam:' ? 'selected' : ''}>Dear Madam:</option></select></div></div>
+        <span class="hint">Used on the Exit Conference invitation letter. Type it once here.</span>
+        ${isAdmin ? '<div class="btn-row"><button class="btn primary" id="m-save">Save</button></div>' : ''}</div></section>` : ''}
       ${sel ? `<section class="panel"><div class="panel-head"><h2>Barangay ${esc(sel.data.name)}</h2></div><div class="panel-body">
         <div class="field"><label class="label" for="b-name">Official Name</label><input class="input strong" id="b-name" value="${esc(sel.data.name)}" ${dis}></div>
         <div class="grid-2"><div class="field"><span class="label">Municipality</span><div class="input" style="display:flex;align-items:center">${esc(mun.data.name)}</div></div>
@@ -69,6 +74,17 @@ export async function lgus(refs, params, q) {
     mount(root) {
       $('#find', root).oninput = (e) => { const v = e.target.value.trim().toLowerCase(); $$('#blist [data-name]', root).forEach((r) => { r.style.display = r.dataset.name.includes(v) ? '' : 'none'; }); };
       if (!isAdmin) return;
+      const ms = $('#m-save', root);
+      if (ms) {
+        const saveMun = async () => {
+          await store.save('lgus', munId, { ...mun.data, abcPresident: $('#m-abc', root).value.trim(), abcSalutation: $('#m-sal', root).value });
+          await store.log('edited a municipality', mun.data.name + ' · ABC President', '', refs.me.email);
+          setDirty(false); toast('Saved.', 'ok'); return true;
+        };
+        ms.onclick = saveMun;
+        $('#m-panel', root).addEventListener('input', () => setDirty(true, saveMun));
+        $('#m-panel', root).addEventListener('change', () => setDirty(true, saveMun));
+      }
       $('#official', root).onclick = async () => {
         const list = OFFICIAL_BARANGAYS[munId];
         if (!list) { await modal({ title: 'Official List', body: `<p style="margin:0">The official Barangay list for ${esc(mun.data.name)} is not built in yet. Add its Barangays one at a time with <b>+ Add Barangay</b>, or ask for the list to be added.</p>` }); return; }
@@ -120,8 +136,9 @@ export async function lgus(refs, params, q) {
           box.insertAdjacentHTML('beforeend', `<label class="check"><input type="checkbox" name="fund" value="${esc(lgus.newFund.code)}" checked>${esc(lgus.newFund.name)} <span class="hint">(${esc(lgus.newFund.code)})</span></label>`);
           setDirty(true, save);
         };
-        root.querySelector('.split-3 > div:last-child').addEventListener('input', () => setDirty(true, save));
-        root.querySelector('.split-3 > div:last-child').addEventListener('change', () => setDirty(true, save));
+        const notMun = (e) => !e.target.closest('#m-panel');
+        root.querySelector('.split-3 > div:last-child').addEventListener('input', (e) => { if (notMun(e)) setDirty(true, save); });
+        root.querySelector('.split-3 > div:last-child').addEventListener('change', (e) => { if (notMun(e)) setDirty(true, save); });
         setDirty(false, save);
       }
     }

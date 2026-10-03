@@ -105,7 +105,7 @@ export async function review(refs, params, q) {
       <a class="btn sm ghost" href="${i > 0 ? link(list[i - 1].id, view) : '#'}" ${i > 0 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Previous AOM">‹</a>
       <b>AOM ${i + 1} of ${list.length}</b>
       <a class="btn sm ghost" href="${i < list.length - 1 ? link(list[i + 1].id, view) : '#'}" ${i < list.length - 1 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Next AOM">›</a>
-      <div class="seg" style="margin-left:8px"><a class="${view === 'review' ? 'on' : ''}" href="${link(cur.id, 'review')}">Review View</a><a class="${view === 'edit' ? 'on' : ''}" href="${link(cur.id, 'edit')}">Correct Text</a><a class="${view === 'page' ? 'on' : ''}" href="${link(cur.id, 'page')}">Page View (As Printed)</a></div>
+      <div class="seg" style="margin-left:8px"><a class="${view === 'review' ? 'on' : ''}" href="${link(cur.id, 'review')}">Review View</a><a class="${view === 'edit' ? 'on' : ''}" href="${link(cur.id, 'edit')}">Correct Text</a><a class="${view === 'page' ? 'on' : ''}" href="${link(cur.id, 'page')}">Print View</a></div>
       ${view === 'review' ? '<div class="rv-nav" id="rv-nav"></div>' : ''}
       <a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/print?draft=1">Print Draft</a></div>`;
   const body = view === 'review' ? `${head}

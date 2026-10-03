@@ -3,7 +3,7 @@
 import { db } from './db.js';
 import { seedData, DEMO_USERS } from './seed.js';
 
-const TABLES = ['users', 'teams', 'lgus', 'audits', 'auditlog', 'aom_library', 'aoms'];
+const TABLES = ['users', 'teams', 'lgus', 'audits', 'auditlog', 'aom_library', 'aoms', 'letters'];
 const REFERENCE = ['users', 'teams', 'lgus', 'aom_library'];
 const ADMIN_ONLY = ['users', 'teams', 'lgus'];
 let clock = 0;

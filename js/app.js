@@ -18,6 +18,7 @@ import { print } from './views/print.js';
 import { review, reviewList, reviewQueue } from './views/review.js';
 import { pool } from './views/library.js';
 import { drafts } from './views/drafts.js';
+import { exitconf } from './views/exitconf.js';
 import { ST } from './aom.js';
 
 const app = document.getElementById('app');
@@ -37,6 +38,7 @@ function route(hash) {
   if (p[0] === 'review') return [reviewList, {}, q];
   if (p[0] === 'library') return [pool, {}, q];
   if (p[0] === 'drafts') return [drafts, {}, q];
+  if (p[0] === 'exit') return [exitconf, {}, q];
   if (p[0] === 'audits') return [audits, {}, q];
   if (p[0] === 'users') return [users, {}, q];
   if (p[0] === 'lgus') return [lgus, {}, q];

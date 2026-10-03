@@ -61,6 +61,7 @@ const NAV = [
   { href: '#/drafts', label: 'AOM Drafts', icon: '✎', count: 'drafts' },
   { href: '#/review', label: 'For My Review', icon: '✓', count: 'review', reviewer: true },
   { label: 'SAOR', icon: '☰', phase: 3 },
+  { href: '#/exit', label: 'Exit Conference', icon: '✉' },
   { label: 'BAAR Reports', icon: '▣', phase: 4 },
   { href: '#/library', label: 'AOM Library', icon: '❏' }
 ];

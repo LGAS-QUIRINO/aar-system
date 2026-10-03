@@ -110,7 +110,7 @@ export async function aoms(refs, params, q) {
       </div>
       <aside style="display:flex;flex-direction:column;gap:16px;min-width:0">
         <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" id="a-checks" style="gap:8px">${checksHTML(allChecks(cur, state.aom))}</div></section>
-        <section class="panel"><div class="panel-head"><h2>As Printed</h2></div><div class="panel-body" id="a-prev" style="padding:12px">${aomPreviewHTML(ctx, cur, state.aom, idx)}</div></section>
+        <section class="panel"><div class="panel-head"><h2>Print View</h2></div><div class="panel-body" id="a-prev" style="padding:12px">${aomPreviewHTML(ctx, cur, state.aom, idx)}</div></section>
         <section class="panel"><div class="panel-head"><h2>Comments</h2></div><div class="panel-body" style="gap:10px">${commentsHTML(cur, refs, false)}</div></section>
       </aside></div>`;
 

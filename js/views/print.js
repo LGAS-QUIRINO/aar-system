@@ -26,7 +26,7 @@ export async function print(refs, params, q) {
         <div class="panel-body"><div id="pr-mode"></div>
           <button class="btn primary" id="pr-print">Print</button><button class="btn ghost" id="pr-word">Download Word</button>
           <span class="hint">Printing uses your browser's print window. In it, choose paper size Legal or 8.5 × 13 if your printer lists it, and Margins: Default.</span></div></section>
-      <section class="panel" style="min-width:0"><div class="panel-head"><h2>Preview</h2></div><div class="panel-body"><div class="paper-wrap big" id="pr-prev"></div></div></section>
+      <section class="panel" style="min-width:0"><div class="panel-head"><h2>Print View</h2></div><div class="panel-body"><div class="paper-wrap big" id="pr-prev"></div></div></section>
     </div>`;
 
   return {
