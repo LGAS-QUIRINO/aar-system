@@ -5,12 +5,15 @@ const isNum = (s) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 export async function downloadWord(doc) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule, BorderStyle } = D;
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType } = D;
   const FONT = 'Times New Roman';
   const run = (r, p) => new TextRun({ text: r.t, bold: !!(p.bold || r.b), italics: !!p.italic, font: FONT, size: p.size || 24 });
   const align = (a) => ({ both: AlignmentType.JUSTIFIED, center: AlignmentType.CENTER, right: AlignmentType.RIGHT }[a] || AlignmentType.LEFT);
-  let letterhead = null;
-  try { letterhead = await (await fetch('img/letterhead.jpg')).arrayBuffer(); } catch (e) { letterhead = null; }
+  const load = async (src) => { try { return await (await fetch(src)).arrayBuffer(); } catch (e) { return null; } };
+  const letterhead = await load('img/letterhead.jpg');
+  const lhImgs = {};
+  for (const p of doc.body) if (p.kind === 'letterhead') { lhImgs.seal = await load(p.seal.src); lhImgs.name = await load(p.name.src); }
+  const EMU = 914400;
 
   const para = (p) => {
     if (p.blank) return new Paragraph({ children: [new TextRun({ text: '', font: FONT, size: 24 })] });
@@ -54,6 +57,14 @@ export async function downloadWord(doc) {
   };
   const toChildren = (list) => list.map((p) => {
     if (p.kind === 'table') return table(p);
+    if (p.kind === 'letterhead') {
+      const kids = [];
+      if (lhImgs.seal) kids.push(new ImageRun({ type: 'jpg', data: lhImgs.seal, transformation: { width: Math.round(p.seal.w * 96), height: Math.round(p.seal.h * 96) },
+        floating: { horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(p.seal.left * EMU) },
+          verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(p.seal.top * EMU) }, wrap: { type: TextWrappingType.NONE }, allowOverlap: true, behindDocument: true } }));
+      if (lhImgs.name) kids.push(new ImageRun({ type: 'jpg', data: lhImgs.name, transformation: { width: Math.round(p.name.w * 96), height: Math.round(p.name.h * 96) } }));
+      return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 230, after: 0 }, children: kids });
+    }
     if (p.kind === 'image') {
       if (!letterhead) return new Paragraph({ children: [] });
       return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new ImageRun({ type: 'jpg', data: letterhead, transformation: { width: Math.round(p.w * 96), height: Math.round(p.h * 96) } })] });

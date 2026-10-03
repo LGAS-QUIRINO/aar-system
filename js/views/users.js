@@ -91,7 +91,7 @@ export async function users(refs) {
     const hist = (t.data.history || []).slice().reverse();
     const res = await modal({
       title: 'Change Assignment · ' + t.data.name,
-      body: `<div class="field"><label class="label" for="t-code">Office Code</label><input class="input" id="t-code" value="${esc(t.data.officeCode)}" placeholder="e.g. R2-02"><span class="hint">Prints as "Office of the Auditor – R2-02".</span></div>
+      body: `<div class="field"><label class="label" for="t-code">Office Code</label><input class="input" id="t-code" value="${esc(t.data.officeCode)}" placeholder="e.g. R2-02"><span class="hint">Prints as "Office of the Auditor – Audit Team R2-02".</span></div>
         <div class="grid-2"><div class="field"><label class="label" for="t-atl">Audit Team Leader</label><select class="input" id="t-atl"><option value="">Not assigned</option>${pick('atl', t.data.atlUserId)}${pick('sa', t.data.atlUserId)}</select></div>
         <div class="field"><label class="label" for="t-sa">Supervising Auditor</label><select class="input" id="t-sa"><option value="">Not assigned</option>${pick('sa', t.data.saUserId)}</select></div></div>
         <div class="field"><label class="label" for="t-date">Effective Date</label><input class="input" type="date" id="t-date" value="${new Date().toISOString().slice(0, 10)}"></div>

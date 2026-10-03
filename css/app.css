@@ -233,6 +233,10 @@ a.t-row:focus-visible, .t-row:focus-visible, .btn:focus-visible { outline: 2px s
 .aom-doc .lbl{display:inline-block;text-indent:0}
 .aom-doc .tab{display:inline-block;width:1in}
 .aom-doc .lh{text-align:center;line-height:0}
+.aom-doc .lh2{position:relative;text-align:center;line-height:0;margin-top:.16in}
+.aom-doc .lh2 .seal{position:absolute;z-index:0;mix-blend-mode:multiply}
+.aom-doc .lh2 ~ p{position:relative;z-index:1}
+.aom-doc .lh2 .name{display:inline-block}
 .aom-doc .lh img{display:inline-block}
 .aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}

@@ -237,13 +237,14 @@ export function buildLetter(info) {
   const rangeText = first === last ? aomNo(audit.auditYear, first, audit.periodFrom, audit.periodTo) : aomRange(audit.auditYear, first, last, audit.periodFrom, audit.periodTo);
   const addr = `${upper(lgu.name)}, ${upper(mun.name)}, QUIRINO`;
   const body = [];
-  body.push({ kind: 'image', src: 'img/letterhead.jpg', w: 3.42, h: 0.9 });
+  // Letterhead as in the team's template: seal on the left, name and office lines centered under it.
+  body.push({ kind: 'letterhead', seal: { src: 'img/lh-seal.jpg', w: 1.1, h: 1.1, left: 0.53, top: -0.16 }, name: { src: 'img/lh-name.jpg', w: 3.0, h: 0.434 } });
   body.push(P('REGIONAL OFFICE NO. II', { bold: true, align: 'center' }));
   body.push(P('PROVINCE OF QUIRINO', { align: 'center' }));
   body.push(P('PROVINCIAL SATELLITE AUDITING OFFICE', { align: 'center' }));
   body.push(P('Capitol Hills, Cabarroguis, Quirino', { align: 'center', size: 18 }));
   body.push(BL());
-  body.push(P('Office of the Auditor' + (team && team.officeCode ? ' – ' + team.officeCode : ''), { bold: true, align: 'center', ruleBelow: true }));
+  body.push(P('Office of the Auditor' + (team && team.officeCode ? ' – Audit Team ' + team.officeCode : ''), { bold: true, align: 'center', ruleBelow: true }));
   body.push(BL());
   body.push(P('AOM No. ' + rangeText, { ind: { left: 4770 } }));
   body.push(P('Date:  ' + (longDate(audit.aomDate) || '__________'), { ind: { left: 4770 } }));
@@ -344,6 +345,7 @@ function runsHTML(runs, mark) {
 
 export function paraHTML(p, mark = true) {
   if (p.kind === 'image') return `<div class="lh"><img src="${p.src}" alt="Commission on Audit letterhead" style="width:${p.w}in;height:${p.h}in"></div>`;
+  if (p.kind === 'letterhead') return `<div class="lh2"><img class="seal" src="${p.seal.src}" alt="Commission on Audit seal" style="width:${p.seal.w}in;height:${p.seal.h}in;left:${p.seal.left}in;top:${p.seal.top}in"><img class="name" src="${p.name.src}" alt="Republic of the Philippines, Commission on Audit" style="width:${p.name.w}in;height:${p.name.h}in"></div>`;
   if (p.kind === 'table') return tableHTML(p);
   if (p.blank) return '<p class="bl">&nbsp;</p>';
   const ind = p.ind || {};
@@ -384,6 +386,10 @@ export const DOC_CSS = `
 .aom-doc .lbl{display:inline-block;text-indent:0}
 .aom-doc .tab{display:inline-block;width:1in}
 .aom-doc .lh{text-align:center;line-height:0}
+.aom-doc .lh2{position:relative;text-align:center;line-height:0;margin-top:.16in}
+.aom-doc .lh2 .seal{position:absolute;z-index:0;mix-blend-mode:multiply}
+.aom-doc .lh2 ~ p{position:relative;z-index:1}
+.aom-doc .lh2 .name{display:inline-block}
 .aom-doc .lh img{display:inline-block}
 .aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}

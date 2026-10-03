@@ -70,7 +70,7 @@ export async function setup(refs, params) {
         <img src="img/coa-logo.png" alt="" style="width:46px;height:46px">
         <div style="text-align:center;line-height:1.25;font-size:11px">Republic of the Philippines<br><b style="font-size:12.5px">COMMISSION ON AUDIT</b><br>Regional Office No. II<br>Province of Quirino<br>Provincial Satellite Auditing Office<br>Capitol Hills, Cabarroguis, Quirino</div>
       </div>
-      <div class="office">Office of the Auditor${team && team.data.officeCode ? ' – ' + esc(team.data.officeCode) : ''}</div>
+      <div class="office">Office of the Auditor${team && team.data.officeCode ? ' – Audit Team ' + esc(team.data.officeCode) : ''}</div>
       <div class="rule"></div>
       <div class="num"><span>AOM No. ${esc(aomRange(s.auditYear, 1, null, s.periodFrom, s.periodTo))}</span><span>Date:&nbsp;&nbsp;${esc(longDate(s.aomDate) || '__________')}</span></div>
       <div class="title">AUDIT OBSERVATION MEMORANDUM</div>
