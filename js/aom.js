@@ -120,7 +120,7 @@ export function newBlock(type) {
 export function checks(aom, vars, audit) {
   const out = [];
   const miss = placeholders(aom).filter((n) => vars[n] === undefined || vars[n] === '');
-  out.push(miss.length ? { st: 'bad', t: `${miss.length} placeholder${miss.length > 1 ? 's' : ''} with no value: ${miss.map((m) => '[' + m + ']').join(', ')}` } : { st: 'ok', t: 'All placeholders filled' });
+  out.push(miss.length ? { st: 'bad', t: `${miss.length} value${miss.length > 1 ? 's' : ''} missing (shown in red in the preview): ${miss.map((m) => '[' + m + ']').join(', ')}. Import the working paper, or edit the sentence.` } : { st: 'ok', t: 'All values filled' });
   const texts = [aom.title, ...(aom.blocks || []).flatMap((b) => [b.text, b.lead, ...(b.items || [])])].filter(Boolean).map((t) => fillText(t, vars)).join('\n');
   const bare = texts.match(/(^|[^₱\d,.])\d{1,3}(,\d{3})+\.\d{2}\b/g);
   out.push(bare ? { st: 'warn', t: `Amount without a peso sign: ${bare.slice(0, 3).map((x) => x.replace(/^[^\d]/, '')).join(', ')}` } : { st: 'ok', t: 'Peso signs and number format' });
@@ -337,8 +337,8 @@ function runsHTML(runs, mark) {
   return runs.map((r) => {
     let t = escH(r.t).replace(/\t/g, '<span class="tab"></span>');
     if (r.b) t = `<b>${t}</b>`;
-    if (mark && r.missing) return `<span class="ph-miss" title="No value for this placeholder">${t}</span>`;
-    if (mark && r.filled) return `<span class="ph-fill" title="From ${escH(r.filled)}">${t}</span>`;
+    if (mark && r.missing) return `<span class="ph-miss" title="No value yet for ${escH(r.missing)}. Import the working paper or edit this sentence.">${t}</span>`;
+    if (mark && r.filled) return `<span class="ph-fill" title="${SETUP_VAR_NAMES.includes(r.filled) ? 'From Audit Setup' : 'From your working paper'} (${escH(r.filled)})">${t}</span>`;
     return t;
   }).join('');
 }

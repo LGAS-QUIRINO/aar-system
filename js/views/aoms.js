@@ -84,8 +84,6 @@ export async function aoms(refs, params, q) {
         <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" id="a-checks" style="gap:8px">${checksHTML(allChecks(cur, state.aom))}</div></section>
         <section class="panel"><div class="panel-head"><h2>As Printed</h2></div><div class="panel-body" id="a-prev" style="padding:12px">${aomPreviewHTML(ctx, cur, state.aom, idx)}</div></section>
         <section class="panel"><div class="panel-head"><h2>Comments</h2></div><div class="panel-body" style="gap:10px">${commentsHTML(cur, refs, false)}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Legend</h2></div><div class="panel-body" style="gap:6px;font-size:13px">
-          <span><span class="ph-fill">₱30,570.72</span> Value from the working paper or Setup</span><span><span class="ph-miss">[MISSING]</span> Placeholder with no value</span></div></section>
       </aside></div>`;
 
   return {

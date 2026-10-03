@@ -112,7 +112,7 @@ async function showLogin(error = '') {
 
 async function enter(email, signIn) {
   const owner = await db.get('meta', 'owner');
-  if (owner && owner !== email) await store.wipe();      // another person's data never mixes with yours
+  if (owner !== email) await store.wipe();               // a different (or unknown) account: start from a clean copy
   if (signIn) await signIn();
   await db.put('meta', email, 'owner');
   await boot();
@@ -140,8 +140,14 @@ async function boot() {
   let refs = await loadRefs();
   if (!refs.me) {
     app.innerHTML = '<div class="login"><div class="login-card"><img class="brand-logo" src="img/coa-logo.png" alt=""><p>Getting your data ready…</p></div></div>';
-    const problems = await syncNow();
+    let problems = await syncNow();
     refs = await loadRefs();
+    if (!refs.me && navigator.onLine) {
+      // The copy on this computer may be incomplete (e.g. right after switching accounts): download everything once more.
+      await db.del('meta', 'lastSync');
+      problems = await syncNow();
+      refs = await loadRefs();
+    }
     if (!refs.me) {
       const msg = (problems && problems[0]) || syncState.message || (navigator.onLine ? 'Your Gmail is not registered. Ask the Admin to add you in Users & Roles.' : 'You are offline. The first sign-in on a device needs internet.');
       await auth.signOut(); await db.del('meta', 'owner');

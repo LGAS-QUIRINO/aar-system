@@ -15,6 +15,8 @@ export async function lgus(refs, params, q) {
   const audits = await store.list('audits');
   const lastAudit = (id) => audits.filter((a) => a.data.lguId === id).sort((a, b) => b.data.auditYear - a.data.auditYear)[0];
   const fundText = (f) => (f || []).map((x) => x === 'BDRRMF' ? '5% BDRRMF' : x).join(' · ');
+  const STANDARD_FUNDS = [{ code: 'GF', name: FUND_NAMES.GF }, { code: 'BDRRMF', name: FUND_NAMES.BDRRMF }];
+  const fundList = (d) => [...STANDARD_FUNDS, ...(d.customFunds || [])];
   const cols = 'grid-template-columns: 76px minmax(110px,1fr) 112px 54px';
   const go = (m, b) => `#/lgus?m=${encodeURIComponent(m)}${b ? '&b=' + encodeURIComponent(b) : ''}`;
   const dis = isAdmin ? '' : 'disabled';
@@ -40,7 +42,8 @@ export async function lgus(refs, params, q) {
         <div class="grid-2"><div class="field"><span class="label">Municipality</span><div class="input" style="display:flex;align-items:center">${esc(mun.data.name)}</div></div>
         <div class="field"><label class="label" for="b-team">Audit Team</label><select class="input" id="b-team" ${dis}>${refs.teams.map((t) => `<option value="${t.id}" ${t.id === sel.data.teamId ? 'selected' : ''}>${esc(t.data.name)}</option>`).join('')}</select></div></div>
         <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="label">Funds</legend>
-          ${['GF', 'BDRRMF'].map((f) => `<label class="check"><input type="checkbox" name="fund" value="${f}" ${(sel.data.funds || []).includes(f) ? 'checked' : ''} ${dis}>${FUND_NAMES[f]}</label>`).join('')}</fieldset>
+          <div id="b-funds">${fundList(sel.data).map((f) => `<label class="check"><input type="checkbox" name="fund" value="${esc(f.code)}" ${(sel.data.funds || []).includes(f.code) ? 'checked' : ''} ${dis}>${esc(f.name)}${f.code !== 'GF' && f.code !== 'BDRRMF' ? ` <span class="hint">(${esc(f.code)})</span>` : ''}</label>`).join('')}</div>
+          ${isAdmin ? '<div><button type="button" class="btn sm dashed" id="b-addfund">+ Add Fund</button></div><span class="hint">Untick a fund the Barangay no longer uses. Funds are never deleted, so past audits keep them.</span>' : ''}</fieldset>
         <label class="check"><input type="checkbox" id="b-active" ${sel.data.active ? 'checked' : ''} ${dis}>Active (inactive Barangays are hidden from New Audit)</label>
         <div class="field"><span class="label">Audit History</span>${audits.filter((a) => a.data.lguId === sel.id).sort((a, b) => b.data.auditYear - a.data.auditYear)
           .map((a) => `<small>${esc(a.data.auditYear)} · ${esc(periodPhrase(a.data.periodFrom, a.data.periodTo))} · ${esc(a.data.imported ? 'Earlier Record' : a.data.status || 'In Progress')}</small>`).join('') || '<small class="hint">Earlier audits appear here once entered</small>'}</div>
@@ -88,11 +91,35 @@ export async function lgus(refs, params, q) {
           const name = $('#b-name', root).value.trim();
           if (!name) { toast('Enter the official name.', 'bad'); return false; }
           const funds = $$('input[name=fund]:checked', root).map((x) => x.value);
-          await store.save('lgus', sel.id, { ...sel.data, name, teamId: $('#b-team', root).value, funds, active: $('#b-active', root).checked });
+          await store.save('lgus', sel.id, { ...sel.data, customFunds: lgus.customFunds || sel.data.customFunds || [], name, teamId: $('#b-team', root).value, funds, active: $('#b-active', root).checked });
+          lgus.customFunds = null;
           await store.log('edited a barangay', name, '', refs.me.email);
           setDirty(false); toast('Saved.', 'ok'); return true;
         };
         sv.onclick = save;
+        lgus.customFunds = null;
+        const af = $('#b-addfund', root);
+        if (af) af.onclick = async () => {
+          const r = await modal({
+            title: 'Add Fund · Barangay ' + sel.data.name,
+            body: `<div class="field"><label class="label" for="nf-name">Fund Name</label><input class="input" id="nf-name" placeholder="e.g. Trust Fund"></div>
+              <div class="field"><label class="label" for="nf-code">Short Code (optional)</label><input class="input" id="nf-code" placeholder="e.g. TF" style="text-transform:uppercase"></div>
+              <span class="hint">It is added for this Barangay only. Click Save afterwards to keep it.</span>`,
+            buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Add Fund', cls: 'primary', value: 'ok', check: (bg) => {
+              const name = $('#nf-name', bg).value.trim();
+              if (!name) { toast('Enter the fund name.', 'bad'); return false; }
+              const code = ($('#nf-code', bg).value.trim() || name.split(/\s+/).filter((w) => /^[A-Za-z0-9%]/.test(w)).map((w) => w[0]).join('')).toUpperCase().replace(/[^A-Z0-9%]/g, '');
+              const all = [...STANDARD_FUNDS, ...(lgus.customFunds || sel.data.customFunds || [])];
+              if (all.some((f) => f.code === code || f.name.toLowerCase() === name.toLowerCase())) { toast('That fund is already listed.', 'bad'); return false; }
+              lgus.newFund = { code, name }; return true;
+            } }]
+          });
+          if (r !== 'ok') return;
+          lgus.customFunds = [...(lgus.customFunds || sel.data.customFunds || []), lgus.newFund];
+          const box = $('#b-funds', root);
+          box.insertAdjacentHTML('beforeend', `<label class="check"><input type="checkbox" name="fund" value="${esc(lgus.newFund.code)}" checked>${esc(lgus.newFund.name)} <span class="hint">(${esc(lgus.newFund.code)})</span></label>`);
+          setDirty(true, save);
+        };
         root.querySelector('.split-3 > div:last-child').addEventListener('input', () => setDirty(true, save));
         root.querySelector('.split-3 > div:last-child').addEventListener('change', () => setDirty(true, save));
         setDirty(false, save);
