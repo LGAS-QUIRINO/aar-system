@@ -2,8 +2,8 @@
 import { store, newId, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { blocksHTML, wireBlocks } from '../blockeditor.js';
-import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES } from '../aom.js';
+import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
+import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain } from '../aom.js';
 import { POOL_SEED } from '../library-seed.js';
 import { nice, longDate } from '../format.js';
 
@@ -49,6 +49,9 @@ export async function pool(refs, params, q) {
       <div class="panel-body">
         ${rec.data.status === 'Active' && editable ? '<div class="note info">Editing an Active template creates the next version as a Draft. This version stays in use until the new one is approved.</div>' : ''}
         ${!canManage ? '<div class="note info">Only the Supervising Auditor or the Admin can change templates. You can use any Active template on the Findings screen.</div>' : ''}
+        ${rec.data.status === 'Superseded' ? `<div class="note info" style="align-items:center"><span>This is an older version. Only the Active version is offered on the Findings screen.</span>
+          ${canManage ? '<span style="margin-left:auto;display:flex;align-items:center;gap:10px"><span class="hint">Use this version again</span><button class="btn sm primary" id="p-again">Use Again</button></span>' : ''}</div>` : ''}
+        ${rec.data.status === 'Retired' ? '<div class="note warn">Retired. It is no longer offered on the Findings screen. AOMs that used it keep their text. Its code is never given to a new template.</div>' : ''}
         <div class="grid-2">
           <div class="field"><label class="label" for="p-title">Finding Title</label><input class="input" id="p-title" value="${esc(rec.data.title)}" ${editable ? '' : 'disabled'}></div>
           <div class="field"><label class="label" for="p-area">Audit Area</label><input class="input" id="p-area" value="${esc(rec.data.area || '')}" ${editable ? '' : 'disabled'}></div>
@@ -105,12 +108,23 @@ export async function pool(refs, params, q) {
       if (!rec) return;
       const ph = () => { const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
       ph();
-      if (!editable) {
-        const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root);
-        if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);
-        if (rbtn) rbtn.onclick = async () => { if (await confirmBox('Retire Template', `${esc(rec.data.code)} will no longer be offered on the Findings screen. AOMs that used it keep their text.`, 'Retire')) { await store.save('aom_library', rec.id, { ...rec.data, status: 'Retired' }); toast('Retired.', 'ok'); } };
-        return;
-      }
+      const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
+      if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);
+      if (rbtn) rbtn.onclick = async () => {
+        if (!(await confirmBox('Retire Template', `${esc(rec.data.code)} will no longer be offered on the Findings screen. AOMs that used it keep their text.`, 'Retire'))) return;
+        setDirty(false);
+        await store.save('aom_library', rec.id, { ...rec.data, status: 'Retired', retiredBy: refs.me.email, retiredAt: new Date().toISOString() });
+        await store.log('retired an AOM Library template', `${rec.data.code} · Version ${rec.data.version}`, '', refs.me.email);
+        toast('Retired.', 'ok');
+      };
+      if (again) again.onclick = async () => {
+        const top = Math.max(...g.versions.map((v) => v.data.version));
+        if (!(await confirmBox('Use Again', `Make the wording of Version ${rec.data.version} the Active one again? It is saved as Version ${top + 1}, and the current Active version becomes an older version. AOMs already written are not changed.`, 'Use Again', 'success'))) return;
+        await saveActiveVersion(g, { ...clone(rec.data), note: `Version ${rec.data.version} wording used again` }, refs);
+        toast(`${rec.data.code} Version ${top + 1} is now Active.`, 'ok');
+        location.hash = go(g.code, `obs-${g.code}-v${top + 1}`);
+      };
+      if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
       ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-saor'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
       const host = $('#p-blocks', root);
@@ -153,4 +167,73 @@ async function makeVariant(rec, groups, refs) {
   location.hash = `#/library?code=${encodeURIComponent(code)}`;
   toast(`${code} created as a Draft.`, 'ok');
   void refs;
+}
+
+// Save d as the next version of group g and make it the only Active one.
+async function saveActiveVersion(g, d, refs) {
+  const top = Math.max(...g.versions.map((v) => v.data.version));
+  const now = new Date().toISOString();
+  const rec = { ...d, code: g.code, version: top + 1, status: 'Active', approvedBy: refs.me.email, approvedAt: now };
+  delete rec.retiredBy; delete rec.retiredAt;
+  for (const v of g.versions) if (v.data.status === 'Active') await store.save('aom_library', v.id, { ...v.data, status: 'Superseded' }, { silent: true });
+  await store.save('aom_library', `obs-${g.code}-v${top + 1}`, rec, { silent: true });
+  await store.log('updated an AOM Library template', `${g.code} · Version ${top + 1} · ${rec.note || ''}`, '', refs.me.email);
+  emitChange('local');
+  return rec;
+}
+
+// Turn a Final AOM back into template wording: values typed from the working paper or Setup become [PLACEHOLDERS] again.
+export function toTemplate(aom, vars) {
+  const pairs = Object.entries(vars || {}).filter(([, v]) => v && String(v).length >= 4)
+    .sort((a, b) => String(b[1]).length - String(a[1]).length || (SETUP_VAR_NAMES.includes(a[0]) ? 1 : 0) - (SETUP_VAR_NAMES.includes(b[0]) ? 1 : 0));
+  const swaps = new Map();
+  const conv = (t) => {
+    let out = String(t || '');
+    const seen = new Set();
+    for (const [name, val] of pairs) {
+      if (seen.has(val)) continue;
+      for (const v of String(val).startsWith('₱') ? [val, val.slice(1)] : [val]) {
+        const ph = v.startsWith('₱') ? `₱[${name}]` : `[${name}]`;   // the Library writes amounts as ₱[NAME]
+        if (v.length >= 4 && out.includes(v)) { out = out.split(v).join(ph); swaps.set(`${v} → ${ph}`, 1); seen.add(val); }
+      }
+    }
+    return out;
+  };
+  const blocks = (aom.blocks || []).map((b) => {
+    const x = clone(b); delete x.id;
+    if (x.text !== undefined) x.text = conv(x.text);
+    if (x.lead !== undefined) x.lead = conv(x.lead);
+    if (x.items) x.items = x.items.map(conv);
+    if (x.caption !== undefined) x.caption = conv(x.caption);
+    return x;
+  });
+  const title = conv(aom.title);
+  const all = [title, ...blocks.map(blockPlain)].join('\n');
+  const leftover = [...new Set(all.match(/₱\s?\d[\d,]*(\.\d+)?|\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b/g) || [])];
+  return { title, blocks, swaps: [...swaps.keys()], leftover };
+}
+
+// SA or Admin, from a Final AOM: apply its corrections to the Library template as the next version.
+export async function updateFromAom(refs, aomRec, vars, label) {
+  const code = aomRec.data.poolCode;
+  const g = (await poolGroups()).find((x) => x.code === code);
+  if (!g || !g.active) { toast(`${code} has no Active version in the Library (it may be retired).`, 'bad'); return; }
+  const act = g.active.data;
+  const t = toTemplate(aomRec.data, vars);
+  const same = t.title === act.title && t.blocks.length === (act.blocks || []).length && t.blocks.every((b, i) => blockPlain(b) === blockPlain(act.blocks[i]) && b.type === act.blocks[i].type);
+  const top = Math.max(...g.versions.map((v) => v.data.version));
+  const fromOld = aomRec.data.poolVersion && aomRec.data.poolVersion !== act.version;
+  const body = `${same ? '<div class="note ok">This AOM has the same wording as the Library template. Nothing to update.</div>'
+    : `<div class="note info"><span>${esc(code)} Version ${act.version} → <b>Version ${top + 1}</b>. Red = removed from the template, green = added. AOMs already written are not changed. Only new AOMs use the new wording.</span></div>`}
+    ${fromOld ? `<div class="note warn">This AOM was written from Version ${esc(aomRec.data.poolVersion)}. The Library is now at Version ${act.version}, so this compares with Version ${act.version}.</div>` : ''}
+    ${t.swaps.length ? `<div class="field"><span class="label">Values changed back to placeholders</span><div class="hint">${t.swaps.map(esc).join('<br>')}</div></div>` : ''}
+    ${t.leftover.length ? `<div class="note warn"><span>Still typed as numbers: <b>${t.leftover.map(esc).join(', ')}</b>. If these should come from the working paper, edit the template after updating and change them to placeholders.</span></div>` : ''}
+    ${same ? '' : `<div style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px">${diffHTML({ title: act.title, blocks: act.blocks }, { title: t.title, blocks: t.blocks })}</div>`}`;
+  const r = await modal({ title: `Update ${code}`, wide: true, body,
+    buttons: same ? [{ label: 'Close', cls: 'ghost', value: null }] : [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Update', cls: 'primary', value: 'ok' }] });
+  if (r !== 'ok') return;
+  const saved = await saveActiveVersion(g, { ...clone(act), title: t.title, blocks: t.blocks, note: `Corrections from ${label}`, fromAom: aomRec.id }, refs);
+  const fresh = await store.get('aoms', aomRec.id);
+  if (fresh) await store.save('aoms', aomRec.id, { ...fresh.data, libraryUpdate: { code, version: saved.version, at: saved.approvedAt, by: refs.me.email } });
+  toast(`${code} Version ${saved.version} is now Active.`, 'ok');
 }

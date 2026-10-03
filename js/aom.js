@@ -98,21 +98,23 @@ export function numberingCheck(nums) {
 /* ───────── New AOM records ───────── */
 
 export function fromTemplate(tpl) {
-  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', blocks: clone(tpl.blocks || []) };
+  const blocks = clone(tpl.blocks || []).map((b) => ({ ...b, id: bid() }));
+  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', blocks };
 }
 export function blankAom() {
   return {
     poolCode: '', poolVersion: 0, mode: 'New', title: 'New Finding', section: 'B', area: '', wp: '',
     blocks: [{ type: 'topic', text: '' }, { type: 'criteria', lead: '', text: '', quoted: false }, { type: 'condition', text: '' },
-      { type: 'effect', text: '' }, { type: 'recommendation', lead: '', items: [], text: 'We recommend that Management ' }]
+      { type: 'effect', text: '' }, { type: 'recommendation', lead: '', items: [], text: 'We recommend that Management ' }].map((b) => ({ ...b, id: bid() }))
   };
 }
 export function newBlock(type) {
-  if (type === 'criteria') return { type, lead: '', text: '', quoted: true };
-  if (type === 'recommendation') return { type, lead: 'We recommend that Management:', items: ['', ''], text: '' };
-  if (type === 'table') return { type, n: 1, annex: false, caption: '' };
-  if (type === 'subheading') return { type, text: '' };
-  return { type, text: '' };
+  const id = bid();
+  if (type === 'criteria') return { id, type, lead: '', text: '', quoted: true };
+  if (type === 'recommendation') return { id, type, lead: 'We recommend that Management:', items: ['', ''], text: '' };
+  if (type === 'table') return { id, type, n: 1, annex: false, caption: '' };
+  if (type === 'subheading') return { id, type, text: '' };
+  return { id, type, text: '' };
 }
 
 /* ───────── Checks ───────── */
@@ -138,7 +140,8 @@ export function checks(aom, vars, audit) {
 /* ───────── Word-level difference (Draft vs. Corrected) ───────── */
 
 export function diffWords(a, b) {
-  const A = String(a || '').split(/(\s+)/), B = String(b || '').split(/(\s+)/);
+  const tok = (x) => String(x || '').split(/(\s+|[,.;:!?()“”"])/).filter((t) => t !== '');
+  const A = tok(a), B = tok(b);
   const n = A.length, m = B.length;
   if (n * m > 400000) return [{ t: b, op: a === b ? '=' : '+' }];
   const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
@@ -153,6 +156,45 @@ export function diffWords(a, b) {
   return out;
 }
 export const blockPlain = (b) => [b.lead, b.text, ...(b.items || [])].filter((x) => x !== undefined && x !== '').join('\n');
+
+/* ───────── Review tracking: block ids, who changed what ───────── */
+
+export const bid = () => 'b' + Math.random().toString(36).slice(2, 9);
+// Every block gets a stable id so corrections and comments stay attached when blocks move.
+// Older AOMs without ids get 'k' + position, the same on every device, so nothing breaks.
+export function ensureIds(aom) {
+  const fix = (list) => (list || []).forEach((b, i) => { if (!b.id) b.id = 'k' + i; });
+  fix(aom.blocks);
+  if (aom.submitted) fix(aom.submitted.blocks);
+  if (aom.editedBy && Object.keys(aom.editedBy).some((k) => /^\d+$/.test(k))) {
+    const e = {};
+    Object.entries(aom.editedBy).forEach(([k, v]) => { const b = /^\d+$/.test(k) ? (aom.blocks || [])[+k] : null; e[b ? b.id : k] = v; });
+    aom.editedBy = e;
+  }
+  aom.comments = (aom.comments || []).map((c, i) => ({ id: c.id || 'c' + i, replies: [], ...c }));
+  return aom;
+}
+const baseOf = (aom, id) => ((aom.submitted && aom.submitted.blocks) || []).find((b) => b.id === id);
+// Mark the blocks this person changed since the last save. With prune (when forwarding), blocks that match the
+// wording the reviewer will compare against lose their mark.
+export function stampEdits(prev, next, email, { prune = false } = {}) {
+  const e = { ...(next.editedBy || prev.editedBy || {}) };
+  const before = {}; (prev.blocks || []).forEach((b) => { before[b.id] = blockPlain(b); });
+  (next.blocks || []).forEach((b) => { if (before[b.id] !== blockPlain(b)) e[b.id] = email; });
+  if ((prev.title || '') !== (next.title || '')) e._title = email;
+  if (prune && next.submitted) {
+    Object.keys(e).forEach((k) => {
+      if (k === '_title') { if (next.title === next.submitted.title) delete e[k]; return; }
+      const cur = (next.blocks || []).find((b) => b.id === k), base = baseOf(next, k);
+      if ((cur && base && blockPlain(cur) === blockPlain(base))) delete e[k];
+    });
+  }
+  next.editedBy = e;
+  return next;
+}
+// A comment is answered once someone other than its writer replies.
+export const answered = (c) => (c.replies || []).some((r) => r.by !== c.by);
+export const openComments = (aom, notBy) => (aom.comments || []).filter((c) => !c.resolved && !answered(c) && c.by !== notBy);
 
 /* ───────── Document layout ───────── */
 // Units: twips (1/1440 inch) as in Word.
