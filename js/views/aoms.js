@@ -9,7 +9,7 @@ import { mountReview, reviewCounts, when } from '../reviewpane.js';
 
 export function aomPreviewHTML(ctx, a, data, i) {
   const n = ctx.nums[a.id]?.n || 1;
-  const paras = findingParas({ ...data, _id: a.id }, { vars: ctx.varsFor({ data }), num: (i + 1) + '.', aomNoText: `${ctx.audit.auditYear}-${String(n).padStart(3, '0')}`, annexLetters: {} });
+  const paras = findingParas({ ...data, _id: a.id }, { vars: ctx.varsFor({ data }), num: (i + 1) + '.', aomNoText: aomNo(ctx.audit.auditYear, n, ctx.audit.periodFrom, ctx.audit.periodTo), annexLetters: {} });
   return `<div class="paper-wrap"><div class="aom-doc sheet">${paras.map((p) => paraHTML(p, true)).join('')}</div></div>`;
 }
 

@@ -327,7 +327,7 @@ export function buildLetter(info) {
   list.forEach((a, i) => {
     body.push(BL()); body.push(BL());
     const n = nums[a.id].n;
-    body.push(...findingParas({ ...a.data, _id: a.id }, { vars: info.varsFor(a), num: (i + 1) + '.', aomNoText: `${audit.auditYear}-${pad3(n)}`, annexLetters }));
+    body.push(...findingParas({ ...a.data, _id: a.id }, { vars: info.varsFor(a), num: (i + 1) + '.', aomNoText: aomNo(audit.auditYear, n, audit.periodFrom, audit.periodTo), annexLetters }));
   });
 
   body.push(BL()); body.push(BL());
