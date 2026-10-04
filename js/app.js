@@ -21,6 +21,7 @@ import { drafts } from './views/drafts.js';
 import { exitconf } from './views/exitconf.js';
 import { saorview } from './views/saorview.js';
 import { comments } from './views/comments.js';
+import { baar, baarList } from './views/baar.js';
 import { ST } from './aom.js';
 
 const app = document.getElementById('app');
@@ -42,6 +43,8 @@ function route(hash) {
   if (p[0] === 'drafts') return [drafts, {}, q];
   if (p[0] === 'exit') return [exitconf, {}, q];
   if (p[0] === 'saor') return [saorview, {}, q];
+  if (p[0] === 'baar' && p[1]) return [baar, { id: p[1] }, q];
+  if (p[0] === 'baar') return [baarList, {}, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'comments') return [comments, { id: p[1] }, q];
   if (p[0] === 'audits') return [audits, {}, q];
   if (p[0] === 'users') return [users, {}, q];

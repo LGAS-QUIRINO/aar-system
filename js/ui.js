@@ -62,7 +62,7 @@ const NAV = [
   { href: '#/review', label: 'For My Review', icon: '✓', count: 'review', reviewer: true },
   { href: '#/saor', label: 'SAOR', icon: '☰' },
   { href: '#/exit', label: 'Exit Conference', icon: '✉' },
-  { label: 'BAAR Reports', icon: '▣', phase: 4 },
+  { href: '#/baar', label: 'BAAR Reports', icon: '▣' },
   { href: '#/library', label: 'AOM Library', icon: '❏' }
 ];
 const ADMIN_NAV = [
