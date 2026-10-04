@@ -3,6 +3,7 @@
 import { loadScript } from './wp.js';
 import { longDate, upper, nice, periodPhrase } from './format.js';
 import { DOC_CSS } from './aom.js';
+import { saveDocx, printPages } from './baar-doc.js';
 
 // Words that fill in by themselves: [BARANGAY] "Cabaruan, Maddela, Quirino", [MUN] "Maddela, Quirino",
 // [PERIOD] "for the two-year period ended December 31, 2025", [CONF_DATE] "October 15, 2026".
@@ -197,24 +198,16 @@ export function paginate(doc, measureBox) {
   return pages;
 }
 
-export function printTransmittal(d, which, title) {
+// Print-ready pieces for the transmittal documents: CSS for the 'tr' page and the HTML of each document.
+export function transmittalPrint(d, which) {
   const docs = which ? d.docs.filter((x) => x.key === which) : d.docs;
-  const css = `${DOC_CSS}${TR_CSS}
-    @page { size: 8.5in 11in; margin: 1in 1in 1in 1.5in; }
-    body { margin: 0; } .doc + .doc { break-before: page; page-break-before: always; }`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escH(title)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head>
-    <body>${docs.map((x) => `<div class="doc aom-doc bl">${docHTML(x)}</div>`).join('')}</body></html>`;
-  const f = document.createElement('iframe');
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(f);
-  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-  const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); };
-  const img = f.contentDocument.querySelector('img');
-  if (img && !img.complete) img.onload = img.onerror = go; else setTimeout(go, 200);
+  return { css: `${DOC_CSS}${TR_CSS} @page tr { size: 8.5in 11in; margin: 1in 1in 1in 1.5in; } .pg-tr { page: tr; }`, html: docs.map((x) => `<div class="pg pg-tr aom-doc bl">${docHTML(x)}</div>`).join('') };
 }
+export function printTransmittal(d, which, title) { const p = transmittalPrint(d, which); printPages(p.css, p.html, title); }
 
 /* ── Word: one section per document, Letter size, 1.5" left margin for binding ── */
-export async function transmittalWord(d, which) {
+// Word sections for the transmittal documents (one section per document). Used alone or in the complete BAAR.
+export async function transmittalSections(d, which) {
   const D = await loadScript('lib/docx.min.js', 'docx');
   const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType, TabStopType, VerticalAlign } = D;
   const FONT = 'Times New Roman', EMU = 914400;
@@ -260,11 +253,8 @@ export async function transmittalWord(d, which) {
     return out;
   };
   const docs = which ? d.docs.filter((x) => x.key === which) : d.docs;
-  const doc = new Document({ creator: 'Annual Audit Report System', title: 'BAAR Transmittal Letters', styles: { default: { document: { run: { font: FONT, size: 24 } } } },
-    sections: docs.map((x) => ({ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 720, footer: 720 } } }, children: kids(x) })) });
-  const blob = await Packer.toBlob(doc);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = d.fileName + (which ? '_' + which.toUpperCase() : '') + '.docx';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return docs.map((x) => ({ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 720, footer: 720 } } }, children: kids(x) }));
+}
+export async function transmittalWord(d, which) {
+  await saveDocx(await transmittalSections(d, which), d.fileName + (which ? '_' + which.toUpperCase() : ''), 'BAAR Transmittal Letters');
 }

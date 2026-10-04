@@ -475,3 +475,17 @@ a.bpart.link{text-decoration:none;cursor:pointer}a.bpart.link:hover{border-color
 .cv .cv-p{margin:0;font-family:'Times New Roman',Tinos,Times,serif;font-size:18pt}
 .ro{display:grid;grid-template-columns:120px 1fr;gap:8px 12px;font-size:13.5px;align-items:baseline}
 .ro span{color:var(--muted)}.ro b{color:var(--navy)}
+.paper-wrap .sheet.tsheet{width:8.5in;min-height:11in;padding:1in 1in 1in 1.2in}
+.toc{font-family:'Times New Roman',Tinos,Times,serif;font-size:12pt;line-height:1.15;color:#000}
+.toc h3{text-align:center;font-size:14pt;font-weight:700;margin:0 0 .45in}
+.toc .r{display:grid;grid-template-columns:1fr .7in;align-items:end}
+.toc .r .pn{text-align:center}
+.toc .pt .pn{font-weight:400}.toc .pt .pn.ph{font-weight:700}
+.toc .pt{font-weight:700;margin-top:14pt}
+.toc .it{padding-left:.5in;position:relative}
+.toc .it::before{content:'•';position:absolute;left:.2in}
+.toc .first{margin-top:8pt}
+.pgt{width:100%;border-collapse:collapse;font-size:13px}
+.pgt td{border-bottom:1px solid var(--line-2);padding:6px 4px;vertical-align:middle}
+.pgt td.p{width:70px;text-align:center;font-weight:600;color:var(--navy)}
+.pgt tr.h td{font-weight:700;color:var(--navy);background:var(--soft)}

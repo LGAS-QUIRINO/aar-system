@@ -3,6 +3,7 @@
 import { loadScript } from './wp.js';
 import { upper } from './format.js';
 import { periodWords } from './baar-transmittal.js';
+import { saveDocx, printPages } from './baar-doc.js';
 
 // Spacing between the lines, in inches (from the issued Balligui cover).
 const GAP = { title: 0.4, on: 1.1, brgy: 0.9, period: 1.65 };
@@ -32,21 +33,14 @@ export function coverHTML(c) {
     <p class="cv-p" style="margin-top:${GAP.period}in">${escH(c.period)}</p></div>`;
 }
 
-export function printCover(c, title) {
-  const css = `${COVER_CSS} @page { size: 8.5in 11in; margin: 1in 1in .79in 1in; } body { margin: 0; }`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escH(title)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${coverHTML(c)}</body></html>`;
-  const f = document.createElement('iframe');
-  f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
-  document.body.appendChild(f);
-  f.contentDocument.open(); f.contentDocument.write(html); f.contentDocument.close();
-  const go = () => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 60000); };
-  const imgs = [...f.contentDocument.images];
-  Promise.all(imgs.map((i) => (i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; })))).then(() => setTimeout(go, 100));
+export function coverPrint(c) {
+  return { css: `${COVER_CSS} @page cv { size: 8.5in 11in; margin: 1in 1in .79in 1in; } .pg-cv { page: cv; }`, html: `<div class="pg pg-cv">${coverHTML(c)}</div>` };
 }
+export function printCover(c, title) { const p = coverPrint(c); printPages(p.css, p.html, title); }
 
-export async function coverWord(c) {
+export async function coverSections(c) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Document, Packer, Paragraph, TextRun, ImageRun, AlignmentType } = D;
+  const { Paragraph, TextRun, ImageRun, AlignmentType } = D;
   const load = async (src) => { try { return await (await fetch(src)).arrayBuffer(); } catch (e) { return null; } };
   const seal = await load('img/cover-seal.png'), name = await load('img/cover-name.png');
   const T = (t, size, o = {}) => new TextRun({ text: t, font: o.font || 'Arial', size, bold: o.b !== false });
@@ -56,11 +50,6 @@ export async function coverWord(c) {
   if (name) children.push(P([new ImageRun({ type: 'png', data: name, transformation: { width: Math.round(3.49 * 96), height: Math.round(0.91 * 96) } })]));
   children.push(P([T(c.title, 52)], GAP.title), P([T(c.on, 40)], GAP.on), P([T(c.brgy, 52)], GAP.brgy), P([T(c.mun, 52)]),
     P([T(c.period, 36, { font: 'Times New Roman', b: false })], GAP.period));
-  const doc = new Document({ creator: 'Annual Audit Report System', title: 'BAAR Cover', styles: { default: { document: { run: { font: 'Times New Roman', size: 24 } } } },
-    sections: [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1134, left: 1440, header: 0, footer: 0 } } }, children }] });
-  const blob = await Packer.toBlob(doc);
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = c.fileName + '.docx';
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  return [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1134, left: 1440, header: 0, footer: 0 } } }, children }];
 }
+export async function coverWord(c) { await saveDocx(await coverSections(c), c.fileName, 'BAAR Cover'); }

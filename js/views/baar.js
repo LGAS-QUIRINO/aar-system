@@ -7,8 +7,10 @@ import { loadAudit, stepsBar } from '../auditctx.js';
 import { ST, clone } from '../aom.js';
 import { periodPhrase, longDate, nice } from '../format.js';
 import { loadGaa, loadPeriodWording, openReportWording, canEditWording } from './reportwording.js';
-import { buildCover, coverHTML, printCover, coverWord } from '../baar-cover.js';
-import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord } from '../baar-transmittal.js';
+import { buildCover, coverHTML, printCover, coverWord, coverPrint, coverSections } from '../baar-cover.js';
+import { buildToc, tocHTML, printToc, tocWord, tocPrint, tocSections } from '../baar-toc.js';
+import { printPages, saveDocx } from '../baar-doc.js';
+import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
 export const PARTS = [
   ['01', 'Transmittal Letters'], ['02', 'Cover'], ['03', 'Table of Contents'], ['04', "Independent Auditor's Report"], ['05', "Management's Responsibility"],
@@ -17,11 +19,11 @@ export const PARTS = [
 const recId = (auditId) => `baar-${auditId}`;
 const stdId = (teamId) => `std-baartr-${teamId}`;
 
-const BUILT = ['01', '02'];
+const BUILT = ['01', '02', '03'];
 // The parts strip: built parts are links; status01 is the Part 01 pill (live on the Part 01 screen).
-function partsStrip(auditId, active, status01) {
+function partsStrip(auditId, active, status01, status03 = pill('In Progress', 'warn')) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
-    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : '';
+    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : n === '03' ? status03 : '';
     if (n === active) return `<span class="bpart on"><b>${n}</b> ${esc(t)} ${pillHTML}</span>`;
     if (BUILT.includes(n)) return `<a class="bpart link" href="#/baar/${auditId}?p=${n}"><b>${n}</b> ${esc(t)} ${pillHTML}</a>`;
     return `<span class="bpart later" title="Built after Part ${String(Number(n) - 1).padStart(2, '0')}"><b>${n}</b> ${esc(t)}</span>`;
@@ -86,14 +88,9 @@ export async function baarList(refs, params, q) {
   };
 }
 
-/* ── One BAAR · Part 01 Transmittal Letters ── */
-export async function baar(refs, params, q) {
-  const ctx = await loadAudit(refs, params.id);
-  if (!ctx) return { active: '#/baar', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
-  const me = refs.me;
-  const { audit, lgu, mun, team, atl, sa } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
-  const canStd = has(me, 'sa') || has(me, 'admin');
+// Everything Part 01 needs: the saved BAAR record with the standard wording filled in where nothing is saved yet.
+async function loadTransmittal(ctx) {
+  const { audit } = ctx;
   const rec = await store.get('letters', recId(ctx.rec.id));
   const stdRec = await store.get('letters', stdId(ctx.teamId));
   const std = stdRec && !stdRec.deleted ? stdRec.data : {};
@@ -110,11 +107,58 @@ export async function baar(refs, params, q) {
   if (T.pbPos === undefined) T.pbPos = pb.pos;
   if (T.salutation === undefined) T.salutation = pbSalutation(pb.name);
   T.opSent = Object.fromEntries(OPINIONS.map((o) => [o, { ...stdOp[o], ...((T.opSent || {})[o] || {}) }]));
-  const isNew = !rec || rec.deleted;
-  let gaa = await loadGaa();
-  let pw = await loadPeriodWording();
+  return { rec, standard, stdOp, exitL, B, T, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
+}
+
+// Page numbers of the numbered parts (Independent Auditor's Report = page 1). Parts 04 to 10 are not built yet: no numbers.
+function baarPages() { return {}; }
+// Annexes added in Part 10 (not built yet).
+function baarAnnexes() { return []; }
+
+// The complete BAAR: every built part, in order, for one printout or one Word file.
+async function completeBAAR(ctx) {
+  const { audit, lgu, mun, team, atl, sa } = ctx;
+  const L = await loadTransmittal(ctx);
+  const tr = buildTransmittal({ t: { ...L.B.tr, opinion: L.B.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(L.gaa, audit.periodTo), pw: L.pw });
+  const cv = buildCover({ audit, lgu, mun, pw: L.pw });
+  const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages: baarPages(), annexes: baarAnnexes() });
+  const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
+  return {
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc))], fileName, 'BAAR'); }
+  };
+}
+// Page heading shared by the parts, with the complete BAAR buttons.
+function baarHead(ctx) {
+  const { audit, lgu, mun } = ctx;
+  return `${stepsBar(ctx, 'BAAR')}
+    <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div>
+      <div class="btn-row"><button class="btn" type="button" id="all-print">Print Complete BAAR</button><button class="btn primary" type="button" id="all-word">Complete BAAR · Word</button></div></div>`;
+}
+function wireComplete(root, ctx, me) {
+  const p = $('#all-print', root), w = $('#all-word', root);
+  if (p) p.onclick = async () => { (await completeBAAR(ctx)).print(); await store.log('printed the complete BAAR', `${ctx.lgu.name} · ${ctx.audit.auditYear}`, ctx.teamId, me.email); };
+  if (w) w.onclick = async () => {
+    try { toast('Preparing the Word file…'); await (await completeBAAR(ctx)).word(); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+    await store.log('downloaded the complete BAAR (Word)', `${ctx.lgu.name} · ${ctx.audit.auditYear}`, ctx.teamId, me.email);
+  };
+}
+
+/* ── One BAAR · Part 01 Transmittal Letters ── */
+export async function baar(refs, params, q) {
+  const ctx = await loadAudit(refs, params.id);
+  if (!ctx) return { active: '#/baar', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
+  const me = refs.me;
+  const { audit, lgu, mun, team, atl, sa } = ctx;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canStd = has(me, 'sa') || has(me, 'admin');
+  const L = await loadTransmittal(ctx);
+  const { rec, standard, stdOp, exitL, B, T, isNew } = L;
+  let { gaa, pw } = L;
   const gaaYear = Number(audit.periodTo);
-  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01: isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear)) });
+  const status01 = isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear));
+  if (q.get('p') === '03') return tocPart({ ctx, me, pw, status01 });
+  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01 });
 
   const parts = partsStrip(ctx.rec.id, '01', '');
   const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="b-${id}">${label}</label><textarea class="input be-text" id="b-${id}" rows="${rows}">${esc(T[id])}</textarea></div>`;
@@ -160,12 +204,11 @@ export async function baar(refs, params, q) {
       <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="b-save" type="button">Save</button></div></div>` : ''}`;
 
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>01 · Transmittal Letters</b>`;
-  const body = `${stepsBar(ctx, 'BAAR')}
-    <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div></div>
+  const body = `${baarHead(ctx)}
     <section class="panel" style="padding:10px 12px">${parts}</section>
     <div class="topnote">Words in [brackets] fill in by themselves. Names come from Audit Setup and Users, and the exit conference date from the Exit Conference letter. Any date can be typed. Changes apply to this BAAR only, unless you click Save as Standard.</div>
     <div class="xcols bcols"><div class="xform">${form}</div>
-      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint">Letter 8.5" × 11"</span>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
         <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="b-print" type="button">Print</button><button class="btn sm primary" id="b-word" type="button">Word</button></span></div>
         <div class="seg" role="tablist" aria-label="Document" id="b-which"><button type="button" class="on" data-d="">All Three</button><button type="button" data-d="sa">SA to Punong Barangay</button><button type="button" data-d="atl">ATL to SA</button><button type="button" data-d="aapsi">AAPSI Form</button></div>
         <div class="paper-wrap big" id="b-paper"></div></div></div>`;
@@ -173,6 +216,7 @@ export async function baar(refs, params, q) {
   return {
     active: '#/baar', crumbs, body,
     mount(root) {
+      wireComplete(root, ctx, me);
       const v = (id) => { const el = $(id, root); return el ? el.value : ''; };
       let op = B.opinion || '';
       let which = '';
@@ -307,23 +351,55 @@ function coverPart({ ctx, me, pw, status01 }) {
   const { audit, lgu, mun } = ctx;
   const c = buildCover({ audit, lgu, mun, pw });
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>02 · Cover</b>`;
-  const body = `${stepsBar(ctx, 'BAAR')}
-    <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div></div>
+  const body = `${baarHead(ctx)}
     <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', status01)}</section>
     <div class="topnote">The cover fills in by itself from Audit Setup. Nothing needs to be typed here.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>On the Cover</h2></div><div class="panel-body">
         <div class="ro"><span>Barangay</span><b>${esc(c.brgy)}</b><span>Municipality</span><b>${esc(c.mun)}</b><span>Period</span><b>${esc(c.period)}</b></div></div></section></div>
-      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint">Letter 8.5" × 11"</span>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
         <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="c-print" type="button">Print</button><button class="btn sm primary" id="c-word" type="button">Word</button></span></div>
         <div class="paper-wrap big"><div class="sheet csheet">${coverHTML(c)}</div></div></div></div>`;
   return {
     active: '#/baar', crumbs, body,
     mount(root) {
+      wireComplete(root, ctx, me);
       $('#c-print', root).onclick = async () => { printCover(c, `BAAR ${audit.auditYear} · ${lgu.name} · 02 Cover`); await store.log('printed the BAAR cover', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email); };
       $('#c-word', root).onclick = async () => {
         try { toast('Preparing the Word file…'); await coverWord(c); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
         await store.log('downloaded the BAAR cover (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+    }
+  };
+}
+
+/* ── Part 03 · Table of Contents ── */
+function tocPart({ ctx, me, pw, status01 }) {
+  const { audit, lgu, mun } = ctx;
+  const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(), annexes: baarAnnexes() });
+  const status03 = t.missing ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
+  const rows = t.rows.map((r) => r.k === 'part'
+    ? `<tr class="h"><td>${esc(r.text)}${/PART IV/.test(r.text) ? ' <span class="hint" style="font-weight:400">(only the annexes added in Part 10)</span>' : ''}</td><td class="p">${r.pageHead ? '' : esc(r.page || '')}</td></tr>`
+    : `<tr><td>${esc(r.text.replace(/ for Financial Statements$/, ''))}</td><td class="p">${esc(r.page)}</td></tr>`).join('');
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>03 · Table of Contents</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '03', status01, status03)}</section>
+    <div class="topnote">Page numbers fill in by themselves from the parts of this BAAR.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Page Numbers</h2></div><div class="panel-body" style="padding-top:6px">
+        <table class="pgt"><tbody>${rows}</tbody></table>
+        ${t.missing ? '<span class="hint">A part not built yet has no page number until it is built.</span>' : ''}</div></section></div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="t-print" type="button">Print</button><button class="btn sm primary" id="t-word" type="button">Word</button></span></div>
+        <div class="paper-wrap big"><div class="sheet tsheet">${tocHTML(t)}</div></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      $('#t-print', root).onclick = async () => { printToc(t, `BAAR ${audit.auditYear} · ${lgu.name} · 03 Table of Contents`); await store.log('printed the BAAR table of contents', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email); };
+      $('#t-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); await tocWord(t); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded the BAAR table of contents (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
       };
     }
   };
