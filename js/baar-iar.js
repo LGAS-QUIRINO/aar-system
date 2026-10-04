@@ -12,11 +12,16 @@ export const IAR_STANDARD = {
   basesIntro: 'As discussed in Part II – Observations and Recommendations portion of this Report, the balances in the Financial Statements of the affected accounts were unreliable due to the following:',
   conducted: 'We conducted our audit in accordance with International Standards of Supreme Audit Institutions (ISSAIs). Our responsibilities under those standards are further described in the Auditor’s Responsibilities for the Audit of the Financial Statements section of our report. We are independent of the agency in accordance with the ethical requirements that are relevant to our audit of the financial statements, and we have fulfilled our other ethical responsibilities in accordance with these requirements. We believe that the audit evidence we have obtained is sufficient and appropriate to provide a basis for our opinion.',
   kam: 'Except for the matter described in the Bases for Qualified Opinion section, we have determined that there are no other key audit matters to communicate in our report.',
-  mgmt1: 'Management is responsible for the preparation and fair presentation of the financial statements in accordance with IPSAS, and for such internal control as management determines is necessary to enable the preparation of financial statements that are free from material misstatement, whether due to fraud or error.',
-  mgmt2: 'Those charged with governance are responsible for overseeing the BLGU’s financial reporting process.',
+  mgmt: 'Management is responsible for the preparation and fair presentation of the financial statements in accordance with IPSAS, and for such internal control as management determines is necessary to enable the preparation of financial statements that are free from material misstatement, whether due to fraud or error.\n\nThose charged with governance are responsible for overseeing the BLGU’s financial reporting process.',
   aud: 'Our objectives are to obtain reasonable assurance about whether the financial statements as a whole are free from material misstatement, whether due to fraud or error, and to issue an auditor’s report that includes our opinion. Reasonable assurance is a high level of assurance, but is not a guarantee that an audit conducted in accordance with ISSAIs will always detect a material misstatement when it exists. Misstatements can arise from fraud or error and are considered material if, individually or in the aggregate, they could reasonably be expected to influence the economic decisions of users taken on the basis of these financial statements.'
 };
 export const IAR_KEYS = Object.keys(IAR_STANDARD);
+// Older saved wording kept the two management paragraphs in separate boxes: join them into one box.
+export function mergeMgmt(w) {
+  if (w && w.mgmt === undefined && (w.mgmt1 !== undefined || w.mgmt2 !== undefined)) w.mgmt = [w.mgmt1, w.mgmt2].filter((x) => String(x || '').trim()).join('\n\n');
+  if (w) { delete w.mgmt1; delete w.mgmt2; }
+  return w;
+}
 // The opinion paragraph, one per opinion. Qualified is from the issued BAARs; the others are typed the first time.
 export const IAR_OPINION_STANDARD = {
   Unmodified: '',
@@ -38,7 +43,9 @@ export function buildIar(info) {
   const { iar: I, opinion, audit, lgu, mun, atl, pb, bases } = info;
   const brgy = `${lgu.name}, ${mun.name}, Quirino`;
   const fill = (s) => String(s || '').replace(/\[BARANGAY\]/g, brgy).replace(/\[YEAR\]/g, String(audit.periodTo));
-  const P = (s, o = {}) => (String(s || '').trim() ? [{ k: 'p', t: fill(s), al: 'j', ...o }, { k: 'bl' }] : []);
+  // A box may hold several paragraphs, separated by an empty line; each prints as its own paragraph.
+  const P = (s, o = {}) => String(s || '').split(/\n\s*\n/).map((x) => x.replace(/\s*\n\s*/g, ' ').trim()).filter(Boolean)
+    .flatMap((x) => [{ k: 'p', t: fill(x), al: 'j', ...o }, { k: 'bl' }]);
   const H = (s) => [{ k: 'p', t: s, b: true, keep: true }, { k: 'bl', keep: true }];
   const items = [{ k: 'lh' }, { k: 'bl' }, { k: 'p', t: 'INDEPENDENT AUDITOR’S REPORT', b: true, al: 'c' }, { k: 'bl' }, { k: 'bl' },
     { k: 'p', t: upper([pb.title, pb.name].filter(Boolean).join(' ')) || blank, b: true }, { k: 'p', t: `Barangay ${lgu.name}` }, { k: 'p', t: `Municipality of ${mun.name}` }, { k: 'p', t: 'Province of Quirino' }, { k: 'bl' }, { k: 'bl' },
@@ -51,7 +58,7 @@ export function buildIar(info) {
     });
   }
   items.push(...P(I.conducted), ...H('Key Audit Matters'), ...P(I.kam),
-    ...H('Responsibilities of Management and Those Charged with Governance for the Financial Statements'), ...P(I.mgmt1), ...P(I.mgmt2),
+    ...H('Responsibilities of Management and Those Charged with Governance for the Financial Statements'), ...P(I.mgmt),
     ...H('Auditor’s Responsibilities for the Audit of the Financial Statements'), ...P(I.aud), { k: 'bl' });
   // The signature block stays together on one page.
   const sig = [{ k: 'p', t: 'COMMISSION ON AUDIT', b: true }, { k: 'bl' }, { k: 'p', t: 'By:' }, { k: 'bl' }, { k: 'bl' }, { k: 'p', t: upper(atl ? atl.name : '') || blank, b: true }];

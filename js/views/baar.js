@@ -10,7 +10,7 @@ import { loadGaa, loadPeriodWording, openReportWording, canEditWording } from '.
 import { buildCover, coverHTML, printCover, coverWord, coverPrint, coverSections } from '../baar-cover.js';
 import { buildToc, tocHTML, printToc, tocWord, tocPrint, tocSections } from '../baar-toc.js';
 import { printPages, saveDocx } from '../baar-doc.js';
-import { IAR_STANDARD, IAR_KEYS, IAR_OPINION_STANDARD, BASES_HEAD, buildIar, iarPagesHTML, paginateIar, iarPrint, iarSections } from '../baar-iar.js';
+import { IAR_STANDARD, IAR_KEYS, mergeMgmt, IAR_OPINION_STANDARD, BASES_HEAD, buildIar, iarPagesHTML, paginateIar, iarPrint, iarSections } from '../baar-iar.js';
 import { fillText, blockPlain, SECTIONS } from '../aom.js';
 import { aomNo } from '../format.js';
 import { aomAmount, peso } from '../saor.js';
@@ -136,9 +136,9 @@ async function loadTransmittal(ctx) {
   // Part 04 · Independent Auditor's Report: standard wording filled in where nothing is saved yet.
   const iStdRec = await store.get('letters', iarStdId(ctx.teamId));
   const iStd = iStdRec && !iStdRec.deleted ? iStdRec.data : {};
-  const iStandard = { ...IAR_STANDARD, ...(iStd.wording || {}) };
+  const iStandard = { ...IAR_STANDARD, ...(mergeMgmt({ ...(iStd.wording || {}) })) };
   const iStdOp = { ...IAR_OPINION_STANDARD, ...(iStd.opSent || {}) };
-  const I = B.iar = B.iar || {};
+  const I = B.iar = mergeMgmt(B.iar || {});
   IAR_KEYS.forEach((k) => { if (I[k] === undefined) I[k] = iStandard[k]; });
   I.opSent = { ...iStdOp, ...(I.opSent || {}) };
   I.bases = I.bases || {};
@@ -492,7 +492,7 @@ function iarPart({ ctx, me, refs, L, status01 }) {
         <div class="field"><span class="label">Signed By</span><div class="bval">${atlLine}</div></div></div></div></section>
       <section class="panel"><div class="panel-head"><h2>Wording</h2><span class="btn-row" style="margin-left:auto">${canStd && canEdit ? '<button class="btn sm ghost" id="i-std" type="button">Save as Standard</button>' : ''}${canEdit ? '<button class="btn sm ghost" id="i-reset" type="button">Reset to Standard</button>' : ''}</span></div><div class="panel-body">
         ${ta('open', 'Opening Paragraph', 4)}${ta('basesIntro', 'Bases · Introduction', 2)}${ta('conducted', 'We Conducted Our Audit…', 5)}${ta('kam', 'Key Audit Matters', 3)}
-        ${ta('mgmt1', 'Responsibilities of Management', 4)}${ta('mgmt2', 'Those Charged with Governance', 2)}${ta('aud', 'Auditor’s Responsibilities', 6)}</div></section>
+        ${ta('mgmt', 'Responsibilities of Management and Those Charged with Governance', 6)}${ta('aud', 'Auditor’s Responsibilities', 6)}</div></section>
       ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
         <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="i-save" type="button">Save</button></div></div>` : ''}</div>
       <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
