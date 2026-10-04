@@ -50,12 +50,24 @@ export const OPINION_STANDARD = {
   Disclaimer: { sa: '', atl: '' }
 };
 
-const WORDS = ['', '', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
-// COA wording for the letters: "for the year ended December 31, 2025" / "for the two-year period ended December 31, 2025".
-export function periodEnded(from, to) {
+const WORDS = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+// Period wording patterns (Report Wording). [YEAR] = the "To" year in Audit Setup; [N] = the number of years in words.
+export const PW_ID = 'report-wording';
+export const PERIOD_STANDARD = {
+  lettersOne: 'for the year ended December 31, [YEAR]',
+  lettersMany: 'for the [N]-year period ended December 31, [YEAR]',
+  coverOne: 'For the Year Ended December 31, [YEAR]',
+  coverMany: 'For the [N]-Year Period Ended December 31, [YEAR]'
+};
+// kind: 'letters' (in a sentence) or 'cover' (as a heading; [N] starts with a capital).
+export function periodWords(pw, from, to, kind = 'letters') {
+  const p = { ...PERIOD_STANDARD, ...(pw || {}) };
   const n = Number(to) - Number(from) + 1;
-  return n <= 1 ? `for the year ended December 31, ${to}` : `for the ${WORDS[n] || n}-year period ended December 31, ${to}`;
+  const w = WORDS[n] || String(n);
+  const pat = n <= 1 ? p[kind + 'One'] : p[kind + 'Many'];
+  return String(pat || '').replace(/\[YEAR\]/g, String(to)).replace(/\[N\]/g, kind === 'cover' ? w.charAt(0).toUpperCase() + w.slice(1) : w);
 }
+export const periodEnded = (from, to, pw) => periodWords(pw, from, to, 'letters');
 // "Dear Punong Barangay Eban:" from "Myrna W. Eban" (suffixes such as Jr. or III are skipped).
 export function pbSalutation(name) {
   const w = String(name || '').trim().split(/\s+/).filter((x) => x && !/^(jr|sr|ii|iii|iv|v)\.?,?$/i.test(x));
@@ -81,7 +93,7 @@ export function buildTransmittal(info) {
   const op = (t.opSent && t.opSent[t.opinion]) || { sa: '', atl: '' };
   const fill = (s) => String(s || '')
     .replace(/\[BARANGAY\]/g, brgy).replace(/\[MUN\]/g, `${mun.name}, Quirino`)
-    .replace(/\[PERIOD\]/g, periodEnded(audit.periodFrom, audit.periodTo))
+    .replace(/\[PERIOD\]/g, periodEnded(audit.periodFrom, audit.periodTo, info.pw))
     .replace(/\[CONF_DATE\]/g, t.confDate ? longDate(t.confDate) : blank)
     .replace(/\[GAA\]/g, gaaComplete(info.gaa) ? gaaText(info.gaa) : blank);
   const lh = (office) => [{ k: 'lh' },

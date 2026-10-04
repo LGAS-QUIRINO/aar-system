@@ -6,7 +6,9 @@ import { has, myTeamIds } from '../refs.js';
 import { loadAudit, stepsBar } from '../auditctx.js';
 import { ST, clone } from '../aom.js';
 import { periodPhrase, longDate, nice } from '../format.js';
-import { GAA_ID, GAA_DEFAULT, gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord } from '../baar-transmittal.js';
+import { loadGaa, loadPeriodWording, openReportWording, canEditWording } from './reportwording.js';
+import { buildCover, coverHTML, printCover, coverWord } from '../baar-cover.js';
+import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord } from '../baar-transmittal.js';
 
 export const PARTS = [
   ['01', 'Transmittal Letters'], ['02', 'Cover'], ['03', 'Table of Contents'], ['04', "Independent Auditor's Report"], ['05', "Management's Responsibility"],
@@ -15,11 +17,17 @@ export const PARTS = [
 const recId = (auditId) => `baar-${auditId}`;
 const stdId = (teamId) => `std-baartr-${teamId}`;
 
-// The GAA References list (shared by all teams), or the starting list when none is saved yet.
-export async function loadGaa() {
-  const r = await store.get('letters', GAA_ID);
-  return r && !r.deleted && Array.isArray(r.data.list) ? r.data.list : GAA_DEFAULT.map((g) => ({ ...g }));
+const BUILT = ['01', '02'];
+// The parts strip: built parts are links; status01 is the Part 01 pill (live on the Part 01 screen).
+function partsStrip(auditId, active, status01) {
+  return `<div class="bparts">${PARTS.map(([n, t]) => {
+    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : '';
+    if (n === active) return `<span class="bpart on"><b>${n}</b> ${esc(t)} ${pillHTML}</span>`;
+    if (BUILT.includes(n)) return `<a class="bpart link" href="#/baar/${auditId}?p=${n}"><b>${n}</b> ${esc(t)} ${pillHTML}</a>`;
+    return `<span class="bpart later" title="Built after Part ${String(Number(n) - 1).padStart(2, '0')}"><b>${n}</b> ${esc(t)}</span>`;
+  }).join('')}</div>`;
 }
+const p01Pill = (miss) => (miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok'));
 
 // What Part 01 still needs before it is ready to print.
 export function trMissing(b, gaa, year) {
@@ -63,7 +71,8 @@ export async function baarList(refs, params, q) {
   }).join('');
   const body = `<div class="page-head"><div><h1>BAAR Reports</h1><p>One BAAR per barangay, built part by part in order. Click a barangay to open its BAAR.</p></div>
       <div class="btn-row"><label class="sr-only" for="b-m">Municipality</label><select class="input" id="b-m" style="width:170px">${munIds.map((id) => `<option value="${id}" ${id === munId ? 'selected' : ''}>${esc(refs.lgu[id]?.data.name || id)}</option>`).join('')}</select>
-        <label class="sr-only" for="b-y">Audit Year</label><select class="input" id="b-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select></div></div>
+        <label class="sr-only" for="b-y">Audit Year</label><select class="input" id="b-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select>
+        ${canEditWording(me) ? '<button class="btn" id="b-rw" type="button">Report Wording</button>' : ''}</div></div>
     <section class="panel"><div class="t-head" style="${cols}"><span>Barangay</span><span>Period</span><span>AOMs</span><span>01 · Transmittal</span><span></span></div>
       ${rows || '<div class="empty">No audits for this year.</div>'}</section>`;
   return {
@@ -71,6 +80,8 @@ export async function baarList(refs, params, q) {
     mount(root) {
       $('#b-m', root).onchange = (e) => { location.hash = `#/baar?m=${encodeURIComponent(e.target.value)}`; };
       $('#b-y', root).onchange = (e) => { location.hash = `#/baar?m=${encodeURIComponent(munId)}&y=${e.target.value}`; };
+      const rw = $('#b-rw', root);
+      if (rw) rw.onclick = async () => { const r = await openReportWording({ me, tab: 'period', year: Math.max(...list.map((a) => Number(a.data.periodTo)), year - 1), teamId: list[0]?.data.teamId || '' }); if (r) emitChange('local'); };
     }
   };
 }
@@ -101,11 +112,11 @@ export async function baar(refs, params, q) {
   T.opSent = Object.fromEntries(OPINIONS.map((o) => [o, { ...stdOp[o], ...((T.opSent || {})[o] || {}) }]));
   const isNew = !rec || rec.deleted;
   let gaa = await loadGaa();
+  let pw = await loadPeriodWording();
   const gaaYear = Number(audit.periodTo);
+  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01: isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear)) });
 
-  const parts = `<div class="bparts">${PARTS.map(([n, t]) => n === '01'
-    ? `<span class="bpart on"><b>${n}</b> ${esc(t)} <span id="b-p01">${pill('', 'grey')}</span></span>`
-    : `<span class="bpart later" title="Built after Part ${String(Number(n) - 1).padStart(2, '0')}"><b>${n}</b> ${esc(t)}</span>`).join('')}</div>`;
+  const parts = partsStrip(ctx.rec.id, '01', '');
   const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="b-${id}">${label}</label><textarea class="input be-text" id="b-${id}" rows="${rows}">${esc(T[id])}</textarea></div>`;
   const dis = canEdit ? '' : 'disabled';
 
@@ -116,7 +127,7 @@ export async function baar(refs, params, q) {
       <div class="field"><label class="label" for="b-ops">Opinion Sentence · Letter to the Punong Barangay</label><textarea class="input be-text" id="b-ops" rows="3" ${dis}></textarea></div>
       <div class="field"><label class="label" for="b-opa">Opinion Sentence · Letter to the SA</label><textarea class="input be-text" id="b-opa" rows="2" ${dis}></textarea></div>
       <span class="hint" id="b-ophint"></span>
-      <div class="field"><span class="label">Period in the Letters</span><div class="bval">${esc(periodEnded(audit.periodFrom, audit.periodTo))}</div>
+      <div class="field"><span class="label">Period in the Letters</span><div class="bval" id="b-period">${esc(periodEnded(audit.periodFrom, audit.periodTo, pw))}</div>
 </div>
       <div class="field"><label class="label" for="b-cd">Exit Conference Date</label><input class="input" type="date" id="b-cd" value="${esc(T.confDate || '')}" ${dis}>
         ${exitL ? '' : '<span class="hint">No Exit Conference letter lists this barangay yet.</span>'}</div>
@@ -148,7 +159,7 @@ export async function baar(refs, params, q) {
     ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
       <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="b-save" type="button">Save</button></div></div>` : ''}`;
 
-  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/audits/${ctx.rec.id}/aoms">${esc(ctx.title)}</a> / <b>01 · Transmittal Letters</b>`;
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>01 · Transmittal Letters</b>`;
   const body = `${stepsBar(ctx, 'BAAR')}
     <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div></div>
     <section class="panel" style="padding:10px 12px">${parts}</section>
@@ -188,7 +199,7 @@ export async function baar(refs, params, q) {
       let measure = document.getElementById('b-measure');
       if (!measure) { measure = document.createElement('div'); measure.id = 'b-measure'; document.body.appendChild(measure); }
       measure.className = 'aom-doc bl'; measure.style.cssText = 'position:absolute;left:-9999px;top:0;width:6in;visibility:hidden';
-      const docOf = (d) => buildTransmittal({ t: { ...d.tr, opinion: d.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(gaa, gaaYear) });
+      const docOf = (d) => buildTransmittal({ t: { ...d.tr, opinion: d.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(gaa, gaaYear), pw });
       const draw = () => {
         if (!document.body.contains(root)) return;
         const d = collect(), doc = docOf(d);
@@ -200,7 +211,7 @@ export async function baar(refs, params, q) {
         }).join('');
         drawGaa(d);
         const miss = trMissing(d, gaa, gaaYear);
-        $('#b-p01', root).innerHTML = miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
+        $('#b-p01', root).innerHTML = p01Pill(miss);
         $('#b-p01', root).title = miss.length ? 'Still needed: ' + miss.join(', ') : '';
         const t = d.tr, w = [];
         if (t.atlDate && t.saDate && t.saDate < t.atlDate) w.push('The letter to the Punong Barangay is dated before the letter to the SA.');
@@ -221,31 +232,11 @@ export async function baar(refs, params, q) {
         box.classList.toggle('bad-box', uses && !gaaComplete(g));
       }
       async function editGaa() {
-        const canGaa = has(me, 'sa') || has(me, 'admin');
-        const rows = gaa.map((g) => ({ ...g }));
-        if (!gaaFor(rows, gaaYear)) rows.push({ fy: gaaYear, ra: '', sec: '', src: '' });
-        rows.sort((a, b) => a.fy - b.fy);
-        const dis = canGaa ? '' : 'disabled';
-        const rowHTML = (g, i) => `<tr><td><input class="input" data-g="fy" data-i="${i}" value="${esc(g.fy)}" inputmode="numeric" aria-label="Fiscal Year" ${dis}></td>
-          <td><input class="input" data-g="ra" data-i="${i}" value="${esc(g.ra)}" aria-label="Republic Act No." ${dis}></td><td><input class="input" data-g="sec" data-i="${i}" value="${esc(g.sec)}" aria-label="Section" ${dis}></td>
-          <td><input class="input" data-g="src" data-i="${i}" value="${esc(g.src || '')}" aria-label="Checked From" ${dis}></td><td>${gaaComplete(g) ? '' : pill('Incomplete', 'warn')}</td></tr>`;
-        const tbl = () => `<table class="gt"><thead><tr><th style="width:100px">Fiscal Year</th><th style="width:140px">Republic Act No.</th><th style="width:90px">Section</th><th>Checked From</th><th style="width:96px"></th></tr></thead><tbody>${rows.map(rowHTML).join('')}</tbody></table>`;
-        const body = `<p class="hint" style="margin:0">The General Provisions section that asks agencies to report actions on audit recommendations within 60 days (AAPSI). Add each new year once; everyone gets it.</p>
-          <div id="g-tbl">${tbl()}</div>${canGaa ? '<button class="btn sm" type="button" id="g-add" style="align-self:flex-start">+ Add Fiscal Year</button>' : '<span class="hint">Only the Admin or the SA can change this list.</span>'}<div id="g-prev" class="note ok" style="margin:0"></div>`;
-        const prev = (bg) => { const g = gaaFor(rows, gaaYear); $('#g-prev', bg).textContent = gaaComplete(g) ? `Preview for FY ${gaaYear}: “…pursuant to ${gaaText(g)}, using the…”` : `FY ${gaaYear} is not complete yet.`; };
-        const v = await modal({ title: 'GAA References', wide: true, body,
-          buttons: canGaa ? [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Save', cls: 'primary', value: 'save' }] : [{ label: 'Close', cls: 'ghost', value: null }],
-          onOpen: (bg) => {
-            bg.addEventListener('input', (e) => { const el = e.target.closest('[data-g]'); if (!el) return; rows[+el.dataset.i][el.dataset.g] = el.dataset.g === 'fy' ? Number(el.value) || el.value : el.value; prev(bg); });
-            const add = $('#g-add', bg); if (add) add.onclick = () => { const next = Math.max(gaaYear, ...rows.map((r) => Number(r.fy) || 0)) + 1; rows.push({ fy: next, ra: '', sec: '', src: '' }); $('#g-tbl', bg).innerHTML = tbl(); prev(bg); };
-            prev(bg);
-          } });
-        if (v !== 'save') return;
-        const list = rows.filter((g) => Number(g.fy)).map((g) => ({ fy: Number(g.fy), ra: String(g.ra || '').trim(), sec: String(g.sec || '').trim(), src: String(g.src || '').trim() }))
-          .filter((g, i, a) => a.findIndex((x) => x.fy === g.fy) === i).sort((a, b) => a.fy - b.fy);
-        await store.save('letters', GAA_ID, { type: 'gaa', list, savedBy: me.email, savedAt: new Date().toISOString() }, { silent: true });
-        await store.log('saved the GAA References', list.map((g) => `FY ${g.fy}: R.A. ${g.ra || '?'} Sec. ${g.sec || '?'}`).join('; '), ctx.teamId, me.email);
-        gaa = list; toast('GAA References saved.', 'ok'); draw();
+        const r = await openReportWording({ me, tab: 'gaa', year: gaaYear, teamId: ctx.teamId });
+        if (!r) return;
+        gaa = r.gaa; pw = r.pw;
+        $('#b-period', root).textContent = periodEnded(audit.periodFrom, audit.periodTo, pw);
+        draw();
       }
       $('#b-gaa', root).addEventListener('click', (e) => {
         const b = e.target.closest('[data-gaa]'); if (!b) return;
@@ -307,6 +298,33 @@ export async function baar(refs, params, q) {
       draw();
       setDirty(false, save);
       void isNew; void longDate; void nice;
+    }
+  };
+}
+
+/* ── Part 02 · Cover ── */
+function coverPart({ ctx, me, pw, status01 }) {
+  const { audit, lgu, mun } = ctx;
+  const c = buildCover({ audit, lgu, mun, pw });
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>02 · Cover</b>`;
+  const body = `${stepsBar(ctx, 'BAAR')}
+    <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div></div>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', status01)}</section>
+    <div class="topnote">The cover fills in by itself from Audit Setup. Nothing needs to be typed here.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>On the Cover</h2></div><div class="panel-body">
+        <div class="ro"><span>Barangay</span><b>${esc(c.brgy)}</b><span>Municipality</span><b>${esc(c.mun)}</b><span>Period</span><b>${esc(c.period)}</b></div></div></section></div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint">Letter 8.5" × 11"</span>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="c-print" type="button">Print</button><button class="btn sm primary" id="c-word" type="button">Word</button></span></div>
+        <div class="paper-wrap big"><div class="sheet csheet">${coverHTML(c)}</div></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      $('#c-print', root).onclick = async () => { printCover(c, `BAAR ${audit.auditYear} · ${lgu.name} · 02 Cover`); await store.log('printed the BAAR cover', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email); };
+      $('#c-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); await coverWord(c); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded the BAAR cover (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
     }
   };
 }
