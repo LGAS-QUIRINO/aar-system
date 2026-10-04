@@ -1,12 +1,12 @@
 // BAAR Reports: the list of Barangay BAARs, and each BAAR's parts (01 to 10), built in order.
 // Part 01 · Transmittal Letters can be printed as soon as its own details are filled in, before the rest of the BAAR is done.
 import { store, emitChange } from '../store.js';
-import { esc, toast, setDirty, confirmBox, pill, $, $$ } from '../ui.js';
+import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has, myTeamIds } from '../refs.js';
 import { loadAudit, stepsBar } from '../auditctx.js';
 import { ST, clone } from '../aom.js';
 import { periodPhrase, longDate, nice } from '../format.js';
-import { TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord } from '../baar-transmittal.js';
+import { GAA_ID, GAA_DEFAULT, gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord } from '../baar-transmittal.js';
 
 export const PARTS = [
   ['01', 'Transmittal Letters'], ['02', 'Cover'], ['03', 'Table of Contents'], ['04', "Independent Auditor's Report"], ['05', "Management's Responsibility"],
@@ -15,8 +15,14 @@ export const PARTS = [
 const recId = (auditId) => `baar-${auditId}`;
 const stdId = (teamId) => `std-baartr-${teamId}`;
 
+// The GAA References list (shared by all teams), or the starting list when none is saved yet.
+export async function loadGaa() {
+  const r = await store.get('letters', GAA_ID);
+  return r && !r.deleted && Array.isArray(r.data.list) ? r.data.list : GAA_DEFAULT.map((g) => ({ ...g }));
+}
+
 // What Part 01 still needs before it is ready to print.
-export function trMissing(b) {
+export function trMissing(b, gaa, year) {
   const t = (b && b.tr) || {}, op = b && b.opinion, s = (t.opSent && t.opSent[op]) || {};
   const miss = [];
   if (!op) miss.push('opinion');
@@ -24,6 +30,7 @@ export function trMissing(b) {
   if (!t.confDate) miss.push('exit conference date');
   if (!t.atlDate || !t.saDate) miss.push('letter dates');
   if (!(t.pbName || '').trim()) miss.push('Punong Barangay');
+  if (gaa && /\[GAA\]/.test(t.sa6 === undefined ? '[GAA]' : t.sa6) && !gaaComplete(gaaFor(gaa, year))) miss.push(`GAA for FY ${year}`);
   return miss;
 }
 
@@ -43,10 +50,11 @@ export async function baarList(refs, params, q) {
     .sort((a, b) => (refs.lgu[a.data.lguId]?.data.name || '').localeCompare(refs.lgu[b.data.lguId]?.data.name || ''));
   const aoms = await store.list('aoms');
   const recs = Object.fromEntries((await store.list('letters')).filter((l) => l.data.type === 'baar').map((l) => [l.data.auditId, l.data]));
+  const gaa = await loadGaa();
   const cols = 'grid-template-columns: minmax(150px,1.3fr) minmax(170px,1.3fr) minmax(120px,1fr) minmax(140px,1fr) 90px';
   const rows = list.map((a) => {
     const xs = aoms.filter((x) => x.data.auditId === a.id), fin = xs.filter((x) => x.data.status === ST.FINAL).length;
-    const miss = trMissing(recs[a.id]);
+    const miss = trMissing(recs[a.id], gaa, a.data.periodTo);
     const p01 = !recs[a.id] ? pill('Not Started', 'grey') : miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
     return `<div class="t-row click" style="${cols}" data-go="#/baar/${a.id}" tabindex="0" role="link"><span><b>${esc(refs.lgu[a.data.lguId]?.data.name || '?')}</b></span>
       <span>${esc(periodPhrase(a.data.periodFrom, a.data.periodTo))}</span>
@@ -92,6 +100,8 @@ export async function baar(refs, params, q) {
   if (T.salutation === undefined) T.salutation = pbSalutation(pb.name);
   T.opSent = Object.fromEntries(OPINIONS.map((o) => [o, { ...stdOp[o], ...((T.opSent || {})[o] || {}) }]));
   const isNew = !rec || rec.deleted;
+  let gaa = await loadGaa();
+  const gaaYear = Number(audit.periodTo);
 
   const parts = `<div class="bparts">${PARTS.map(([n, t]) => n === '01'
     ? `<span class="bpart on"><b>${n}</b> ${esc(t)} <span id="b-p01">${pill('', 'grey')}</span></span>`
@@ -107,26 +117,26 @@ export async function baar(refs, params, q) {
       <div class="field"><label class="label" for="b-opa">Opinion Sentence · Letter to the SA</label><textarea class="input be-text" id="b-opa" rows="2" ${dis}></textarea></div>
       <span class="hint" id="b-ophint"></span>
       <div class="field"><span class="label">Period in the Letters</span><div class="bval">${esc(periodEnded(audit.periodFrom, audit.periodTo))}</div>
-        <span class="hint">From the audit period in Setup. One year reads "for the year ended…", three years "for the three-year period ended…".</span></div>
+</div>
       <div class="field"><label class="label" for="b-cd">Exit Conference Date</label><input class="input" type="date" id="b-cd" value="${esc(T.confDate || '')}" ${dis}>
-        <span class="hint">${exitL ? `From Exit Conference Letter ${exitL.data.n}. You can change it.` : 'No Exit Conference letter lists this barangay yet. Type the date.'}</span></div>
+        ${exitL ? '' : '<span class="hint">No Exit Conference letter lists this barangay yet.</span>'}</div>
     </div></section>
     <section class="panel"><div class="panel-head"><h2>Letter Dates</h2></div><div class="panel-body">
       <div class="grid-2">
         <div class="field"><label class="label" for="b-atld">ATL to SA</label><input class="input" type="date" id="b-atld" value="${esc(T.atlDate || '')}" ${dis}></div>
         <div class="field"><label class="label" for="b-sad">SA to Punong Barangay</label><input class="input" type="date" id="b-sad" value="${esc(T.saDate || '')}" ${dis}></div>
-      </div><span class="hint">Any date. Past dates are allowed.</span><div id="b-datewarn"></div></div></section>
+      </div><div id="b-datewarn"></div></div></section>
     <section class="panel"><div class="panel-head"><h2>Addressed To</h2><a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/setup">Edit in Setup</a></div><div class="panel-body">
       <div class="grid-2">
         <div class="field"><label class="label" for="b-pb">Punong Barangay</label><input class="input" id="b-pb" value="${esc(T.pbName)}" ${dis}></div>
         <div class="field"><label class="label" for="b-sal">Salutation</label><input class="input" id="b-sal" value="${esc(T.salutation)}" ${dis}></div>
-      </div><span class="hint">From the officials in Audit Setup. The salutation uses the surname. A change here applies to this BAAR only.</span></div></section>
+      </div></div></section>
     <section class="panel"><div class="panel-head"><h2>Wording</h2><span class="btn-row" style="margin-left:auto">${canStd && canEdit ? '<button class="btn sm ghost" id="b-std" type="button">Save as Standard</button>' : ''}${canEdit ? '<button class="btn sm ghost" id="b-reset" type="button">Reset to Standard</button>' : ''}</span></div><div class="panel-body">
       <div class="seg" role="tablist" aria-label="Which letter"><button type="button" class="on" data-wl="sa">Letter to Punong Barangay</button><button type="button" data-wl="atl">Letter to SA</button></div>
       <fieldset class="bw" data-w="sa" ${dis}>
         ${ta('sa1', 'Paragraph 1', 4)}${ta('sa2', 'Paragraph 2', 4)}${ta('sa3', 'Paragraph 3', 3)}
         <span class="hint">Paragraph 4 is the opinion sentence, under Report Details.</span>
-        ${ta('sa5', 'Paragraph 5', 3)}${ta('sa6', 'Paragraph 6 · update the GAA section and R.A. number each year', 5)}${ta('sa7', 'Paragraph 7', 2)}
+        ${ta('sa5', 'Paragraph 5', 3)}<div class="sugg" id="b-gaa"></div>${ta('sa6', 'Paragraph 6', 5)}${ta('sa7', 'Paragraph 7', 2)}
         ${ta('cc', 'Copy furnished (one per line)', 5)}</fieldset>
       <fieldset class="bw" data-w="atl" hidden ${dis}>
         ${ta('atlAddr', "SA's Address (one line each)", 2)}
@@ -134,8 +144,6 @@ export async function baar(refs, params, q) {
         ${ta('atl1', 'Paragraph 1', 4)}${ta('atl2', 'Paragraph 2', 4)}${ta('atl3', 'Paragraph 3', 5)}${ta('atl4', 'Paragraph 4', 2)}
         <span class="hint">Paragraph 5 is the opinion sentence, under Report Details.</span>
         ${ta('atl6', 'Paragraph 6', 2)}</fieldset>
-      <span class="hint">These fill in by themselves: <b>[BARANGAY]</b> ${esc(lgu.name)}, ${esc(mun.name)}, Quirino · <b>[MUN]</b> ${esc(mun.name)}, Quirino · <b>[PERIOD]</b> ${esc(periodEnded(audit.periodFrom, audit.periodTo))} · <b>[CONF_DATE]</b> the exit conference date.
-        Signatories: the Supervising Auditor signs the letter to the Punong Barangay, the Audit Team Leader signs the letter to the SA, with their position and designation from Users. Spaces are left blank for wet signatures.</span>
     </div></section>
     ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
       <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="b-save" type="button">Save</button></div></div>` : ''}`;
@@ -144,6 +152,7 @@ export async function baar(refs, params, q) {
   const body = `${stepsBar(ctx, 'BAAR')}
     <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div></div>
     <section class="panel" style="padding:10px 12px">${parts}</section>
+    <div class="topnote">Words in [brackets] fill in by themselves. Names come from Audit Setup and Users, and the exit conference date from the Exit Conference letter. Any date can be typed. Changes apply to this BAAR only, unless you click Save as Standard.</div>
     <div class="xcols bcols"><div class="xform">${form}</div>
       <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint">Letter 8.5" × 11"</span>
         <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="b-print" type="button">Print</button><button class="btn sm primary" id="b-word" type="button">Word</button></span></div>
@@ -161,9 +170,11 @@ export async function baar(refs, params, q) {
         const s = T.opSent[op] || { sa: '', atl: '' };
         opBox.sa.value = op ? s.sa : ''; opBox.atl.value = op ? s.atl : '';
         opBox.sa.disabled = opBox.atl.disabled = !op || !canEdit;
-        $('#b-ophint', root).textContent = !op ? 'Choose the opinion first.'
-          : (s.sa || '').trim() && (s.atl || '').trim() ? `Each opinion keeps its own sentences. [BARANGAY] and [PERIOD] fill in by themselves.`
+        const hint = $('#b-ophint', root);
+        hint.textContent = !op ? 'Choose the opinion first.'
+          : (s.sa || '').trim() && (s.atl || '').trim() ? ''
           : `Type the ${op} sentences the first time. ${canStd ? 'Click Save as Standard to keep them for every BAAR.' : 'Your SA can save them as standard.'}`;
+        hint.hidden = !hint.textContent;
       };
       const keepOp = () => { if (op) T.opSent[op] = { sa: opBox.sa.value, atl: opBox.atl.value }; };
       const collect = () => {
@@ -177,7 +188,7 @@ export async function baar(refs, params, q) {
       let measure = document.getElementById('b-measure');
       if (!measure) { measure = document.createElement('div'); measure.id = 'b-measure'; document.body.appendChild(measure); }
       measure.className = 'aom-doc bl'; measure.style.cssText = 'position:absolute;left:-9999px;top:0;width:6in;visibility:hidden';
-      const docOf = (d) => buildTransmittal({ t: { ...d.tr, opinion: d.opinion }, audit, lgu, mun, team, atl, sa });
+      const docOf = (d) => buildTransmittal({ t: { ...d.tr, opinion: d.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(gaa, gaaYear) });
       const draw = () => {
         if (!document.body.contains(root)) return;
         const d = collect(), doc = docOf(d);
@@ -187,7 +198,8 @@ export async function baar(refs, params, q) {
           return `<div class="doc-label">${esc(x.title)}${pages.length > 1 ? ` (${pages.length} pages)` : ''}</div>` +
             pages.map((items) => `<div class="sheet bsheet"><div class="aom-doc bl">${docHTML({ items })}</div></div>`).join('');
         }).join('');
-        const miss = trMissing(d);
+        drawGaa(d);
+        const miss = trMissing(d, gaa, gaaYear);
         $('#b-p01', root).innerHTML = miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
         $('#b-p01', root).title = miss.length ? 'Still needed: ' + miss.join(', ') : '';
         const t = d.tr, w = [];
@@ -195,6 +207,53 @@ export async function baar(refs, params, q) {
         if (t.confDate && ((t.atlDate && t.atlDate < t.confDate) || (t.saDate && t.saDate < t.confDate))) w.push('A letter is dated before the exit conference.');
         $('#b-datewarn', root).innerHTML = w.length ? `<div class="note warn">${w.map(esc).join(' ')} Please check the dates.</div>` : '';
       };
+      // The GAA cited in Paragraph 6.
+      function drawGaa(d) {
+        const box = $('#b-gaa', root); if (!box) return;
+        const g = gaaFor(gaa, gaaYear), typed = TYPED_GAA.exec(d.tr.sa6 || '');
+        const uses = /\[GAA\]/.test(d.tr.sa6 || '');
+        let html = `<div class="lr-row"><b>GAA Cited in Paragraph 6</b>${gaaComplete(g) ? '<button class="btn sm ghost" type="button" data-gaa="open">GAA References</button>' : `<button class="btn sm primary" type="button" data-gaa="open">${g ? 'Complete' : 'Add'} GAA FY ${gaaYear}</button>`}</div>`;
+        if (uses) html += gaaComplete(g) ? `<div>${esc(gaaText(g))}</div>`
+          : `<div class="note bad" style="margin:0;display:block"><b>No complete GAA for Fiscal Year ${gaaYear} in the list yet.</b> Add its R.A. number and section before printing. Until then the letter prints a blank line in its place.</div>`;
+        else if (typed && Number(typed[1]) !== gaaYear) html += `<div class="note warn" style="margin:0;display:block">Paragraph 6 cites <b>Fiscal Year ${esc(typed[1])}</b>, but this BAAR should cite <b>Fiscal Year ${gaaYear}</b>. ${canEdit ? '<button class="btn sm" type="button" data-gaa="use">Use [GAA] Instead</button>' : ''}</div>`;
+        else html += `<div class="hint">Paragraph 6 has the GAA typed in. ${canEdit ? '<button class="btn sm ghost" type="button" data-gaa="use">Use [GAA] Instead</button>' : ''}</div>`;
+        if (box.dataset.h !== html) { box.innerHTML = html; box.dataset.h = html; }
+        box.classList.toggle('bad-box', uses && !gaaComplete(g));
+      }
+      async function editGaa() {
+        const canGaa = has(me, 'sa') || has(me, 'admin');
+        const rows = gaa.map((g) => ({ ...g }));
+        if (!gaaFor(rows, gaaYear)) rows.push({ fy: gaaYear, ra: '', sec: '', src: '' });
+        rows.sort((a, b) => a.fy - b.fy);
+        const dis = canGaa ? '' : 'disabled';
+        const rowHTML = (g, i) => `<tr><td><input class="input" data-g="fy" data-i="${i}" value="${esc(g.fy)}" inputmode="numeric" aria-label="Fiscal Year" ${dis}></td>
+          <td><input class="input" data-g="ra" data-i="${i}" value="${esc(g.ra)}" aria-label="Republic Act No." ${dis}></td><td><input class="input" data-g="sec" data-i="${i}" value="${esc(g.sec)}" aria-label="Section" ${dis}></td>
+          <td><input class="input" data-g="src" data-i="${i}" value="${esc(g.src || '')}" aria-label="Checked From" ${dis}></td><td>${gaaComplete(g) ? '' : pill('Incomplete', 'warn')}</td></tr>`;
+        const tbl = () => `<table class="gt"><thead><tr><th style="width:100px">Fiscal Year</th><th style="width:140px">Republic Act No.</th><th style="width:90px">Section</th><th>Checked From</th><th style="width:96px"></th></tr></thead><tbody>${rows.map(rowHTML).join('')}</tbody></table>`;
+        const body = `<p class="hint" style="margin:0">The General Provisions section that asks agencies to report actions on audit recommendations within 60 days (AAPSI). Add each new year once; everyone gets it.</p>
+          <div id="g-tbl">${tbl()}</div>${canGaa ? '<button class="btn sm" type="button" id="g-add" style="align-self:flex-start">+ Add Fiscal Year</button>' : '<span class="hint">Only the Admin or the SA can change this list.</span>'}<div id="g-prev" class="note ok" style="margin:0"></div>`;
+        const prev = (bg) => { const g = gaaFor(rows, gaaYear); $('#g-prev', bg).textContent = gaaComplete(g) ? `Preview for FY ${gaaYear}: “…pursuant to ${gaaText(g)}, using the…”` : `FY ${gaaYear} is not complete yet.`; };
+        const v = await modal({ title: 'GAA References', wide: true, body,
+          buttons: canGaa ? [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Save', cls: 'primary', value: 'save' }] : [{ label: 'Close', cls: 'ghost', value: null }],
+          onOpen: (bg) => {
+            bg.addEventListener('input', (e) => { const el = e.target.closest('[data-g]'); if (!el) return; rows[+el.dataset.i][el.dataset.g] = el.dataset.g === 'fy' ? Number(el.value) || el.value : el.value; prev(bg); });
+            const add = $('#g-add', bg); if (add) add.onclick = () => { const next = Math.max(gaaYear, ...rows.map((r) => Number(r.fy) || 0)) + 1; rows.push({ fy: next, ra: '', sec: '', src: '' }); $('#g-tbl', bg).innerHTML = tbl(); prev(bg); };
+            prev(bg);
+          } });
+        if (v !== 'save') return;
+        const list = rows.filter((g) => Number(g.fy)).map((g) => ({ fy: Number(g.fy), ra: String(g.ra || '').trim(), sec: String(g.sec || '').trim(), src: String(g.src || '').trim() }))
+          .filter((g, i, a) => a.findIndex((x) => x.fy === g.fy) === i).sort((a, b) => a.fy - b.fy);
+        await store.save('letters', GAA_ID, { type: 'gaa', list, savedBy: me.email, savedAt: new Date().toISOString() }, { silent: true });
+        await store.log('saved the GAA References', list.map((g) => `FY ${g.fy}: R.A. ${g.ra || '?'} Sec. ${g.sec || '?'}`).join('; '), ctx.teamId, me.email);
+        gaa = list; toast('GAA References saved.', 'ok'); draw();
+      }
+      $('#b-gaa', root).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-gaa]'); if (!b) return;
+        if (b.dataset.gaa === 'open') { editGaa(); return; }
+        const ta = $('#b-sa6', root);
+        ta.value = TYPED_GAA.test(ta.value) ? ta.value.replace(TYPED_GAA, '[GAA]') : standard.sa6;
+        changed();
+      });
       async function save() {
         const d = collect();
         await store.save('letters', recId(ctx.rec.id), d, { silent: true });

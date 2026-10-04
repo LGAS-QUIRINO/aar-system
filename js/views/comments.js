@@ -37,6 +37,7 @@ export async function comments(refs, params, q) {
       <span style="display:flex;flex-direction:column;gap:3px;align-items:flex-end">${has(a) ? pill('Received', 'ok') : pill('Awaiting', 'warn')}${has(a) && !decided(a) ? pill('Rejoinder?', 'grey') : ''}</span></a>`).join('');
 
   const body = `${head}<div class="btn-row">${pill(recd + ' Received', 'ok')}${pill(finals.length - recd + ' Awaiting', finals.length - recd ? 'warn' : 'grey')}</div></div>
+    <div class="topnote">Every Final AOM needs a comment and a rejoinder decision before the BAAR can be finalized.</div>
     <div class="cm-cols">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>Final AOMs</h2></div>
         <div class="panel-body" style="gap:6px;padding-bottom:10px"><label class="label" for="c-rcv">AOMs Received by the Barangay</label><input class="input" type="date" id="c-rcv" value="${esc(rcvAOM)}">
@@ -68,7 +69,7 @@ export async function comments(refs, params, q) {
         <section class="panel"><div class="panel-head"><h2>Before the BAAR</h2></div><div class="panel-body" style="gap:4px;font-size:13px">
           <span>${recd === finals.length ? '✓' : '!'} ${recd} of ${finals.length} Final AOMs have comments</span>
           <span>${decd === finals.length ? '✓' : '!'} ${decd} of ${finals.length} have a rejoinder decision</span>
-          ${recd < finals.length || decd < finals.length ? '<span class="hint">Every Final AOM needs a comment and a rejoinder decision before the BAAR can be finalized.</span>' : '<span class="hint" style="color:var(--ok-ink)">Complete.</span>'}</div></section>
+          ${recd < finals.length || decd < finals.length ? '' : '<span class="hint" style="color:var(--ok-ink)">Complete.</span>'}</div></section>
       </aside></div>`;
 
   return {

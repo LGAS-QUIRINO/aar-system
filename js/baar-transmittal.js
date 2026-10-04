@@ -11,7 +11,7 @@ export const TR_STANDARD = {
   sa2: 'The audit was conducted to: (a) ascertain the level of assurance that may be placed on management’s assertions on the financial statements; (b) determine the propriety of transactions as well as the extent of compliance with applicable laws, rules and regulations; (c) recommend agency improvement opportunities; and (d) determine the extent of implementation of prior years’ audit recommendations.',
   sa3: 'The auditing standards used in conducting the audit was in accordance with the International Standards of Supreme Audit Institutions (ISSAIs) and we believe that it provides reasonable bases for the results of audit.',
   sa5: 'The audit observations together with the recommended courses of action, which were discussed with the concerned management officials and staff during the exit conference on [CONF_DATE], are presented in detail in Part II of the report.',
-  sa6: 'We request that the recommended remedial measures be immediately implemented and we will appreciate being informed of the actions taken thereon within 60 days from receipt hereof pursuant to Section 94 of the General Provisions of the General Appropriations Act of Fiscal Year 2024 (Republic Act No. 11975), using the Agency Action Plan and Status of Implementation (AAPSI) Form to be submitted to the Audit Team.',
+  sa6: 'We request that the recommended remedial measures be immediately implemented and we will appreciate being informed of the actions taken thereon within 60 days from receipt hereof pursuant to [GAA], using the Agency Action Plan and Status of Implementation (AAPSI) Form to be submitted to the Audit Team.',
   sa7: 'We acknowledge the support and cooperation that you and your staff extended to the Audit Team, thus facilitating the conduct of audit and submission of this report.',
   cc: 'The Municipal Mayor, [MUN]\nThe Presiding Officer, Sangguniang Bayan, [MUN]\nThe Municipal Accountant, [MUN]\nThe Chairman, Committee on Appropriations, Barangay [BARANGAY]\nThe Regional Director',
   atlAddr: 'Audit Group G-Quirino Province\nCabarroguis, Quirino',
@@ -23,6 +23,20 @@ export const TR_STANDARD = {
   atl6: 'We acknowledge the cooperation extended to the audit team by the officials and staff of the agency which made possible the submission of this report.'
 };
 export const TR_KEYS = Object.keys(TR_STANDARD);
+
+// GAA References: the General Provisions section asking agencies to report actions on audit recommendations within 60 days.
+// [GAA] in Paragraph 6 fills in from this list, using the GAA of the year audited (as in the issued BAARs).
+export const GAA_ID = 'gaa-refs';
+export const GAA_DEFAULT = [
+  { fy: 2024, ra: '11975', sec: '94', src: 'Issued BAARs (Balligui, Cofcaville)' },
+  { fy: 2025, ra: '12116', sec: '100', src: 'COA 2025 audit report transmittal' },
+  { fy: 2026, ra: '12314', sec: '', src: 'R.A. No. found online · section to be checked' }
+];
+export const gaaFor = (list, year) => (list || []).find((g) => Number(g.fy) === Number(year)) || null;
+export const gaaComplete = (g) => !!(g && String(g.ra || '').trim() && String(g.sec || '').trim());
+export const gaaText = (g) => `Section ${String(g.sec).trim()} of the General Provisions of the General Appropriations Act of Fiscal Year ${g.fy} (Republic Act No. ${String(g.ra).trim()})`;
+// A GAA typed by hand in older wording, e.g. "…Fiscal Year 2024 (Republic Act No. 11975)".
+export const TYPED_GAA = /Section\s+\d+\s+of\s+the\s+General\s+Provisions\s+of\s+the\s+General\s+Appropriations\s+Act\s+of\s+Fiscal\s+Year\s+(\d{4})\s*\(Republic\s+Act\s+No\.\s*[\d,]+\)/i;
 export const OPINIONS = ['Unmodified', 'Qualified', 'Adverse', 'Disclaimer'];
 // The opinion sentences, one pair per opinion: sa = in the letter to the Punong Barangay, atl = in the letter to the SA.
 // Only Qualified has standard wording (from the issued BAARs); the others are typed the first time and saved as standard.
@@ -68,7 +82,8 @@ export function buildTransmittal(info) {
   const fill = (s) => String(s || '')
     .replace(/\[BARANGAY\]/g, brgy).replace(/\[MUN\]/g, `${mun.name}, Quirino`)
     .replace(/\[PERIOD\]/g, periodEnded(audit.periodFrom, audit.periodTo))
-    .replace(/\[CONF_DATE\]/g, t.confDate ? longDate(t.confDate) : blank);
+    .replace(/\[CONF_DATE\]/g, t.confDate ? longDate(t.confDate) : blank)
+    .replace(/\[GAA\]/g, gaaComplete(info.gaa) ? gaaText(info.gaa) : blank);
   const lh = (office) => [{ k: 'lh' },
     { k: 'p', t: 'REGIONAL OFFICE NO. II', b: true, al: 'c' }, { k: 'p', t: 'PROVINCE OF QUIRINO', al: 'c' },
     { k: 'p', t: 'PROVINCIAL SATELLITE AUDITING OFFICE', al: 'c' }, { k: 'p', t: 'Capitol Hills, Cabarroguis, Quirino', al: 'c', size: 18 },

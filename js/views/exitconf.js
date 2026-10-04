@@ -63,7 +63,7 @@ export async function exitconf(refs, params, q) {
       <span class="hint">Barangays with all AOMs Final are ticked when a letter is made. Untick any, or tick others. More than 10 go into two columns.</span></div></section>
     <section class="panel"><div class="panel-head"><h2>Dates and Venue</h2></div><div class="panel-body">
       <div class="grid-2">
-        <div class="field"><label class="label" for="x-ld">Letter Date</label><input class="input" type="date" id="x-ld" value="${esc(L.letterDate || '')}"><span class="hint">Any date. Past dates are allowed.</span></div>
+        <div class="field"><label class="label" for="x-ld">Letter Date</label><input class="input" type="date" id="x-ld" value="${esc(L.letterDate || '')}"></div>
         <div class="field"><label class="label" for="x-cd">Exit Conference Date</label><input class="input" type="date" id="x-cd" value="${esc(L.confDate || '')}"><span class="hint" id="x-day" style="color:var(--ok-ink);font-weight:600"></span></div>
         <div class="field"><label class="label" for="x-t">Time</label><input class="input" id="x-t" value="${esc(L.time || '')}" placeholder="e.g. 10:00 in the morning"></div>
         <div class="field"><label class="label" for="x-v">Venue</label><input class="input" id="x-v" value="${esc(L.venue || '')}" placeholder="e.g. LDRRMO Function Hall, ${esc(mun.name)}, Quirino"></div>
@@ -73,14 +73,12 @@ export async function exitconf(refs, params, q) {
         <div class="field"><label class="label" for="x-an">Name</label><input class="input" id="x-an" value="${esc(L.addrName || '')}" placeholder="e.g. Hon. Juan A. Dela Cruz"></div>
         <div class="field"><label class="label" for="x-ap">Position</label><input class="input" id="x-ap" value="${esc(L.addrPos || 'ABC President')}"></div>
         <div class="field"><label class="label" for="x-sal">Salutation</label><select class="input" id="x-sal"><option ${L.salutation !== 'Dear Madam:' ? 'selected' : ''}>Dear Sir:</option><option ${L.salutation === 'Dear Madam:' ? 'selected' : ''}>Dear Madam:</option></select></div>
-      </div><span class="hint">Filled from ${esc(mun.name)} in the LGU Master List when the letter is made. A change here applies to this letter only.</span></div></section>
+      </div></div></section>
     <section class="panel"><div class="panel-head"><h2>Wording</h2><span class="btn-row" style="margin-left:auto">${canStd ? '<button class="btn sm ghost" id="x-std" type="button">Save as Standard</button>' : ''}<button class="btn sm ghost" id="x-reset" type="button">Reset to Standard</button></span></div><div class="panel-body">
       <div class="field"><label class="label" for="x-p1">Opening</label><textarea class="input be-text" id="x-p1" rows="3">${esc(L.p1)}</textarea></div>
       <div class="field"><label class="label" for="x-p2">Request</label><textarea class="input be-text" id="x-p2" rows="4">${esc(L.p2)}</textarea></div>
       <div class="field"><label class="label" for="x-p3">Attendees</label><textarea class="input be-text" id="x-p3" rows="3">${esc(L.p3)}</textarea></div>
       <div class="field"><label class="label" for="x-cc">Cc (one per line)</label><textarea class="input be-text" id="x-cc" rows="2">${esc(L.cc)}</textarea></div>
-      <span class="hint">These fill in by themselves: <b>[PERIOD]</b> the calendar years (left out when the barangays have different periods, which are then shown as groups), <b>[CONF_DATE]</b> the day and date, <b>[TIME]</b> and <b>[VENUE]</b>.
-        Signatories are the same as on the AOM, with spaces left blank for wet signatures.</span>
     </div></section>
     <div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
       <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="x-del" type="button">Delete Letter</button><button class="btn primary" id="x-save" type="button">Save</button></div></div>` : '';
@@ -88,6 +86,7 @@ export async function exitconf(refs, params, q) {
   const body = `<div class="page-head"><div><h1>Exit Conference · ${esc(mun.name)}</h1></div>
       <div class="btn-row"><label class="sr-only" for="x-m">Municipality</label><select class="input" id="x-m" style="width:170px">${munIds.map((id) => `<option value="${id}" ${id === munId ? 'selected' : ''}>${esc(refs.lgu[id]?.data.name || id)}</option>`).join('')}</select>
         <label class="sr-only" for="x-y">Audit Year</label><select class="input" id="x-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select></div></div>
+    <div class="topnote">Words in [brackets] fill in by themselves. The ABC President comes from the LGU Master List. Any date can be typed. Changes apply to this letter only, unless you click Save as Standard.</div>
     <section class="panel" style="padding:12px">${tabs}</section>
     ${cur ? `<div class="xcols"><div class="xform">${form}</div>
       <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>

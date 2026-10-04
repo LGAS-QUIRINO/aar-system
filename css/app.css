@@ -458,3 +458,12 @@ label.btn{cursor:pointer}
 .bl .sign span{display:inline-block;border-top:1px solid #000;padding-top:2pt}
 .bl .note{display:grid;grid-template-columns:.5in 1fr}
 @media (max-width:1180px){.bcols{grid-template-columns:1fr}}
+
+.sugg{border:1px solid #BFD3EA;background:#F3F8FD;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+.sugg.bad-box{border-color:#F3B9B9;background:#FFF7F7}
+.sugg .lr-row b{color:var(--navy)}
+.gt{width:100%;border-collapse:collapse;font-size:13.5px}
+.gt th,.gt td{border-bottom:1px solid var(--line-2);padding:7px 5px;text-align:left}
+.gt th{font-size:12px;color:var(--muted);font-weight:600}
+.gt td .input{height:34px}
+.topnote{background:#fff;border:1px solid var(--line);border-left:4px solid var(--primary);border-radius:10px;padding:10px 14px;font-size:13.5px;color:var(--ink-2);line-height:1.5}

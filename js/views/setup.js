@@ -106,7 +106,8 @@ export async function setup(refs, params) {
 
   const title = rec ? `${refs.lgu[rec.data.lguId]?.data.name || ''} · ${rec.data.auditYear}` : 'New Audit';
   const body = `
-    <div class="page-head"><div><h1>Audit Setup</h1><p>Choose the Barangay and period, then confirm the officials. Names entered here print on every AOM, the SAOR and the BAAR.</p></div></div>
+    <div class="page-head"><div><h1>Audit Setup</h1><p>Choose the Barangay and period, then confirm the officials.</p></div></div>
+    <div class="topnote">Names entered here print on every AOM, the SAOR and the BAAR. Type them in normal letters (e.g. Juan A. Cruz); AOMs print them in capitals. Highlighted fields changed from the previous audit.</div>
     ${editable ? '' : '<div class="note info">You can view this setup but not change it.</div>'}
     <div class="split preview"><div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">1</span><h2>Entity</h2></div></div><div class="panel-body">
@@ -125,9 +126,9 @@ export async function setup(refs, params) {
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">3</span><h2>Officials for the AOM</h2></div><span class="hint" id="carry"></span></div>
         <div class="t-head off-row"><span style="grid-area:title">Title</span><span style="grid-area:name">Full Name · Position</span><span style="grid-area:role">AOM Role</span></div>
         <div id="officials">${officialsRows()}</div>
-        ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div><span class="hint">Type names in normal letters, as they should appear in the Notes (e.g. Juan A. Cruz). AOMs print them in capitals automatically. Add others when an AOM is addressed to them, e.g. the BAC Chairperson. Highlighted fields changed from the previous audit.</span></div>' : ''}
+        ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div></div>' : ''}
       </section>
-      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the officials list in the Notes to Financial Statements (e.g. Juan A. Cruz)</span></div>
+      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the officials list in the Notes to Financial Statements</span></div>
         <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}></div>`).join('')}</div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">5</span><h2>Audit Team</h2></div></div><div class="panel-body" id="teampanel">${teamPanel()}</div></section>
       ${editable ? `<div class="panel" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;bottom:12px;z-index:5">

@@ -59,13 +59,14 @@ export async function saorview(refs, params, q) {
       ${o.edited ? '<span class="pill violet" style="margin-left:auto">Edited in this SAOR</span>' : ''}</div><div class="panel-body">
       <div class="field"><label class="label" for="o-${o.n}">Observation</label><textarea class="input be-text" id="o-${o.n}" data-f="obs" rows="4">${esc(o.obs)}</textarea></div>
       <div class="field"><label class="label" for="r-${o.n}">Recommendation</label><textarea class="input be-text" id="r-${o.n}" data-f="rec" rows="4">${esc(o.rec)}</textarea></div>
-      <div style="display:flex;gap:8px;align-items:center"><span class="hint">An edit here stays in this SAOR only. The AOM Library is not changed.</span>
+      <div style="display:flex;gap:8px;align-items:center">
         <button class="btn sm ghost" style="margin-left:auto" data-reset="${esc(o.key)}" ${o.edited ? '' : 'disabled'}>Reset to Library Wording</button></div></div></section>`).join('')
     || '<section class="panel"><div class="empty">No Final AOMs yet.</div></section>';
 
   const body = `<div class="page-head"><div><h1>SAOR · ${esc(mun.name)}</h1></div>
       <div class="btn-row"><label class="sr-only" for="s-m">Municipality</label><select class="input" id="s-m" style="width:160px">${munIds.map((id) => `<option value="${id}" ${id === munId ? 'selected' : ''}>${esc(refs.lgu[id]?.data.name || id)}</option>`).join('')}</select>
         <label class="sr-only" for="s-y">Audit Year</label><select class="input" id="s-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select></div></div>
+    <div class="topnote">An edit here stays in this SAOR only. The AOM Library is not changed.</div>
     <div class="saor-lay">
       <section class="panel mc-panel" style="align-self:start"><div class="panel-head"><h2>Management Comments</h2></div>
         <div class="mc-sum"><div><b>${mcRec}</b><span>Received</span></div><div><b class="${mcAw ? 'warn' : ''}">${mcAw}</b><span>Awaiting</span></div><div><b class="${mcDone === brgyStats.length && brgyStats.length ? 'ok' : ''}">${mcDone} of ${brgyStats.length}</b><span>Completed Barangays</span></div></div>
