@@ -84,40 +84,56 @@ const br = (s) => escH(s).replace(/\n/g, '<br>');
 export const SAOR_CSS = `
 .saor-doc{font-family:'Times New Roman',Tinos,Times,serif;font-size:10.5pt;line-height:1.2;color:#000;position:relative}
 .saor-doc p{margin:0}.saor-doc .c{text-align:center}.saor-doc .b{font-weight:700}
-.saor-doc .lh2{position:relative;text-align:center;line-height:0;margin-top:.1in}
-.saor-doc .lh2 .seal{position:absolute;mix-blend-mode:multiply}
+.saor-doc .lh2{position:relative;text-align:center;line-height:0;margin-top:.16in}
+.saor-doc .lh2 .seal{position:absolute;mix-blend-mode:multiply;left:calc(50% - 2.72in);top:-.16in;width:1.1in;height:1.1in}
+.saor-doc .lh2 ~ p{position:relative;z-index:1}
 .saor-doc .rule{border-bottom:3px solid #000;padding-bottom:3pt;position:relative;margin-top:6pt}
 .saor-doc .rule::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .saor-t{border-collapse:collapse;width:100%;margin-top:10pt;table-layout:fixed}
-.saor-t th,.saor-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top;text-align:left}
+.saor-t th,.saor-t td{border:1px solid #000;padding:.06in .08in;vertical-align:top;text-align:left}
 .saor-t th{text-align:center;font-weight:700}
 .saor-t td.ref{white-space:normal}
+.saor-t td.no{text-align:center;font-weight:700}
+.saor-t td.j{text-align:justify}
+.saor-t td p{margin:0 0 4pt}.saor-t td p:last-child{margin-bottom:0}
+.saor-t td.ref p{margin:0}
+.saor-t td p.li{padding-left:.25in;text-indent:-.25in}
+.saor-t td p.li .lt{display:inline-block;width:.25in;text-indent:0}
 .saor-t tr.sec td{font-weight:700;background:#F2F2F2}
 .saor-t tr.tot td{font-weight:700}
 .saor-t .amt{float:right;padding-left:6pt}
 .saor-wm{position:absolute;top:38%;left:0;right:0;text-align:center;font:700 90pt Arial,sans-serif;color:rgba(0,0,0,.06);transform:rotate(-20deg);pointer-events:none}
 `;
+// Cell text: paragraphs with a small space between them; a./b./c. items get a hanging indent.
+const paras = (t, lead = '') => String(t || '').split('\n').filter((x) => x.trim() !== '').map((x, i) => {
+  const m = /^([a-z]|\d+)\.\s+(.*)$/.exec(x);
+  const pre = i === 0 ? lead : '';
+  return m ? `<p class="li">${pre}<span class="lt">${escH(m[1])}.</span>${escH(m[2])}</p>` : `<p>${pre}${escH(x)}</p>`;
+}).join('') || (lead ? `<p>${lead}</p>` : '');
+// AOM No. on two lines: "AOM No. 2026-001" / "(2024-2025)".
+const refSplit = (r) => { const m = /^(.*?)\s*(\(.*\))$/.exec(String(r || '')); return m ? [m[1], m[2]] : [String(r || '')]; };
+const refHTML = (r) => refSplit(r).map((x) => `<p>${escH(x)}</p>`).join('');
 export function saorHTML(m, head) {
-  const one = (o) => { const l = o.lines[0]; return `<tr><td class="ref">${escH(l.ref)}</td><td><b>${o.n}.</b> <b>Barangay ${escH(l.brgy)}:</b> ${br(o.obs)}</td><td>${br(o.rec)}</td><td>${br(l.comment)}</td><td>${br(l.rejoinder)}</td></tr>`; };
-  const rows = m.sections.map((s) => `<tr class="sec"><td colspan="5">${escH(s.code)}. ${escH(s.title.toUpperCase())}</td></tr>` + s.obs.map((o) => o.single ? one(o) : `
-    <tr><td></td><td><b>${o.n}.</b> ${br(o.obs)}</td><td>${br(o.rec)}</td><td></td><td></td></tr>
-    ${o.lines.map((l) => `<tr><td class="ref">${escH(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(peso(l.amount))}</span>` : ''}</td><td></td><td>${br(l.comment)}</td><td>${br(l.rejoinder)}</td></tr>`).join('')}
-    ${o.money ? `<tr class="tot"><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td><td></td></tr>` : ''}`).join('')).join('');
+  const one = (o) => { const l = o.lines[0]; return `<tr><td class="no">${o.n}.</td><td class="ref">${refHTML(l.ref)}</td><td class="j">${paras(o.obs, `<b>Barangay ${escH(l.brgy)}:</b> `)}</td><td class="j">${paras(o.rec)}</td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`; };
+  const rows = m.sections.map((s) => `<tr class="sec"><td colspan="6">${escH(s.code)}. ${escH(s.title.toUpperCase())}</td></tr>` + s.obs.map((o) => o.single ? one(o) : `
+    <tr><td class="no">${o.n}.</td><td></td><td class="j">${paras(o.obs)}</td><td class="j">${paras(o.rec)}</td><td></td><td></td></tr>
+    ${o.lines.map((l) => `<tr><td></td><td class="ref">${refHTML(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(peso(l.amount))}</span>` : ''}</td><td></td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`).join('')}
+    ${o.money ? `<tr class="tot"><td></td><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td><td></td></tr>` : ''}`).join('')).join('');
   return `<div class="saor-doc"><div class="saor-wm">CONFIDENTIAL</div>
-    <div class="lh2"><img class="seal" src="img/lh-seal.jpg" alt="Commission on Audit seal" style="width:1in;height:1in;left:${head.sealLeft || 3.05}in;top:-.14in"><img class="name" src="img/lh-name.jpg" alt="Republic of the Philippines, Commission on Audit" style="width:2.8in;height:.405in"></div>
+    <div class="lh2"><img class="seal" src="img/lh-seal.jpg" alt="Commission on Audit seal"><img class="name" src="img/lh-name.jpg" alt="Republic of the Philippines, Commission on Audit" style="width:3in;height:.434in"></div>
     <p class="c b">REGIONAL OFFICE NO. II</p><p class="c">PROVINCE OF QUIRINO</p><p class="c">PROVINCIAL SATELLITE AUDITING OFFICE</p><p class="c" style="font-size:9pt">Capitol Hills, Cabarroguis, Quirino</p>
     <p class="c b rule">Office of the Auditor – Audit Team ${escH(head.officeCode || '')}</p>
     <p class="c b" style="margin-top:12pt;text-decoration:underline">SUMMARY OF AUDIT OBSERVATIONS AND RECOMMENDATIONS</p>
     <p class="c" style="font-style:italic">Barangays of ${escH(head.mun)}, Quirino</p><p class="c" style="font-style:italic">For Audit Year ${escH(head.year)}</p>
-    <table class="saor-t"><colgroup><col style="width:15%"><col style="width:29%"><col style="width:24%"><col style="width:18%"><col style="width:14%"></colgroup>
-      <thead><tr><th>Reference No.</th><th>Observations</th><th>Recommendations</th><th>Management Comments</th><th>Auditor's Rejoinder</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="5" style="text-align:center;padding:16pt">No Final AOMs yet.</td></tr>'}</tbody></table></div>`;
+    <table class="saor-t"><colgroup><col style="width:4%"><col style="width:13%"><col style="width:27%"><col style="width:22.6%"><col style="width:17.8%"><col style="width:15.6%"></colgroup>
+      <thead><tr><th>No.</th><th>Reference No.</th><th>Observations</th><th>Recommendations</th><th>Management Comments</th><th>Auditor's Rejoinder</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:16pt">No Final AOMs yet.</td></tr>'}</tbody></table></div>`;
 }
 export function printSaor(m, head) {
   const css = `${SAOR_CSS}
     @page{size:13in 8.5in;margin:.75in .75in .8in .75in;@bottom-right{content:"Page " counter(page) " of " counter(pages);font:9pt 'Times New Roman'}}
     body{margin:0}.saor-wm{position:fixed;top:40%}`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>SAOR · ${escH(head.mun)} · Audit Year ${escH(head.year)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${saorHTML(m, { ...head, sealLeft: 3.95 })}</body></html>`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>SAOR · ${escH(head.mun)} · Audit Year ${escH(head.year)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${saorHTML(m, head)}</body></html>`;
   const f = document.createElement('iframe');
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(f);
@@ -136,34 +152,41 @@ export async function saorWord(m, head) {
   const seal = await load('img/lh-seal.jpg'), name = await load('img/lh-name.jpg');
   const R = (t, o = {}) => new TextRun({ text: t, font: FONT, size: o.size || 21, bold: !!o.b, italics: !!o.i, underline: o.u ? {} : undefined });
   const C = (t, o = {}) => new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(t, o)], border: o.rule ? { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 24, color: '000000', space: 4 } } : undefined });
-  const lines = (t, o = {}) => String(t || '').split('\n').map((x) => new Paragraph({ spacing: { after: 0 }, alignment: o.right ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [R(x, o)] }));
-  const W = [2484, 4802, 3974, 2981, 2319];   // 16560 twips: 13" folio landscape less .75" margins, split 15/29/24/18/14%
+  // Justified cell text, a small space between paragraphs, hanging indent for a./b./c.
+  const GAP = 80, IND = 360;
+  const lines = (t, lead = []) => { const ps = String(t || '').split('\n').filter((x) => x.trim() !== '');
+    if (!ps.length) return lead.length ? [new Paragraph({ spacing: { after: 0 }, children: lead })] : [];
+    return ps.map((x, i) => { const mm = /^([a-z]|\d+)\.\s+(.*)$/.exec(x);
+      return new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: i === ps.length - 1 ? 0 : GAP }, indent: mm ? { left: IND, hanging: IND } : undefined,
+        tabStops: mm ? [{ type: 'left', position: IND }] : undefined, children: [...(i === 0 ? lead : []), ...(mm ? [R(mm[1] + '.\t'), R(mm[2])] : [R(x)])] }); }); };
+  const refP = (r) => refSplit(r).map((x) => new Paragraph({ spacing: { after: 0 }, children: [R(x)] }));
+  const noP = (n) => [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(n + '.', { b: true })] })];
+  const W = [650, 2160, 4500, 3750, 2950, 2550];   // 16560 twips: 13" folio landscape less .75" margins
   const cell = (kids, i, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids.length ? kids : [new Paragraph({ children: [] })], columnSpan: o.span, shading: o.shade ? { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' } : undefined });
-  const amtPara = (brgy, amt, b) => new Paragraph({ spacing: { after: 0 }, tabStops: [{ type: 'right', position: W[1] - 200 }], children: [R(brgy, { b }), ...(amt !== null ? [new TextRun({ text: '\t' + peso(amt), font: FONT, size: 21, bold: !!b })] : [])] });
-  const rows = [new TableRow({ tableHeader: true, children: ['Reference No.', 'Observations', 'Recommendations', 'Management Comments', "Auditor's Rejoinder"].map((h, i) => cell([new Paragraph({ alignment: AlignmentType.CENTER, children: [R(h, { b: true })] })], i)) })];
+  const amtPara = (brgy, amt, b) => new Paragraph({ spacing: { after: 0 }, tabStops: [{ type: 'right', position: W[2] - 240 }], children: [R(brgy, { b }), ...(amt !== null ? [new TextRun({ text: '\t' + peso(amt), font: FONT, size: 21, bold: !!b })] : [])] });
+  const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: ['No.', 'Reference No.', 'Observations', 'Recommendations', 'Management Comments', "Auditor's Rejoinder"].map((h, i) => cell([new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(h, { b: true })] })], i)) })];
   m.sections.forEach((s) => {
-    rows.push(new TableRow({ children: [new TableCell({ columnSpan: 5, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
+    rows.push(new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 6, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
     s.obs.forEach((o) => {
       if (o.single) {
         const l = o.lines[0];
-        rows.push(new TableRow({ children: [cell([new Paragraph({ children: [R(l.ref)] })], 0),
-          cell([new Paragraph({ spacing: { after: 0 }, children: [R(o.n + '. ', { b: true }), R(`Barangay ${l.brgy}: `, { b: true }), R(o.obs.split('\n')[0])] }), ...lines(o.obs.split('\n').slice(1).join('\n'))], 1),
-          cell(lines(o.rec), 2), cell(l.comment ? lines(l.comment) : [], 3), cell(l.rejoinder ? lines(l.rejoinder) : [], 4)] }));
+        rows.push(new TableRow({ children: [cell(noP(o.n), 0), cell(refP(l.ref), 1), cell(lines(o.obs, [R(`Barangay ${l.brgy}: `, { b: true })]), 2),
+          cell(lines(o.rec), 3), cell(lines(l.comment), 4), cell(lines(l.rejoinder), 5)] }));
         return;
       }
-      rows.push(new TableRow({ children: [cell([], 0), cell([new Paragraph({ spacing: { after: 0 }, children: [R(o.n + '. ', { b: true }), R(o.obs.split('\n')[0])] }), ...lines(o.obs.split('\n').slice(1).join('\n'))].filter(Boolean), 1), cell(lines(o.rec), 2), cell([], 3), cell([], 4)] }));
-      o.lines.forEach((l) => rows.push(new TableRow({ children: [cell([new Paragraph({ children: [R(l.ref)] })], 0), cell([amtPara(l.brgy, l.amount)], 1), cell([], 2), cell(l.comment ? lines(l.comment) : [], 3), cell(l.rejoinder ? lines(l.rejoinder) : [], 4)] })));
-      if (o.money) rows.push(new TableRow({ children: [cell([], 0), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 1), cell([], 2), cell([], 3), cell([], 4)] }));
+      rows.push(new TableRow({ children: [cell(noP(o.n), 0), cell([], 1), cell(lines(o.obs), 2), cell(lines(o.rec), 3), cell([], 4), cell([], 5)] }));
+      o.lines.forEach((l) => rows.push(new TableRow({ cantSplit: true, children: [cell([], 0), cell(refP(l.ref), 1), cell([amtPara(l.brgy, l.amount)], 2), cell([], 3), cell(lines(l.comment), 4), cell(lines(l.rejoinder), 5)] })));
+      if (o.money) rows.push(new TableRow({ cantSplit: true, children: [cell([], 0), cell([], 1), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 2), cell([], 3), cell([], 4), cell([], 5)] }));
     });
   });
   const lh = [];
-  if (seal) lh.push(new ImageRun({ type: 'jpg', data: seal, transformation: { width: 96, height: 96 }, floating: { horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(3.6 * EMU) }, verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(-0.14 * EMU) }, wrap: { type: TextWrappingType.NONE }, allowOverlap: true, behindDocument: true } }));
-  if (name) lh.push(new ImageRun({ type: 'jpg', data: name, transformation: { width: Math.round(2.8 * 96), height: Math.round(0.405 * 96) } }));
-  const children = [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 160, after: 0 }, children: lh }),
+  if (seal) lh.push(new ImageRun({ type: 'jpg', data: seal, transformation: { width: Math.round(1.1 * 96), height: Math.round(1.1 * 96) }, floating: { horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(3.03 * EMU) }, verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(-0.16 * EMU) }, wrap: { type: TextWrappingType.NONE }, allowOverlap: true, behindDocument: true } }));
+  if (name) lh.push(new ImageRun({ type: 'jpg', data: name, transformation: { width: Math.round(3.0 * 96), height: Math.round(0.434 * 96) } }));
+  const children = [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 230, after: 0 }, children: lh }),
     C('REGIONAL OFFICE NO. II', { b: true }), C('PROVINCE OF QUIRINO'), C('PROVINCIAL SATELLITE AUDITING OFFICE'), C('Capitol Hills, Cabarroguis, Quirino', { size: 18 }),
     C(''), C('Office of the Auditor – Audit Team ' + (head.officeCode || ''), { b: true, rule: true }), C(''),
     C('SUMMARY OF AUDIT OBSERVATIONS AND RECOMMENDATIONS', { b: true, u: true }), C(`Barangays of ${head.mun}, Quirino`, { i: true }), C(`For Audit Year ${head.year}`, { i: true }), C(''),
-    new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, rows })];
+    new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, margins: { top: 80, bottom: 80, left: 115, right: 115 }, rows })];
   const doc = new Document({ creator: 'Annual Audit Report System', title: 'SAOR', styles: { default: { document: { run: { font: FONT, size: 21 } } } },
     sections: [{ properties: { page: { size: { width: 12240, height: 18720, orientation: PageOrientation.LANDSCAPE }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080, header: 500, footer: 500 } } },
       headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'CONFIDENTIAL', bold: true, color: 'A0A0A0', font: FONT, size: 20 })] })] }) },
