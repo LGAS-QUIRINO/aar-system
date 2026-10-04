@@ -124,12 +124,12 @@ export async function setup(refs, params) {
         </div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">2</span><h2>Audit Year and Period</h2></div>${periodLocked ? `<span id="p-lockpill" style="margin-left:auto">${pill('🔒 Locked', 'grey')}</span>` : ''}</div><div class="panel-body">
         <div class="grid-4">
-          <div class="field"><label class="label" for="ay">Audit Year</label><select class="input" id="ay" ${dis}>${[year + 1, year, year - 1].map((y) => `<option ${Number(s.auditYear) === y ? 'selected' : ''}>${y}</option>`).join('')}</select></div>
+          <div class="field"><label class="label" for="ay">Audit Year</label><select class="input" id="ay" ${pdis}>${[year + 1, year, year - 1].map((y) => `<option ${Number(s.auditYear) === y ? 'selected' : ''}>${y}</option>`).join('')}</select></div>
           <div class="field"><label class="label" for="pf">Period Covered From</label><select class="input" id="pf" ${pdis}>${yearOpts(s.periodFrom, year - 8, year)}</select></div>
           <div class="field"><label class="label" for="pt">Period Covered To</label><select class="input" id="pt" ${pdis}>${yearOpts(s.periodTo, year - 8, year)}</select></div>
           <div class="field"><label class="label" for="ad">AOM Date</label><input type="date" class="input" id="ad" value="${esc(s.aomDate)}" ${dis}></div>
-        </div>${periodLocked ? `<div id="p-lock"><div class="note warn" style="margin:0;display:block">Locked because AOM No. ${esc(aomNo(s.auditYear, finalAom.data.number || 1, s.periodFrom, s.periodTo))} is Final. Only the SA or Admin can unlock it.</div>
-          ${canUnlock && editable ? '<div class="lr-row" style="margin-top:8px"><span></span><button class="btn sm" type="button" id="p-unlock">Unlock Period</button></div>' : ''}</div>` : ''}<div id="facts">${facts()}</div></div></section>
+        </div>${periodLocked ? `<div id="p-lock"><div class="note warn" style="margin:0;display:block">Locked because AOM No. ${esc(aomNo(s.auditYear, finalAom.data.number || 1, s.periodFrom, s.periodTo))} is Final, so the Audit Year and the period are locked. Only the SA or Admin can unlock them.</div>
+          ${canUnlock && editable ? '<div class="lr-row" style="margin-top:8px"><span></span><button class="btn sm" type="button" id="p-unlock">Unlock</button></div>' : ''}</div>` : ''}<div id="facts">${facts()}</div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">3</span><h2>Officials for the AOM</h2></div><span class="hint" id="carry"></span></div>
         <div class="t-head off-row"><span style="grid-area:title">Title</span><span style="grid-area:name">Full Name · Position</span><span style="grid-area:role">AOM Role</span></div>
         <div id="officials">${officialsRows()}</div>
@@ -224,16 +224,16 @@ export async function setup(refs, params) {
       };
       const ul = $('#p-unlock', root);
       if (ul) ul.onclick = async () => {
-        const v = await modal({ title: 'Unlock Period',
-          body: `<p style="margin:0 0 12px;font-size:14px;line-height:1.5">Changing the period changes the AOM numbers, the SAOR, the Exit Conference letter, the transmittal letters and the cover of this barangay. Unlock anyway?</p>
+        const v = await modal({ title: 'Unlock Audit Year and Period',
+          body: `<p style="margin:0 0 12px;font-size:14px;line-height:1.5">Changing the Audit Year or the period changes the AOM numbers, the SAOR, the Exit Conference letter, the transmittal letters and the cover of this barangay. Unlock anyway?</p>
             <div class="field"><label class="label" for="ul-r">Reason (kept in the audit log)</label><input class="input" id="ul-r" placeholder="e.g. Period was entered wrongly"></div>`,
           buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Unlock', cls: 'primary', value: 'ok', check: (bg) => { const r = $('#ul-r', bg).value.trim(); if (!r) { toast('Please give the reason.', 'bad'); return false; } ul.dataset.reason = r; return true; } }] });
         if (v !== 'ok') return;
-        await store.log('unlocked the audit period', `${refs.lgu[s.lguId]?.data.name || ''} · ${s.auditYear} · Reason: ${ul.dataset.reason}`, s.teamId, refs.me.email);
-        $('#pf', root).disabled = false; $('#pt', root).disabled = false;
-        $('#p-lock', root).innerHTML = '<div class="note info" style="margin:0;display:block">Unlocked. The period locks again when you Save.</div>';
+        await store.log('unlocked the audit year and period', `${refs.lgu[s.lguId]?.data.name || ''} · ${s.auditYear} · Reason: ${ul.dataset.reason}`, s.teamId, refs.me.email);
+        $('#ay', root).disabled = false; $('#pf', root).disabled = false; $('#pt', root).disabled = false;
+        $('#p-lock', root).innerHTML = '<div class="note info" style="margin:0;display:block">Unlocked. They lock again when you Save.</div>';
         const lp = $('#p-lockpill', root); if (lp) lp.innerHTML = pill('Unlocked', 'warn');
-        toast('Period unlocked. It locks again when you Save.', 'ok');
+        toast('Unlocked. They lock again when you Save.', 'ok');
       };
       setDirty(false, save);
     }
