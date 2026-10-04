@@ -5,7 +5,7 @@ import { updateFromAom } from './library.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits } from '../aom.js';
+import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { has, myTeamIds } from '../refs.js';
 import { aomPreviewHTML, checksHTML, commentsHTML } from './aoms.js';
@@ -131,8 +131,8 @@ export async function review(refs, params, q) {
     return `
         <section class="panel"><div class="panel-head"><h2>AOM Number Check</h2></div><div class="panel-body" style="gap:8px">
           ${checksHTML([
-            { st: 'ok', t: 'Format: ' + aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo) },
-            nc.ok ? { st: 'ok', t: `Sequential ${String(first).padStart(3, '0')} to ${String(last).padStart(3, '0')}, no gaps or duplicates` } : { st: 'bad', t: `Gaps ${nc.gaps.join(', ') || 'none'} · duplicates ${nc.dup.join(', ') || 'none'}` },
+            { st: 'ok', t: 'Format: AOM No. ' + aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo) },
+            nc.ok ? { st: 'ok', t: `Sequential: ${first === last ? 'AOM No. ' + aomNo(ctx.audit.auditYear, first, ctx.audit.periodFrom, ctx.audit.periodTo) : 'AOM Nos. ' + aomRange(ctx.audit.auditYear, first, last, ctx.audit.periodFrom, ctx.audit.periodTo)}, no gaps or duplicates` } : { st: 'bad', t: `Gaps ${nc.gaps.join(', ') || 'none'} · duplicates ${nc.dup.join(', ') || 'none'}` },
             { st: 'ok', t: 'Period matches the Audit Setup' }, { st: 'ok', t: 'Header and footer ranges match' }])}
           ${reviewing ? '<label class="check"><input type="checkbox" id="r-numok">I checked the AOM numbering</label>' : ''}</div></section>
         <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" style="gap:8px">${checksHTML(checks(state.aom, ctx.varsFor({ data: state.aom }), ctx.audit))}</div></section>
@@ -220,9 +220,11 @@ export async function review(refs, params, q) {
         if (willFinal) {
           d.status = ST.FINAL; d.number = N[id].n; d.finalAt = now; d.finalBy = me.email;
           d.history = [...(d.history || []), { at: now, by: me.email, action: `Approved as Final · AOM No. ${aomNo(ctx.audit.auditYear, N[id].n, ctx.audit.periodFrom, ctx.audit.periodTo)} locked` }];
+          snapshot(d, iAmSA ? 'SA review, approved as Final' : 'Review, approved as Final', me.email);
         } else {
           d.status = ST.WITH_SA; d.atlApprovedAt = now; d.atlApprovedBy = me.email;
           d.history = [...(d.history || []), { at: now, by: me.email, action: 'Approved by ATL and forwarded to SA' }];
+          snapshot(d, 'ATL review, approved and forwarded to the SA', me.email);
         }
         return d;
       };
@@ -246,6 +248,7 @@ export async function review(refs, params, q) {
         const d = clone(state.aom); const now = new Date().toISOString();
         d.status = ST.RETURNED; d.returnNote = review.rn; d.returnedBy = me.email; d.returnedAt = now;
         d.returnedVersion = { title: d.title, blocks: clone(d.blocks) };
+        snapshot(d, (s === ST.SA ? 'SA' : 'ATL') + ' review, returned to member', me.email);
         d.history = [...(d.history || []), { at: now, by: me.email, action: 'Returned to member: ' + review.rn }];
         await store.save('aoms', cur.id, d);
         await store.log('returned an AOM', `${ctx.lgu.name} · ${cur.data.title}`, ctx.teamId, me.email);

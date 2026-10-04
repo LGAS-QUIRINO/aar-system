@@ -3,9 +3,10 @@ import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { loadAudit, stepsBar, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks } from '../blockeditor.js';
-import { clone, checks, findingParas, paraHTML, ST, statusPill, SECTIONS, numberingCheck, fillText, ensureIds, stampEdits, openComments, answered } from '../aom.js';
+import { clone, checks, findingParas, paraHTML, ST, statusPill, SECTIONS, numberingCheck, fillText, ensureIds, stampEdits, openComments, answered, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { mountReview, reviewCounts, when } from '../reviewpane.js';
+import { aomTrail, includedLine, printTrail, trailWord } from '../reviewtrail.js';
 
 export function aomPreviewHTML(ctx, a, data, i) {
   const n = ctx.nums[a.id]?.n || 1;
@@ -54,7 +55,7 @@ export async function aoms(refs, params, q) {
     const open = a.data.status === ST.RETURNED ? openComments(a.data, refs.me.email).length : 0;
     return `<a class="t-row click ${a.id === cur.id ? 'sel' : ''}" href="#/audits/${ctx.rec.id}/aoms?aom=${a.id}" style="grid-template-columns:10px 1fr;text-decoration:none;color:inherit;padding:10px 14px">
       <span class="dot" style="background:${bad ? '#C2410C' : '#2F7D4F'}" title="${bad ? 'Needs fixing' : 'Checks passed'}"></span>
-      <span><span class="mono" style="font-size:12px">${esc(ctx.audit.auditYear)}-${String(N[a.id].n).padStart(3, '0')}</span> ${pill(a.data.status || 'Draft', statusPill(a.data.status || 'Draft'))}${open ? ' ' + pill(open + ' open', 'warn') : ''}<br><b>${esc(fillText(a.data.title, ctx.varsFor(a)))}</b></span></a>`;
+      <span><span class="mono" style="font-size:12px">AOM No. ${esc(aomNo(ctx.audit.auditYear, N[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}</span><br> ${pill(a.data.status || 'Draft', statusPill(a.data.status || 'Draft'))}${open ? ' ' + pill(open + ' open', 'warn') : ''}<br><b>${esc(fillText(a.data.title, ctx.varsFor(a)))}</b></span></a>`;
   }).join('');
 
   const flowNote = s === ST.RETURNED ? `<div class="note warn">Returned by ${esc(nice(refs.users.find((u) => u.data.email === cur.data.returnedBy)?.data.name || ''))}: ${esc(cur.data.returnNote || 'see comments')}</div>`
@@ -79,7 +80,7 @@ export async function aoms(refs, params, q) {
       ${s === ST.RETURNED ? `<div class="msg">Returned by <b>${esc(userName(cur.data.returnedBy))}</b> · ${esc(when(cur.data.returnedAt))}${cur.data.returnNote ? ': “' + esc(cur.data.returnNote) + '”' : ''}</div>`
         : `<div class="msg" style="color:var(--muted)">${esc(s)}. You can read the corrections and comments while it is being reviewed.</div>`}</div>
     <div class="panel rv-bar">${toggle}<div class="rv-nav" id="rv-nav"></div>
-      <span class="btn-row" style="margin-left:auto">${prevA ? `<a class="btn sm ghost" href="${aomLink(prevA)}">‹ Previous AOM</a>` : ''}<span class="hint">AOM ${idx + 1} of ${list.length}</span>${nextA ? `<a class="btn sm ghost" href="${aomLink(nextA)}">Next AOM ›</a>` : ''}</span></div>
+      <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="a-trail" type="button">Review Trail</button>${prevA ? `<a class="btn sm ghost" href="${aomLink(prevA)}">‹ Previous AOM</a>` : ''}<span class="hint">AOM ${idx + 1} of ${list.length}</span>${nextA ? `<a class="btn sm ghost" href="${aomLink(nextA)}">Next AOM ›</a>` : ''}</span></div>
     <div id="rv-host"></div>
     ${s === ST.RETURNED && editable ? `<div class="panel rv-foot"><div id="rv-block" style="max-width:260px"></div>
       <textarea class="input" id="rv-note" aria-label="Note to the ${esc(reviewerName)}" placeholder="Note to the ${esc(reviewerName)} (optional), e.g. Kept the amount, see my reply on the topic sentence.">${esc(cur.data.forwardNoteDraft || '')}</textarea>
@@ -87,7 +88,7 @@ export async function aoms(refs, params, q) {
 
   const body = isReview ? reviewBody : `${stepsBar(ctx, 'AOM Review')}
     <div class="page-head"><div><h1>Barangay ${esc(ctx.lgu.name)} AOMs</h1><p>${list.length} AOM${list.length > 1 ? 's' : ''} · ${esc(first === last ? aomNo(ctx.audit.auditYear, first, ctx.audit.periodFrom, ctx.audit.periodTo) : aomRange(ctx.audit.auditYear, first, last, ctx.audit.periodFrom, ctx.audit.periodTo))} ${nc.ok ? '' : '· <b style="color:var(--bad-ink)">Numbering has gaps or duplicates</b>'}</p></div>
-      <div class="btn-row"><a class="btn ghost" href="#/audits/${ctx.rec.id}/findings">Findings</a><a class="btn ghost" href="#/audits/${ctx.rec.id}/print">Print / Word</a></div></div>
+      <div class="btn-row"><a class="btn ghost" href="#/audits/${ctx.rec.id}/findings">Findings</a><a class="btn ghost" href="#/audits/${ctx.rec.id}/print">Print / Word</a>${list.some((a) => a.data.status === ST.FINAL) ? `<a class="btn ghost" href="#/audits/${ctx.rec.id}/comments">Management Comments</a>` : ''}<button class="btn primary" id="a-trail" type="button">Review Trail</button></div></div>
     <div class="split-3 ed">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>AOMs</h2></div>${leftHTML()}</section>
       <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
@@ -117,6 +118,8 @@ export async function aoms(refs, params, q) {
   return {
     active: '#/drafts', crumbs: `<a href="#/audits">My Audit</a> / <a href="#/audits/${ctx.rec.id}/setup">${esc(ctx.title)}</a> / <b>AOM Drafts</b>`, body,
     mount(root) {
+      const tr = $('#a-trail', root);
+      if (tr) tr.onclick = () => reviewTrailDialog(ctx, refs, list, N, cur.id);
       if (isReview) {
         const canAct = editable && s === ST.RETURNED;
         const foot = (d) => {
@@ -190,6 +193,7 @@ export async function aoms(refs, params, q) {
           const n = a.id === cur.id ? (note || d.forwardNoteDraft || '') : (d.forwardNoteDraft || '');
           d.forwardNote = n; delete d.forwardNoteDraft;
           d.history = [...(d.history || []), { at: now, by: refs.me.email, action: (again ? 'Forwarded again after corrections' : 'Forwarded for review') + (n ? ': ' + n : '') }];
+          snapshot(d, again ? 'Member revision, forwarded again' : 'Draft forwarded for review', refs.me.email);
           await store.save('aoms', a.id, d, { silent: true });
         }
         await advanceStage(ctx, 'AOM Review');
@@ -210,4 +214,36 @@ export async function aoms(refs, params, q) {
       void modal; void $$;
     }
   };
+}
+
+// Review Trail: tick the AOMs to include (all ticked to start), then Print or Word (Track Changes).
+async function reviewTrailDialog(ctx, refs, list, N, curId) {
+  const no = (a) => aomNo(ctx.audit.auditYear, N[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
+  const nameOf = (e) => (e ? nice(refs.users.find((u) => u.data.email === e)?.data.name || e) : '');
+  const sorted = list.slice().sort((a, b) => N[a.id].n - N[b.id].n);
+  let action = null;
+  const r = await modal({
+    title: 'Review Trail · Barangay ' + ctx.lgu.name, wide: true,
+    body: `<label class="check"><input type="checkbox" id="rt-all" checked><b>Select all</b></label>
+      <div style="display:flex;flex-direction:column;gap:2px;max-height:46vh;overflow:auto;border:1px solid var(--line-2);border-radius:8px;padding:6px 10px">${sorted.map((a) => `<label class="check"><input type="checkbox" name="rt" value="${a.id}" checked><span><span class="mono" style="font-size:12px">AOM No. ${esc(no(a))}</span> · ${esc(fillText(a.data.title, ctx.varsFor(a)))}</span></label>`).join('')}</div>
+      <span class="hint">Includes the history, every round of corrections with initials, the comments and replies, and the final text. Marked "REVIEW TRAIL – Not for Issuance". The first page states which AOMs are included.</span>`,
+    onOpen: (bg) => {
+      const all = $('#rt-all', bg), boxes = $$('input[name=rt]', bg);
+      all.onchange = () => boxes.forEach((b) => { b.checked = all.checked; });
+      boxes.forEach((b) => { b.onchange = () => { all.checked = boxes.every((x) => x.checked); }; });
+    },
+    buttons: [{ label: 'Cancel', cls: 'ghost', value: null },
+      { label: 'Print', cls: 'ghost', value: 'print', check: (bg) => { action = $$('input[name=rt]:checked', bg).map((x) => x.value); if (!action.length) toast('Tick at least one AOM.', 'warn'); return action.length > 0; } },
+      { label: 'Word (Track Changes)', cls: 'primary', value: 'word', check: (bg) => { action = $$('input[name=rt]:checked', bg).map((x) => x.value); if (!action.length) toast('Tick at least one AOM.', 'warn'); return action.length > 0; } }]
+  });
+  if (!r || !action) return;
+  const fresh = await Promise.all(sorted.filter((a) => action.includes(a.id)).map((a) => store.get('aoms', a.id)));
+  const trails = fresh.filter(Boolean).map((a) => aomTrail(a, { no: no(a), vars: ctx.varsFor(a), nameOf }));
+  const place = `Barangay ${ctx.lgu.name}, ${ctx.mun.name || ''}, Quirino`;
+  const file = { title: 'AOM Review Trail · ' + ctx.lgu.name, place, included: includedLine(trails, list.length), trails,
+    footer: `Barangay ${ctx.lgu.name} · AOM Review Trail`, fileName: `${String(ctx.lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_AOM_Review_Trail` };
+  if (r === 'print') printTrail(file);
+  else { try { toast('Preparing the Word file…'); await trailWord(file); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; } }
+  await store.log(r === 'print' ? 'printed the AOM review trail' : 'downloaded the AOM review trail (Word)', `${ctx.lgu.name} · ${trails.length} AOM${trails.length > 1 ? 's' : ''}`, ctx.teamId, refs.me.email);
+  void curId;
 }

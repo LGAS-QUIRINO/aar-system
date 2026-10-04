@@ -192,6 +192,11 @@ export function stampEdits(prev, next, email, { prune = false } = {}) {
   next.editedBy = e;
   return next;
 }
+// Keep a copy of the wording at every review step (forward, return, approve, final), for the Review Trail.
+export function snapshot(d, step, email) {
+  d.versions = [...(d.versions || []), { at: new Date().toISOString(), by: email, step, title: d.title, blocks: clone(d.blocks || []), editedBy: clone(d.editedBy || {}) }];
+  return d;
+}
 // A comment is answered once someone other than its writer replies.
 export const answered = (c) => (c.replies || []).some((r) => r.by !== c.by);
 export const openComments = (aom, notBy) => (aom.comments || []).filter((c) => !c.resolved && !answered(c) && c.by !== notBy);

@@ -38,7 +38,7 @@ export async function findings(refs, params, q) {
     const N = nums();
     const chk = numberingCheck(N);
     const first = items.length ? N[items[0].id].n : 0, last = items.length ? Math.max(...Object.values(N).map((x) => x.n)) : 0;
-    const cols = 'grid-template-columns: 58px 92px minmax(150px,1fr) 150px 150px 30px';
+    const cols = 'grid-template-columns: 58px 132px minmax(150px,1fr) 150px 150px 30px';
     return `<div class="panel-head"><div><h2>Selected Findings · ${items.length}</h2><span class="hint">The order here is the AOM numbering. Use the arrows to reorder; numbers adjust automatically.</span></div>
         ${items.length ? `<span class="mono" style="font-weight:600">${esc(first === last ? aomNo(audit.auditYear, first, audit.periodFrom, audit.periodTo) : aomRange(audit.auditYear, first, last, audit.periodFrom, audit.periodTo))}</span>${chk.ok ? pill('No Gaps', 'ok') : pill('Check Numbering', 'bad')}` : ''}</div>
       ${items.length ? `<div class="t-head" style="${cols}"><span>Order</span><span>AOM No.</span><span>Finding</span><span>Part II Section</span><span>Working Paper</span><span></span></div>` : ''}
@@ -47,7 +47,7 @@ export async function findings(refs, params, q) {
         const lock = lockedOrSent(it);
         return `<div class="t-row click ${it.id === sel ? 'sel' : ''}" style="${cols}" data-sel="${it.id}">
           <span style="display:flex;gap:2px">${canEdit && !lock ? `<button class="x sm" data-mv="-1" data-i="${i}" aria-label="Move up" ${i === 0 ? 'disabled' : ''}>▲</button><button class="x sm" data-mv="1" data-i="${i}" aria-label="Move down" ${i === items.length - 1 ? 'disabled' : ''}>▼</button>` : '<span class="hint">🔒</span>'}</span>
-          <span class="mono" style="font-size:13px">${esc(audit.auditYear)}-${String(n.n).padStart(3, '0')}${n.locked ? ' 🔒' : '<br><small class="hint">provisional</small>'}</span>
+          <span class="mono" style="font-size:12px">AOM No.<br>${esc(aomNo(audit.auditYear, n.n, audit.periodFrom, audit.periodTo))}${n.locked ? ' 🔒' : '<br><small class="hint">provisional</small>'}</span>
           <span><b>${esc(d.title)}</b><br><small class="hint">${esc(d.poolCode || 'Not in Library')}${d.poolVersion ? ' · version ' + d.poolVersion : ''} · ${esc(d.mode || 'Standard')}</small> ${d.status && d.status !== ST.DRAFT ? pill(d.status, statusPill(d.status)) : ''}</span>
           <span><select class="input" style="height:36px" data-sec="${i}" aria-label="Part II Section" ${canEdit && !lock ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${d.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></span>
           <span>${w.k === 'ok' ? pill('✓ ' + w.t, 'ok') : w.k === 'none' ? pill(w.t, 'grey') : w.k === 'warn' ? pill(w.t, 'warn') : `<button class="btn sm ghost" data-imp="${it.id}">${esc(w.t)}</button>`}</span>

@@ -1,10 +1,10 @@
 // Keeps the app working offline. Bump VERSION on every release so devices pick up the new files.
-const RELEASE = 'v2.2.0';
+const RELEASE = 'v2.3.0';
 const VERSION = 'aar|' + self.registration.scope + '|' + RELEASE;   // each copy of the app has its own cache
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/coa-logo.png', 'img/icon-192.png', 'img/icon-512.png', 'data-coa.json',
   'js/app.js', 'js/config.js', 'js/db.js', 'js/store.js', 'js/sync.js', 'js/api.js', 'js/auth.js', 'js/demo-server.js', 'js/seed.js', 'js/ui.js', 'js/format.js', 'js/refs.js',
   'js/views/login.js', 'js/views/dashboard.js', 'js/views/audits.js', 'js/views/setup.js', 'js/views/users.js', 'js/views/lgus.js',
-  'js/aom.js', 'js/auditctx.js', 'js/blockeditor.js', 'js/reviewpane.js', 'js/exitletter.js', 'js/views/exitconf.js', 'js/docx-aom.js', 'js/wp.js', 'js/library-seed.js',
+  'js/aom.js', 'js/auditctx.js', 'js/blockeditor.js', 'js/reviewpane.js', 'js/exitletter.js', 'js/views/exitconf.js', 'js/reviewtrail.js', 'js/saor.js', 'js/saor-wording.js', 'js/views/saorview.js', 'js/views/comments.js', 'js/docx-aom.js', 'js/wp.js', 'js/library-seed.js',
   'js/views/findings.js', 'js/views/aoms.js', 'js/views/print.js', 'js/views/review.js', 'js/views/library.js', 'js/views/drafts.js',
   'img/letterhead.jpg', 'img/lh-seal.jpg', 'img/lh-name.jpg', 'lib/xlsx.full.min.js', 'lib/docx.min.js'];
 

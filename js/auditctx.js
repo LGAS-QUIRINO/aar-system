@@ -41,11 +41,12 @@ export async function loadAudit(refs, auditId) {
 const STEPS = ['Setup', 'Findings and AOMs', 'AOM Review', 'SAOR and Exit Conference', 'BAAR', 'Final'];
 export function stepsBar(ctx, active) {
   const stage = Math.max(0, STEPS.indexOf(ctx.audit.stage || 'Setup'));
-  const links = { Setup: `#/audits/${ctx.rec.id}/setup`, 'Findings and AOMs': `#/audits/${ctx.rec.id}/findings`, 'AOM Review': `#/audits/${ctx.rec.id}/aoms` };
+  const links = { Setup: `#/audits/${ctx.rec.id}/setup`, 'Findings and AOMs': `#/audits/${ctx.rec.id}/findings`, 'AOM Review': `#/audits/${ctx.rec.id}/aoms`, 'SAOR and Exit Conference': `#/audits/${ctx.rec.id}/comments` };
+  const anyFinal = (ctx.aoms || []).some((a) => a.data.status === ST.FINAL);
   return `<nav class="stepsbar" aria-label="Audit stages">${STEPS.map((s, i) => {
     const cls = s === active ? 'now' : i < stage ? 'done' : '';
     const label = (i < stage ? '✓ ' : '') + s.replace(' and ', ' & ');
-    return links[s] && i <= Math.max(stage, 1) ? `<a class="${cls}" href="${links[s]}">${esc(label)}</a>` : `<span class="${cls}">${esc(label)}</span>`;
+    return links[s] && (i <= Math.max(stage, 1) || (s === 'SAOR and Exit Conference' && anyFinal)) ? `<a class="${cls}" href="${links[s]}">${esc(label)}</a>` : `<span class="${cls}">${esc(label)}</span>`;
   }).join('')}</nav>`;
 }
 

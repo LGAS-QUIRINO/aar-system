@@ -3,8 +3,9 @@ import { store, newId, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain } from '../aom.js';
+import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
 import { POOL_SEED } from '../library-seed.js';
+import { SAOR_WORDING } from '../saor-wording.js';
 import { nice, longDate } from '../format.js';
 
 const STATUS_KIND = { Active: 'ok', Draft: 'grey', Proposed: 'warn', Superseded: 'grey', Retired: 'grey' };
@@ -36,6 +37,7 @@ export async function pool(refs, params, q) {
   const editable = canManage && rec && ['Draft', 'Proposed', 'Active'].includes(rec.data.status) && rec.id === g.latest.id;
   const go = (code, v) => `#/library?code=${encodeURIComponent(code)}${v ? '&v=' + encodeURIComponent(v) : ''}`;
   const q0 = (q.get('find') || '').toLowerCase();
+  const missingSaor = groups.filter((x) => SAOR_WORDING[x.code] && x.versions.some((v) => ['Active', 'Draft', 'Proposed'].includes(v.data.status) && !(v.data.saor || '').trim()));
 
   const listHTML = groups.filter((x) => !q0 || (x.code + ' ' + x.latest.data.title + ' ' + (x.latest.data.area || '')).toLowerCase().includes(q0)).map((x) => {
     const d = x.latest.data; const st = x.active && x.latest !== x.active ? 'Proposed' : d.status;
@@ -58,7 +60,8 @@ export async function pool(refs, params, q) {
           <div class="field"><label class="label" for="p-sec">Default Part II Section</label><select class="input" id="p-sec" ${editable ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${rec.data.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
           <div class="field"><label class="label" for="p-wp">Working Paper</label><input class="input" id="p-wp" value="${esc(rec.data.wp || '')}" placeholder="e.g. WP-CA01, or blank if none" ${editable ? '' : 'disabled'}></div>
         </div>
-        <div class="field"><label class="label" for="p-saor">SAOR Wording (General, Plural)</label><textarea class="input be-text" id="p-saor" rows="2" ${editable ? '' : 'disabled'} placeholder="Used in the consolidated SAOR (Phase 3)">${esc(rec.data.saor || '')}</textarea></div>
+        <div class="field"><label class="label" for="p-saor">SAOR Wording (General)</label><textarea class="input be-text" id="p-saor" rows="3" ${editable ? '' : 'disabled'} placeholder="The observation as written in the consolidated SAOR, for any number of barangays">${esc(rec.data.saor || '')}</textarea></div>
+        <div class="field"><label class="label" for="p-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="p-saorrec" rows="3" ${editable ? '' : 'disabled'} placeholder="Leave blank to use the AOM recommendation">${esc(rec.data.saorRec || '')}</textarea><span class="hint">Leave blank to use the AOM recommendation in the SAOR.</span></div>
         <div class="field"><span class="label">Placeholders Found</span><div id="p-ph" class="hint"></div></div>
       </div></section>
     <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable })}</div></section>
@@ -74,6 +77,7 @@ export async function pool(refs, params, q) {
 
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
       <div class="btn-row"><button class="btn ghost" disabled title="Comes in Phase 5">Import Issued AOMs (Word)</button>${canManage ? '<button class="btn primary" id="p-new">+ New Template</button>' : ''}</div></div>
+    ${canManage && missingSaor.length ? `<div class="note info" style="align-items:center"><span>${missingSaor.length} template${missingSaor.length > 1 ? 's have' : ' has'} no SAOR wording yet. The approved wording is ready to load.</span><button class="btn sm primary" id="p-saor-load" style="margin-left:auto">Load the Approved SAOR Wording</button></div>` : ''}
     ${!groups.length && canManage ? `<div class="note warn" style="align-items:center">The Library is empty. <button class="btn sm primary" id="p-seed" style="margin-left:auto">Load the ${POOL_SEED.length} Templates from Your Workbook</button></div>` : ''}
     <div class="split" style="grid-template-columns:340px minmax(0,1fr)">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>Templates · ${groups.length}</h2></div>
@@ -89,10 +93,20 @@ export async function pool(refs, params, q) {
       const seed = $('#p-seed', root);
       if (seed) seed.onclick = async () => {
         for (const t of POOL_SEED) {
-          await store.save('aom_library', 'obs-' + t.code + '-v1', { ...clone(t), version: 1, status: 'Active', note: 'From the Barangay Audit System workbook', approvedBy: refs.me.email, approvedAt: new Date().toISOString() }, { silent: true });
+          await store.save('aom_library', 'obs-' + t.code + '-v1', { ...clone(t), saor: SAOR_WORDING[t.code]?.obs || t.saor || '', saorRec: SAOR_WORDING[t.code]?.rec || '', version: 1, status: 'Active', note: 'From the Barangay Audit System workbook', approvedBy: refs.me.email, approvedAt: new Date().toISOString() }, { silent: true });
         }
         await store.log('loaded the AOM Library templates', POOL_SEED.length + ' templates', '', refs.me.email);
         emitChange('local'); toast('Templates loaded.', 'ok');
+      };
+      const sl = $('#p-saor-load', root);
+      if (sl) sl.onclick = async () => {
+        if (!(await confirmBox('Load SAOR Wording', `Add the approved SAOR wording to ${missingSaor.length} template${missingSaor.length > 1 ? 's' : ''}? Templates that already have SAOR wording are not changed.`, 'Load', 'success'))) return;
+        for (const g2 of missingSaor) for (const v of g2.versions) {
+          if (!['Active', 'Draft', 'Proposed'].includes(v.data.status) || (v.data.saor || '').trim()) continue;
+          await store.save('aom_library', v.id, { ...v.data, saor: SAOR_WORDING[g2.code].obs, saorRec: v.data.saorRec || SAOR_WORDING[g2.code].rec || '' }, { silent: true });
+        }
+        await store.log('loaded the approved SAOR wording', `${missingSaor.length} templates`, '', refs.me.email);
+        emitChange('local'); toast('SAOR wording loaded.', 'ok');
       };
       const nw = $('#p-new', root);
       if (nw) nw.onclick = async () => {
@@ -126,10 +140,10 @@ export async function pool(refs, params, q) {
       };
       if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
-      ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-saor'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
+      ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-saor', '#p-saorrec'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
       const host = $('#p-blocks', root);
       wireBlocks(host, state, (redraw) => { if (redraw) host.innerHTML = blocksHTML(state.aom, { editable }); ph(); dirty(); });
-      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim() });
+      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim() });
       async function save(approve) {
         const d = collect();
         if (!d.title) { toast('Enter the finding title.', 'bad'); return false; }
@@ -213,6 +227,39 @@ export function toTemplate(aom, vars) {
   return { title, blocks, swaps: [...swaps.keys()], leftover };
 }
 
+// Carry a wording change from the AOM template into the SAOR wording: the same words removed or added, found by the
+// words just before the change. Changes that have no match in the SAOR wording are simply skipped.
+export function carryOver(target, oldText, newText) {
+  let out = String(target || '');
+  if (!out || oldText === newText) return out;
+  // Join changes split only by spaces into one change, so "and COA Circular No. 97-002" is one insertion.
+  const raw = diffWords(oldText, newText), segs = [];
+  raw.forEach((sg, i) => {
+    const prev = segs[segs.length - 1], next = raw[i + 1];
+    if (sg.op === '=' && /^\s+$/.test(sg.t) && prev && prev.op !== '=' && next && next.op !== '=') { segs.push({ op: '-', t: sg.t }, { op: '+', t: sg.t }); return; }
+    segs.push({ ...sg });
+  });
+  for (let i = segs.length - 1; i > 0; i--) if (segs[i].op === segs[i - 1].op && segs[i].op !== '=') { segs[i - 1].t += segs[i].t; segs.splice(i, 1); }
+  let ctx = '';
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i];
+    if (s.op === '=') { ctx += s.t; continue; }
+    let del = '', ins = '';
+    while (i < segs.length && segs[i].op !== '=') { if (segs[i].op === '-') del += segs[i].t; else ins += segs[i].t; i++; }
+    i--;
+    const tail = (ctx.match(/(\S+\s+){0,3}\S+\s*$/) || [''])[0];
+    if (del.trim()) {
+      const find = tail + del;
+      if (tail.trim() && out.includes(find)) out = out.replace(find, tail + ins);
+      else if (del.trim().length >= 12 && out.split(del).length === 2) out = out.replace(del, ins);
+    } else if (ins.trim() && tail.trim().length >= 8 && out.split(tail).length === 2) {
+      out = out.replace(tail, tail + ins);
+    }
+    ctx += ins;
+  }
+  return out;
+}
+
 // SA or Admin, from a Final AOM: apply its corrections to the Library template as the next version.
 export async function updateFromAom(refs, aomRec, vars, label) {
   const code = aomRec.data.poolCode;
@@ -229,10 +276,19 @@ export async function updateFromAom(refs, aomRec, vars, label) {
     ${t.swaps.length ? `<div class="field"><span class="label">Values changed back to placeholders</span><div class="hint">${t.swaps.map(esc).join('<br>')}</div></div>` : ''}
     ${t.leftover.length ? `<div class="note warn"><span>Still typed as numbers: <b>${t.leftover.map(esc).join(', ')}</b>. If these should come from the working paper, edit the template after updating and change them to placeholders.</span></div>` : ''}
     ${same ? '' : `<div style="max-height:52vh;overflow:auto;display:flex;flex-direction:column;gap:10px">${diffHTML({ title: act.title, blocks: act.blocks }, { title: t.title, blocks: t.blocks })}</div>`}`;
-  const r = await modal({ title: `Update ${code}`, wide: true, body,
-    buttons: same ? [{ label: 'Close', cls: 'ghost', value: null }] : [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Update', cls: 'primary', value: 'ok' }] });
+  // The SAOR wording gets the same correction automatically; it can still be edited here.
+  // Compare block by block (and the title), so long templates are compared word by word.
+  const pairs = [[act.title, t.title], ...(t.blocks || []).map((b, i) => [blockPlain((act.blocks || [])[i] || {}), blockPlain(b)])];
+  let saorNew = act.saor || '', recNew = act.saorRec || '';
+  pairs.forEach(([o, n]) => { if (o !== n) { saorNew = carryOver(saorNew, o, n); recNew = carryOver(recNew, o, n); } });
+  const saorBox = same ? '' : `<div class="grid-2" style="align-items:start">
+      <div class="field"><label class="label" for="u-saor">SAOR Wording · updated automatically, you can still edit</label><textarea class="input be-text" id="u-saor" rows="5">${esc(saorNew)}</textarea></div>
+      <div class="field"><label class="label" for="u-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="u-saorrec" rows="5" placeholder="Blank: the SAOR uses the AOM recommendation">${esc(recNew)}</textarea></div></div>`;
+  let saorVals = null;
+  const r = await modal({ title: `Update ${code}`, wide: true, body: body + saorBox,
+    buttons: same ? [{ label: 'Close', cls: 'ghost', value: null }] : [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Update', cls: 'primary', value: 'ok', check: (bg) => { saorVals = { saor: $('#u-saor', bg).value.trim(), saorRec: $('#u-saorrec', bg).value.trim() }; return true; } }] });
   if (r !== 'ok') return;
-  const saved = await saveActiveVersion(g, { ...clone(act), title: t.title, blocks: t.blocks, note: `Corrections from ${label}`, fromAom: aomRec.id }, refs);
+  const saved = await saveActiveVersion(g, { ...clone(act), title: t.title, blocks: t.blocks, ...(saorVals || {}), note: `Corrections from ${label}`, fromAom: aomRec.id }, refs);
   const fresh = await store.get('aoms', aomRec.id);
   if (fresh) await store.save('aoms', aomRec.id, { ...fresh.data, libraryUpdate: { code, version: saved.version, at: saved.approvedAt, by: refs.me.email } });
   toast(`${code} Version ${saved.version} is now Active.`, 'ok');
