@@ -404,3 +404,24 @@ label.btn{cursor:pointer}
 .saor-t tr.tot td{font-weight:700}
 .saor-t .amt{float:right;padding-left:6pt}
 .saor-wm{position:absolute;top:38%;left:0;right:0;text-align:center;font:700 90pt Arial,sans-serif;color:rgba(0,0,0,.06);transform:rotate(-20deg);pointer-events:none}
+.saor-lay{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px;align-items:start}
+.mc-panel{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto}
+.mc-sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:12px 14px;border-bottom:1px solid var(--line-2)}
+.mc-sum div{background:var(--soft);border-radius:8px;padding:8px 6px;text-align:center}
+.mc-sum b{display:block;font-size:20px;color:var(--navy)}.mc-sum b.warn{color:var(--warn-ink)}.mc-sum b.ok{color:var(--ok-ink)}
+.mc-sum span{font-size:11px;color:var(--muted);line-height:1.2;display:block}
+.mc-filt{display:flex;gap:6px;padding:10px 14px;border-bottom:1px solid var(--line-2)}
+.mc-filt button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer}
+.mc-filt button.on{background:var(--primary);color:#fff;border-color:var(--primary)}
+.mc-list a{display:grid;grid-template-columns:34px minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line-2);text-decoration:none;color:inherit}
+.mc-list a:hover{background:#F6F8FB}
+.mc-list b{font-size:14px;color:var(--navy)}.mc-list small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.mc-av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--sans);color:#fff}
+.mc-av.ok{background:#2F7D4F}.mc-av.part{background:#D97706}.mc-av.none{background:#9AA6B2}
+.mc-bar{display:block;height:6px;border-radius:4px;background:#E7ECF1;overflow:hidden;margin-top:6px;max-width:150px}.mc-bar i{display:block;height:100%;background:#2F7D4F}.mc-bar.part i{background:#D97706}
+.mc-cnt{font:600 13px var(--sans);color:var(--ink-2);white-space:nowrap}
+@media (max-width:1100px){.saor-lay{grid-template-columns:1fr}.mc-panel{position:static;max-height:none}}
+.paper-wrap .sheet.saor-sheet{zoom:.52}
+@media (max-width:1400px){.paper-wrap .sheet.saor-sheet{zoom:.44}}
+/* Label at the far left, its buttons at the far right, on one line (app-wide layout rule) */
+.lr-row{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}

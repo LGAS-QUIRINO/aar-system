@@ -46,7 +46,7 @@ export async function comments(refs, params, q) {
           <span class="hint">Opens each Awaiting AOM one after another, with the source set to Exit Conference.</span></div></section>
       <section class="panel"><div class="panel-head"><div><h2>AOM No. ${esc(no(cur))}</h2><span class="hint">${esc(fillText(cur.data.title, ctx.varsFor(cur)))} · Part II ${esc(SECTIONS[cur.data.section] || '')}</span></div></div>
         <div class="panel-body" id="c-form">
-          <div><span class="label">Source of Comment</span><div class="seg" role="group" aria-label="Source of comment">${SOURCES.map((s) => `<button type="button" class="${m.source === s ? 'on' : ''}" data-src="${s}">${s}</button>`).join('')}</div></div>
+          <div class="lr-row"><span class="label" id="c-src-l" style="margin:0">Source of Comment</span><div class="seg" role="group" aria-labelledby="c-src-l">${SOURCES.map((s) => `<button type="button" class="${m.source === s ? 'on' : ''}" data-src="${s}">${s}</button>`).join('')}</div></div>
           <div class="grid-2" id="c-dates">
             <div class="field"><label class="label" for="c-rd">Reply Letter Date</label><input class="input" type="date" id="c-rd" value="${esc(m.replyDate || '')}"></div>
             <div class="field"><label class="label" for="c-rr">Received by Audit Team</label><input class="input" type="date" id="c-rr" value="${esc(m.receivedDate || '')}"><span id="c-due" class="hint"></span></div></div>

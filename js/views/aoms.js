@@ -54,7 +54,7 @@ export async function aoms(refs, params, q) {
     const bad = allChecks(a, a.id === cur.id ? state.aom : a.data).some((c) => c.st === 'bad');
     const open = a.data.status === ST.RETURNED ? openComments(a.data, refs.me.email).length : 0;
     return `<a class="t-row click ${a.id === cur.id ? 'sel' : ''}" href="#/audits/${ctx.rec.id}/aoms?aom=${a.id}" style="grid-template-columns:10px 1fr;text-decoration:none;color:inherit;padding:10px 14px">
-      <span class="dot" style="background:${bad ? '#C2410C' : '#2F7D4F'}" title="${bad ? 'Needs fixing' : 'Checks passed'}"></span>
+      <span class="dot" style="background:${bad ? '#C2410C' : '#2F7D4F'}" title="${bad ? 'Needs fixing' : 'Draft Results all clear'}"></span>
       <span><span class="mono" style="font-size:12px">AOM No. ${esc(aomNo(ctx.audit.auditYear, N[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}</span><br> ${pill(a.data.status || 'Draft', statusPill(a.data.status || 'Draft'))}${open ? ' ' + pill(open + ' open', 'warn') : ''}<br><b>${esc(fillText(a.data.title, ctx.varsFor(a)))}</b></span></a>`;
   }).join('');
 
@@ -110,7 +110,7 @@ export async function aoms(refs, params, q) {
           </div></div>
       </div>
       <aside style="display:flex;flex-direction:column;gap:16px;min-width:0">
-        <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" id="a-checks" style="gap:8px">${checksHTML(allChecks(cur, state.aom))}</div></section>
+        <section class="panel"><div class="panel-head"><h2>Draft Results</h2></div><div class="panel-body" id="a-checks" style="gap:8px">${checksHTML(allChecks(cur, state.aom))}</div></section>
         <section class="panel"><div class="panel-head"><h2>Print View</h2></div><div class="panel-body" id="a-prev" style="padding:12px">${aomPreviewHTML(ctx, cur, state.aom, idx)}</div></section>
         <section class="panel"><div class="panel-head"><h2>Comments</h2></div><div class="panel-body" style="gap:10px">${commentsHTML(cur, refs, false)}</div></section>
       </aside></div>`;
@@ -178,7 +178,7 @@ export async function aoms(refs, params, q) {
         const blocked = recs.filter((a) => openComments(a.id === cur.id ? state.aom : a.data, refs.me.email).length);
         if (blocked.length) { toast(`Answer or mark resolved every comment first: ${blocked.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. Open Review View to reply.`, 'bad'); return; }
         const problems = recs.filter((a) => allChecks(a, a.id === cur.id ? state.aom : a.data).some((c) => c.st === 'bad'));
-        if (problems.length && !(await confirmBox('Some Checks Need Fixing', `${problems.length} AOM${problems.length > 1 ? 's have' : ' has'} missing values or tables (${problems.map((a) => esc(a.data.title)).join(', ')}). Forward anyway?`, 'Forward Anyway'))) return;
+        if (problems.length && !(await confirmBox('Some Draft Results Need Fixing', `${problems.length} AOM${problems.length > 1 ? 's have' : ' has'} missing values or tables (${problems.map((a) => esc(a.data.title)).join(', ')}). Forward anyway?`, 'Forward Anyway'))) return;
         if (!problems.length && !(await confirmBox('Forward for Review', `Forward ${recs.length} AOM${recs.length > 1 ? 's' : ''} to ${esc(nice(ctx.atl ? ctx.atl.name : 'the reviewer'))}? You can retrieve ${recs.length > 1 ? 'them' : 'it'} until the review starts.`, 'Forward', 'success'))) return;
         const now = new Date().toISOString();
         for (const a of recs) {

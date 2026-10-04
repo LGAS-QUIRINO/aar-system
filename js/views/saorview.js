@@ -40,7 +40,20 @@ export async function saorview(refs, params, q) {
   const head = { mun: mun.name, year, officeCode: team.officeCode || '' };
   const go = (o = {}) => `#/saor?m=${encodeURIComponent(o.m || munId)}&y=${o.y || year}${(o.view || view) === 'edit' ? '&view=edit' : ''}`;
   const allObs = model.sections.flatMap((s) => s.obs);
-  const brgyLinks = [...new Map(allObs.flatMap((o) => o.lines).map((l) => [l.auditId, l.brgy])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  // Per barangay: Final AOMs with comments and with a rejoinder decision.
+  const brgyStats = list.map((au) => {
+    const fin = aoms.filter((a) => a.data.auditId === au.id && a.data.status === 'Final');
+    if (!fin.length) return null;
+    const has = (a) => !!(a.data.mgmt && (a.data.mgmt.comment || '').trim());
+    const rec = fin.filter(has).length;
+    const dec = fin.filter((a) => has(a) && (a.data.mgmt.noRejoinder || (a.data.mgmt.rejoinder || '').trim())).length;
+    const name = refs.lgu[au.data.lguId]?.data.name || '?';
+    const done = rec === fin.length && dec === fin.length;
+    const left = fin.length - rec, pend = rec - dec;
+    const note = done ? 'Completed' : left ? `${left} comment${left > 1 ? 's' : ''} awaiting` : `${pend} rejoinder decision${pend > 1 ? 's' : ''} pending`;
+    return { id: au.id, name, ini: name.replace(/[^A-Za-z ]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase(), total: fin.length, rec, dec, done, note };
+  }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name, 'en'));
+  const mcRec = brgyStats.reduce((n, b) => n + b.rec, 0), mcAw = brgyStats.reduce((n, b) => n + b.total - b.rec, 0), mcDone = brgyStats.filter((b) => b.done).length;
 
   const editHTML = allObs.map((o) => `<section class="panel" data-key="${esc(o.key)}"><div class="panel-head"><div><h2>${o.n}. ${esc(o.title)}</h2><span class="hint">${esc(o.code || 'Not in the AOM Library')} · ${o.lines.length} barangay${o.lines.length > 1 ? 's' : ''}</span></div>
       ${o.edited ? '<span class="pill violet" style="margin-left:auto">Edited in this SAOR</span>' : ''}</div><div class="panel-body">
@@ -53,21 +66,28 @@ export async function saorview(refs, params, q) {
   const body = `<div class="page-head"><div><h1>SAOR · ${esc(mun.name)}</h1></div>
       <div class="btn-row"><label class="sr-only" for="s-m">Municipality</label><select class="input" id="s-m" style="width:160px">${munIds.map((id) => `<option value="${id}" ${id === munId ? 'selected' : ''}>${esc(refs.lgu[id]?.data.name || id)}</option>`).join('')}</select>
         <label class="sr-only" for="s-y">Audit Year</label><select class="input" id="s-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select></div></div>
-    <div class="panel rv-bar"><div class="seg"><a class="${view === 'print' ? 'on' : ''}" href="${go({ view: 'print' })}">Print View</a><a class="${view === 'edit' ? 'on' : ''}" href="${go({ view: 'edit' })}">Edit</a></div>
-      <a class="btn sm ghost" href="#/exit?m=${encodeURIComponent(munId)}&y=${year}">✉ Exit Conference Letters</a>
-      <span class="btn-row" style="margin-left:auto">${view === 'edit' ? '<button class="btn primary" id="s-save" type="button">Save</button>' : ''}<button class="btn ghost" id="s-print" type="button" ${allObs.length ? '' : 'disabled'}>Print</button><button class="btn primary" id="s-word" type="button" ${allObs.length ? '' : 'disabled'}>Word</button></span></div>
-    ${view === 'print' ? `<div class="paper-wrap big" style="max-height:none"><div class="sheet saor-sheet">${saorHTML(model, head)}</div></div>` : `<div style="display:flex;flex-direction:column;gap:16px">${editHTML}</div>`}
-    <div class="grid-3" style="align-items:start">
+    <div class="saor-lay">
+      <section class="panel mc-panel" style="align-self:start"><div class="panel-head"><h2>Management Comments</h2></div>
+        <div class="mc-sum"><div><b>${mcRec}</b><span>Received</span></div><div><b class="${mcAw ? 'warn' : ''}">${mcAw}</b><span>Awaiting</span></div><div><b class="${mcDone === brgyStats.length && brgyStats.length ? 'ok' : ''}">${mcDone} of ${brgyStats.length}</b><span>Completed Barangays</span></div></div>
+        <div class="mc-filt" role="group" aria-label="Show barangays"><button type="button" class="on" data-flt="all">All</button><button type="button" data-flt="awaiting">Awaiting</button><button type="button" data-flt="completed">Completed</button></div>
+        <div class="mc-list">${brgyStats.map((b) => `<a href="#/audits/${b.id}/comments" data-st="${b.done ? 'completed' : 'awaiting'}">
+          <span class="mc-av ${b.done ? 'ok' : b.rec ? 'part' : 'none'}" aria-hidden="true">${esc(b.ini)}</span>
+          <span><b>${esc(b.name)}</b><small>${esc(b.note)}</small><span class="mc-bar ${b.done ? '' : 'part'}"><i style="width:${b.total ? Math.round(100 * b.rec / b.total) : 0}%"></i></span></span>
+          <span class="mc-cnt">${b.rec} of ${b.total}</span></a>`).join('') || '<div class="empty">No Final AOMs yet.</div>'}</div>
+        <div class="panel-body"><span class="hint">Click a barangay to enter or edit its comments.</span></div></section>
+      <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+        <div class="panel rv-bar"><div class="seg"><a class="${view === 'print' ? 'on' : ''}" href="${go({ view: 'print' })}">Print View</a><a class="${view === 'edit' ? 'on' : ''}" href="${go({ view: 'edit' })}">Edit</a></div>
+          <a class="btn sm ghost" href="#/exit?m=${encodeURIComponent(munId)}&y=${year}">✉ Exit Conference Letters</a>
+          <span class="btn-row" style="margin-left:auto">${view === 'edit' ? '<button class="btn primary" id="s-save" type="button">Save</button>' : ''}<button class="btn ghost" id="s-print" type="button" ${allObs.length ? '' : 'disabled'}>Print</button><button class="btn primary" id="s-word" type="button" ${allObs.length ? '' : 'disabled'}>Word</button></span></div>
+        ${view === 'print' ? `<div class="paper-wrap big" style="max-height:none"><div class="sheet saor-sheet">${saorHTML(model, head)}</div></div>` : `<div style="display:flex;flex-direction:column;gap:16px">${editHTML}</div>`}
+      </div></div>
+    <div class="grid-2" style="align-items:start">
       <section class="panel"><div class="panel-head"><h2>Coverage</h2></div><div class="panel-body" style="gap:4px;font-size:13.5px">
         <div class="ckv"><span>Barangays with Final AOMs</span><b>${model.barangays}</b></div><div class="ckv"><span>Observations</span><b>${model.obsCount}</b></div>
-        <div class="ckv"><span>Barangay lines</span><b>${model.lineCount}</b></div><div class="ckv"><span>Management comments received</span><b>${model.received}</b></div>
-        <div class="ckv" style="color:${model.awaiting ? 'var(--warn-ink)' : 'inherit'}"><span>Awaiting comment</span><b>${model.awaiting}</b></div></div></section>
-      <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" style="gap:4px;font-size:13px">
+        <div class="ckv"><span>Barangay lines</span><b>${model.lineCount}</b></div></div></section>
+      <section class="panel"><div class="panel-head"><h2>Cross-Reference Results</h2></div><div class="panel-body" style="gap:4px;font-size:13px">
         <span>✓ All ${model.lineCount} Final AOMs appear under their observation</span><span>✓ AOM Nos. and amounts come from each Final AOM</span><span>✓ Totals are the sum of the barangay amounts</span>
         ${model.notFinal.length ? `<span style="color:var(--warn-ink)">! ${model.notFinal.length} AOM${model.notFinal.length > 1 ? 's are' : ' is'} not Final yet and not included: ${esc([...new Set(model.notFinal.map((x) => x.brgy))].join(', '))}</span>` : ''}</div></section>
-      <section class="panel"><div class="panel-head"><h2>Management Comments</h2></div><div class="panel-body" style="gap:6px">
-        <span class="hint">Entered per barangay; they fill in here by themselves.</span>
-        ${brgyLinks.map(([id, name]) => `<a href="#/audits/${id}/comments" style="font-size:13.5px">${esc(name)}</a>`).join('') || '<span class="hint">None yet.</span>'}</div></section>
     </div>`;
 
   return {
@@ -75,6 +95,10 @@ export async function saorview(refs, params, q) {
     mount(root) {
       $('#s-m', root).onchange = (e) => { location.hash = `#/saor?m=${encodeURIComponent(e.target.value)}`; };
       $('#s-y', root).onchange = (e) => { location.hash = go({ y: e.target.value }); };
+      $$('[data-flt]', root).forEach((b) => { b.onclick = () => {
+        $$('[data-flt]', root).forEach((x) => x.classList.toggle('on', x === b));
+        $$('.mc-list a', root).forEach((r) => { r.hidden = b.dataset.flt !== 'all' && r.dataset.st !== b.dataset.flt; });
+      }; });
       const pr = $('#s-print', root), wd = $('#s-word', root);
       if (pr) pr.onclick = async () => { printSaor(model, head); await store.log('printed the SAOR', `${mun.name} · Audit Year ${year}`, teamId, me.email); };
       if (wd) wd.onclick = async () => {

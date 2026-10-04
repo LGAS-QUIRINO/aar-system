@@ -51,9 +51,14 @@ export function buildSaor(input) {
     const tpl = g.code ? templates[g.code] : null;
     const section = first.section || (tpl && tpl.section) || 'B';
     const vars0 = g.items[0].au.vars(g.items[0].a);
-    const libObs = tpl && (tpl.saor || '').trim() ? tpl.saor.trim() : fillText(blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {}), vars0);
-    const libRec = tpl ? ((tpl.saorRec || '').trim() || recText(tpl.blocks)) : fillText(recText(first.blocks), vars0);
-    const ov = overrides[g.key] || {};
+    // Only one barangay has this finding: one row, its own AOM wording, with "Barangay X:" in front (approved Option A).
+    const single = g.items.length === 1;
+    const ownObs = fillText(blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {}), vars0);
+    const ownRec = fillText(recText(first.blocks), vars0);
+    const libObs = single ? ownObs : tpl && (tpl.saor || '').trim() ? tpl.saor.trim() : ownObs;
+    const libRec = single ? ownRec : tpl ? ((tpl.saorRec || '').trim() || recText(tpl.blocks)) : ownRec;
+    const key = g.key + (single ? '#1' : '');
+    const ov = overrides[key] || {};
     const lines = g.items.map(({ a, au }) => {
       const amt = aomAmount(a.data);
       const m = a.data.mgmt || null;
@@ -62,7 +67,7 @@ export function buildSaor(input) {
     }).sort((x, y) => x.brgy.localeCompare(y.brgy, 'en') || x.ref.localeCompare(y.ref));
     const money = lines.some((l) => l.amount !== null);
     const total = money ? lines.reduce((s, l) => s + (l.amount || 0), 0) : null;
-    return { key: g.key, code: g.code, section, order: g.code ? codeNum(g.code) : 10000, title: (tpl && tpl.title) || first.title,
+    return { key, single, code: g.code, section, order: g.code ? codeNum(g.code) : 10000, title: (tpl && tpl.title) || first.title,
       obs: ov.obs !== undefined ? ov.obs : libObs, rec: ov.rec !== undefined ? ov.rec : libRec, libObs, libRec, edited: ov.obs !== undefined || ov.rec !== undefined, lines, money, total };
   }).sort((x, y) => x.section.localeCompare(y.section) || x.order - y.order || x.title.localeCompare(y.title));
   let n = 0;
@@ -93,7 +98,8 @@ export const SAOR_CSS = `
 .saor-wm{position:absolute;top:38%;left:0;right:0;text-align:center;font:700 90pt Arial,sans-serif;color:rgba(0,0,0,.06);transform:rotate(-20deg);pointer-events:none}
 `;
 export function saorHTML(m, head) {
-  const rows = m.sections.map((s) => `<tr class="sec"><td colspan="5">${escH(s.code)}. ${escH(s.title.toUpperCase())}</td></tr>` + s.obs.map((o) => `
+  const one = (o) => { const l = o.lines[0]; return `<tr><td class="ref">${escH(l.ref)}</td><td><b>${o.n}.</b> <b>Barangay ${escH(l.brgy)}:</b> ${br(o.obs)}</td><td>${br(o.rec)}</td><td>${br(l.comment)}</td><td>${br(l.rejoinder)}</td></tr>`; };
+  const rows = m.sections.map((s) => `<tr class="sec"><td colspan="5">${escH(s.code)}. ${escH(s.title.toUpperCase())}</td></tr>` + s.obs.map((o) => o.single ? one(o) : `
     <tr><td></td><td><b>${o.n}.</b> ${br(o.obs)}</td><td>${br(o.rec)}</td><td></td><td></td></tr>
     ${o.lines.map((l) => `<tr><td class="ref">${escH(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(peso(l.amount))}</span>` : ''}</td><td></td><td>${br(l.comment)}</td><td>${br(l.rejoinder)}</td></tr>`).join('')}
     ${o.money ? `<tr class="tot"><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td><td></td></tr>` : ''}`).join('')).join('');
@@ -138,6 +144,13 @@ export async function saorWord(m, head) {
   m.sections.forEach((s) => {
     rows.push(new TableRow({ children: [new TableCell({ columnSpan: 5, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
     s.obs.forEach((o) => {
+      if (o.single) {
+        const l = o.lines[0];
+        rows.push(new TableRow({ children: [cell([new Paragraph({ children: [R(l.ref)] })], 0),
+          cell([new Paragraph({ spacing: { after: 0 }, children: [R(o.n + '. ', { b: true }), R(`Barangay ${l.brgy}: `, { b: true }), R(o.obs.split('\n')[0])] }), ...lines(o.obs.split('\n').slice(1).join('\n'))], 1),
+          cell(lines(o.rec), 2), cell(l.comment ? lines(l.comment) : [], 3), cell(l.rejoinder ? lines(l.rejoinder) : [], 4)] }));
+        return;
+      }
       rows.push(new TableRow({ children: [cell([], 0), cell([new Paragraph({ spacing: { after: 0 }, children: [R(o.n + '. ', { b: true }), R(o.obs.split('\n')[0])] }), ...lines(o.obs.split('\n').slice(1).join('\n'))].filter(Boolean), 1), cell(lines(o.rec), 2), cell([], 3), cell([], 4)] }));
       o.lines.forEach((l) => rows.push(new TableRow({ children: [cell([new Paragraph({ children: [R(l.ref)] })], 0), cell([amtPara(l.brgy, l.amount)], 1), cell([], 2), cell(l.comment ? lines(l.comment) : [], 3), cell(l.rejoinder ? lines(l.rejoinder) : [], 4)] })));
       if (o.money) rows.push(new TableRow({ children: [cell([], 0), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 1), cell([], 2), cell([], 3), cell([], 4)] }));

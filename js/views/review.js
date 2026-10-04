@@ -135,7 +135,7 @@ export async function review(refs, params, q) {
             nc.ok ? { st: 'ok', t: `Sequential: ${first === last ? 'AOM No. ' + aomNo(ctx.audit.auditYear, first, ctx.audit.periodFrom, ctx.audit.periodTo) : 'AOM Nos. ' + aomRange(ctx.audit.auditYear, first, last, ctx.audit.periodFrom, ctx.audit.periodTo)}, no gaps or duplicates` } : { st: 'bad', t: `Gaps ${nc.gaps.join(', ') || 'none'} · duplicates ${nc.dup.join(', ') || 'none'}` },
             { st: 'ok', t: 'Period matches the Audit Setup' }, { st: 'ok', t: 'Header and footer ranges match' }])}
           ${reviewing ? '<label class="check"><input type="checkbox" id="r-numok">I checked the AOM numbering</label>' : ''}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body" style="gap:8px">${checksHTML(checks(state.aom, ctx.varsFor({ data: state.aom }), ctx.audit))}</div></section>
+        <section class="panel"><div class="panel-head"><h2>Draft Results</h2></div><div class="panel-body" style="gap:8px">${checksHTML(checks(state.aom, ctx.varsFor({ data: state.aom }), ctx.audit))}</div></section>
         ${reviewing ? `<section class="panel"><div class="panel-head"><h2>Changes to This AOM</h2></div><div class="panel-body">
           <label class="check"><input type="radio" name="r-mode" value="minor" ${cur.data.mode !== 'Modified' ? 'checked' : ''}>Minor (rewording only)</label>
           <label class="check"><input type="radio" name="r-mode" value="major" ${cur.data.mode === 'Modified' ? 'checked' : ''}>Modified (Major): condition, cause, effect or recommendation changed substantially</label></div></section>` : ''}
