@@ -10,6 +10,10 @@ import { loadGaa, loadPeriodWording, openReportWording, canEditWording } from '.
 import { buildCover, coverHTML, printCover, coverWord, coverPrint, coverSections } from '../baar-cover.js';
 import { buildToc, tocHTML, printToc, tocWord, tocPrint, tocSections } from '../baar-toc.js';
 import { printPages, saveDocx } from '../baar-doc.js';
+import { IAR_STANDARD, IAR_KEYS, IAR_OPINION_STANDARD, BASES_HEAD, buildIar, iarPagesHTML, paginateIar, iarPrint, iarSections } from '../baar-iar.js';
+import { fillText, blockPlain, SECTIONS } from '../aom.js';
+import { aomNo } from '../format.js';
+import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
 export const PARTS = [
@@ -18,18 +22,40 @@ export const PARTS = [
 ];
 const recId = (auditId) => `baar-${auditId}`;
 const stdId = (teamId) => `std-baartr-${teamId}`;
+const iarStdId = (teamId) => `std-baariar-${teamId}`;
 
-const BUILT = ['01', '02', '03'];
+const BUILT = ['01', '02', '03', '04'];
 // The parts strip: built parts are links; status01 is the Part 01 pill (live on the Part 01 screen).
-function partsStrip(auditId, active, status01, status03 = pill('In Progress', 'warn')) {
+function partsStrip(auditId, active, status01, status03 = pill('In Progress', 'warn'), status04 = '') {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
-    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : n === '03' ? status03 : '';
+    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : n === '03' ? status03 : n === '04' ? `<span id="b-p04">${status04 || pill('In Progress', 'warn')}</span>` : '';
     if (n === active) return `<span class="bpart on"><b>${n}</b> ${esc(t)} ${pillHTML}</span>`;
     if (BUILT.includes(n)) return `<a class="bpart link" href="#/baar/${auditId}?p=${n}"><b>${n}</b> ${esc(t)} ${pillHTML}</a>`;
     return `<span class="bpart later" title="Built after Part ${String(Number(n) - 1).padStart(2, '0')}"><b>${n}</b> ${esc(t)}</span>`;
   }).join('')}</div>`;
 }
 const p01Pill = (miss) => (miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok'));
+
+// The Final AOMs of the audit as possible bases: Section A (Financial Audit) ticked unless changed; text from the AOM's own observation.
+function basesList(ctx, I) {
+  return ctx.aoms.filter((a) => a.data.status === ST.FINAL).sort((a, b) => ctx.nums[a.id].n - ctx.nums[b.id].n).map((a) => {
+    const v = ctx.varsFor(a), sv = I.bases[a.id] || {};
+    const own = fillText(blockPlain((a.data.blocks || []).find((b) => b.type === 'topic') || {}), v).trim().replace(/[.;\s]+$/, '');
+    const amt = aomAmount(a.data);
+    return { id: a.id, sec: a.data.section || 'B', no: aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo),
+      title: fillText(a.data.title || '', v), amount: amt, own, on: sv.on !== undefined ? !!sv.on : (a.data.section || 'B') === 'A', text: sv.text !== undefined ? sv.text : own };
+  });
+}
+// What Part 04 still needs before it is ready to print.
+function iarMissing(op, I, list) {
+  const m = [];
+  if (!op) m.push('opinion');
+  else if (!String((I.opSent || {})[op] || '').trim()) m.push('opinion paragraph');
+  if (op && op !== 'Unmodified' && !list.some((b) => b.on)) m.push('at least one basis');
+  if (!I.date) m.push('report date');
+  return m;
+}
+const p04Pill = (m) => (m.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok'));
 
 // What Part 01 still needs before it is ready to print.
 export function trMissing(b, gaa, year) {
@@ -107,11 +133,21 @@ async function loadTransmittal(ctx) {
   if (T.pbPos === undefined) T.pbPos = pb.pos;
   if (T.salutation === undefined) T.salutation = pbSalutation(pb.name);
   T.opSent = Object.fromEntries(OPINIONS.map((o) => [o, { ...stdOp[o], ...((T.opSent || {})[o] || {}) }]));
-  return { rec, standard, stdOp, exitL, B, T, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
+  // Part 04 · Independent Auditor's Report: standard wording filled in where nothing is saved yet.
+  const iStdRec = await store.get('letters', iarStdId(ctx.teamId));
+  const iStd = iStdRec && !iStdRec.deleted ? iStdRec.data : {};
+  const iStandard = { ...IAR_STANDARD, ...(iStd.wording || {}) };
+  const iStdOp = { ...IAR_OPINION_STANDARD, ...(iStd.opSent || {}) };
+  const I = B.iar = B.iar || {};
+  IAR_KEYS.forEach((k) => { if (I[k] === undefined) I[k] = iStandard[k]; });
+  I.opSent = { ...iStdOp, ...(I.opSent || {}) };
+  I.bases = I.bases || {};
+  if (I.date === undefined) I.date = '';
+  return { rec, standard, stdOp, exitL, B, T, I, iStandard, iStdOp, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
 }
 
 // Page numbers of the numbered parts (Independent Auditor's Report = page 1). Parts 04 to 10 are not built yet: no numbers.
-function baarPages() { return {}; }
+function baarPages() { return { iar: 1 }; }      // the Independent Auditor's Report is page 1; later parts follow as they are built
 // Annexes added in Part 10 (not built yet).
 function baarAnnexes() { return []; }
 
@@ -122,11 +158,24 @@ async function completeBAAR(ctx) {
   const tr = buildTransmittal({ t: { ...L.B.tr, opinion: L.B.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(L.gaa, audit.periodTo), pw: L.pw });
   const cv = buildCover({ audit, lgu, mun, pw: L.pw });
   const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages: baarPages(), annexes: baarAnnexes() });
+  const ia = iarOf(ctx, L);
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox()))]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia))], fileName, 'BAAR'); }
   };
+}
+// The Independent Auditor's Report built from the saved BAAR record.
+function iarOf(ctx, L) {
+  const bases = basesList(ctx, L.I).filter((b) => b.on);
+  return buildIar({ iar: L.I, opinion: L.B.opinion, audit: ctx.audit, lgu: ctx.lgu, mun: ctx.mun, atl: ctx.atl, pb: { title: '', name: L.T.pbName }, bases });
+}
+// A hidden box used to measure lines when laying out pages.
+function measureBox() {
+  let m = document.getElementById('b-measure-ia');
+  if (!m) { m = document.createElement('div'); m.id = 'b-measure-ia'; document.body.appendChild(m); }
+  m.className = 'aom-doc ia'; m.style.cssText = 'position:absolute;left:-9999px;top:0;width:6in;visibility:hidden';
+  return m;
 }
 // Page heading shared by the parts, with the complete BAAR buttons.
 function baarHead(ctx) {
@@ -157,10 +206,12 @@ export async function baar(refs, params, q) {
   let { gaa, pw } = L;
   const gaaYear = Number(audit.periodTo);
   const status01 = isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear));
-  if (q.get('p') === '03') return tocPart({ ctx, me, pw, status01 });
-  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01 });
+  const status04 = p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I)));
+  if (q.get('p') === '03') return tocPart({ ctx, me, pw, status01, status04 });
+  if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, status01 });
+  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01, status04 });
 
-  const parts = partsStrip(ctx.rec.id, '01', '');
+  const parts = partsStrip(ctx.rec.id, '01', '', undefined, status04);
   const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="b-${id}">${label}</label><textarea class="input be-text" id="b-${id}" rows="${rows}">${esc(T[id])}</textarea></div>`;
   const dis = canEdit ? '' : 'disabled';
 
@@ -291,7 +342,11 @@ export async function baar(refs, params, q) {
       });
       async function save() {
         const d = collect();
-        await store.save('letters', recId(ctx.rec.id), d, { silent: true });
+        // Part 04's saved data stays as it is (only what was saved there, not the standard wording shown).
+        const cur = await store.get('letters', recId(ctx.rec.id));
+        const out = { ...d, iar: cur && !cur.deleted ? cur.data.iar : undefined };
+        if (out.iar === undefined) delete out.iar;
+        await store.save('letters', recId(ctx.rec.id), out, { silent: true });
         Object.assign(B, clone(d)); Object.assign(T, d.tr);
         await store.log('saved the BAAR transmittal letters', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
         setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
@@ -347,12 +402,12 @@ export async function baar(refs, params, q) {
 }
 
 /* ── Part 02 · Cover ── */
-function coverPart({ ctx, me, pw, status01 }) {
+function coverPart({ ctx, me, pw, status01, status04 }) {
   const { audit, lgu, mun } = ctx;
   const c = buildCover({ audit, lgu, mun, pw });
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>02 · Cover</b>`;
   const body = `${baarHead(ctx)}
-    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', status01)}</section>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', status01, undefined, status04)}</section>
     <div class="topnote">The cover fills in by itself from Audit Setup. Nothing needs to be typed here.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>On the Cover</h2></div><div class="panel-body">
@@ -374,7 +429,7 @@ function coverPart({ ctx, me, pw, status01 }) {
 }
 
 /* ── Part 03 · Table of Contents ── */
-function tocPart({ ctx, me, pw, status01 }) {
+function tocPart({ ctx, me, pw, status01, status04 }) {
   const { audit, lgu, mun } = ctx;
   const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(), annexes: baarAnnexes() });
   const status03 = t.missing ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
@@ -383,7 +438,7 @@ function tocPart({ ctx, me, pw, status01 }) {
     : `<tr><td>${esc(r.text.replace(/ for Financial Statements$/, ''))}</td><td class="p">${esc(r.page)}</td></tr>`).join('');
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>03 · Table of Contents</b>`;
   const body = `${baarHead(ctx)}
-    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '03', status01, status03)}</section>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '03', status01, status03, status04)}</section>
     <div class="topnote">Page numbers fill in by themselves from the parts of this BAAR.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>Page Numbers</h2></div><div class="panel-body" style="padding-top:6px">
@@ -401,6 +456,130 @@ function tocPart({ ctx, me, pw, status01 }) {
         try { toast('Preparing the Word file…'); await tocWord(t); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
         await store.log('downloaded the BAAR table of contents (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
       };
+    }
+  };
+}
+
+/* ── Part 04 · Independent Auditor's Report ── */
+function iarPart({ ctx, me, refs, L, status01 }) {
+  const { audit, lgu, mun } = ctx;
+  const { B, I, iStandard, iStdOp } = L;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canStd = has(me, 'sa') || has(me, 'admin');
+  const dis = canEdit ? '' : 'disabled';
+  const list = basesList(ctx, I);
+  const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="i-${id}">${label}</label><textarea class="input be-text" id="i-${id}" rows="${rows}" ${dis}>${esc(I[id])}</textarea></div>`;
+  const basesHTML = list.length ? list.map((b) => `<div class="basis ${b.on ? '' : 'dim'}" data-b="${b.id}"><input type="checkbox" data-bon="${b.id}" ${b.on ? 'checked' : ''} aria-label="Include ${esc(b.no)}" ${dis}>
+      <div><div class="src">AOM No. ${esc(b.no)} · ${esc(SECTIONS[b.sec] || '')} · ${esc(b.title)}${b.amount !== null ? ' · ' + esc(peso(b.amount)) : ''}</div>
+      <textarea class="input be-text" data-btx="${b.id}" rows="3" ${dis}>${esc(b.text)}</textarea>
+      ${canEdit ? `<button class="reset" type="button" data-bre="${b.id}" ${b.text === b.own ? 'hidden' : ''}>Back to the AOM wording</button>` : ''}</div></div>`).join('')
+    : '<div class="empty">No Final AOMs yet.</div>';
+  const atlLine = ctx.atl ? [nice(ctx.atl.name), ctx.atl.designation || ctx.atl.position].filter(Boolean).map((x) => esc(x)).join(' · ') : 'No Audit Team Leader in Users';
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>04 · Independent Auditor's Report</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '04', status01, undefined, '')}</section>
+    <div class="topnote">Words in [brackets] fill in by themselves. The opinion is the same one chosen in Part 01. Changes apply to this BAAR only, unless you click Save as Standard.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Opinion</h2></div><div class="panel-body">
+        <div class="lr-row"><span class="label" style="margin:0;white-space:nowrap">Auditor's Opinion</span>
+          <div class="seg bop" role="group" aria-label="Auditor's Opinion">${OPINIONS.map((o) => `<button type="button" data-op="${o}" class="${B.opinion === o ? 'on' : ''}" aria-pressed="${B.opinion === o}" ${dis}>${o}</button>`).join('')}</div></div>
+        <div class="field"><label class="label" for="i-op">Opinion Paragraph</label><textarea class="input be-text" id="i-op" rows="5" ${dis}></textarea></div>
+        <span class="hint" id="i-ophint"></span></div></section>
+      <section class="panel" id="i-bases"><div class="panel-head"><h2 id="i-bhead"></h2><span class="pill violet" id="i-bcount" style="margin-left:auto"></span></div>
+        <div class="panel-body" style="padding-top:4px">${basesHTML}</div></section>
+      <section class="panel"><div class="panel-head"><h2>Report Date</h2></div><div class="panel-body"><div class="grid-2">
+        <div class="field"><label class="label" for="i-date">Date of the Report</label><input class="input" type="date" id="i-date" value="${esc(I.date || '')}" ${dis}></div>
+        <div class="field"><span class="label">Signed By</span><div class="bval">${atlLine}</div></div></div></div></section>
+      <section class="panel"><div class="panel-head"><h2>Wording</h2><span class="btn-row" style="margin-left:auto">${canStd && canEdit ? '<button class="btn sm ghost" id="i-std" type="button">Save as Standard</button>' : ''}${canEdit ? '<button class="btn sm ghost" id="i-reset" type="button">Reset to Standard</button>' : ''}</span></div><div class="panel-body">
+        ${ta('open', 'Opening Paragraph', 4)}${ta('basesIntro', 'Bases · Introduction', 2)}${ta('conducted', 'We Conducted Our Audit…', 5)}${ta('kam', 'Key Audit Matters', 3)}
+        ${ta('mgmt1', 'Responsibilities of Management', 4)}${ta('mgmt2', 'Those Charged with Governance', 2)}${ta('aud', 'Auditor’s Responsibilities', 6)}</div></section>
+      ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
+        <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="i-save" type="button">Save</button></div></div>` : ''}</div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="i-print" type="button">Print</button><button class="btn sm primary" id="i-word" type="button">Word</button></span></div>
+        <div class="paper-wrap big" id="i-paper"></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      let op = B.opinion || '';
+      const opBox = $('#i-op', root);
+      const keepOp = () => { if (op) I.opSent[op] = opBox.value; };
+      const showOp = () => {
+        opBox.value = op ? (I.opSent[op] || '') : ''; opBox.disabled = !op || !canEdit;
+        const h = $('#i-ophint', root);
+        h.textContent = !op ? 'Choose the opinion first.' : String(I.opSent[op] || '').trim() ? '' : `Type the ${op} opinion paragraph the first time. ${canStd ? 'Click Save as Standard to keep it for every BAAR.' : 'Your SA can save it as standard.'}`;
+        h.hidden = !h.textContent;
+        $('#i-bases', root).hidden = !op || op === 'Unmodified';
+        $('#i-bhead', root).textContent = BASES_HEAD[op] || 'Bases';
+      };
+      const collect = () => {
+        keepOp();
+        const i = { ...I, opSent: { ...I.opSent }, bases: {} };
+        IAR_KEYS.forEach((k) => { const el = $('#i-' + k, root); if (el) i[k] = el.value; });
+        i.date = $('#i-date', root).value;
+        list.forEach((b) => { const on = $(`[data-bon="${b.id}"]`, root).checked, text = $(`[data-btx="${b.id}"]`, root).value;
+          i.bases[b.id] = { on, text: text === b.own ? undefined : text }; });
+        return { ...B, opinion: op, iar: i };
+      };
+      const ia = (d) => buildIar({ iar: d.iar, opinion: d.opinion, audit, lgu, mun, atl: ctx.atl, pb: { title: '', name: L.T.pbName },
+        bases: list.filter((b) => $(`[data-bon="${b.id}"]`, root).checked).map((b) => ({ text: $(`[data-btx="${b.id}"]`, root).value })) });
+      const draw = () => {
+        if (!document.body.contains(root)) return;
+        const d = collect(), r = ia(d);
+        const pages = paginateIar(r.items, measureBox());
+        const html = iarPagesHTML(r, pages, 1);
+        $('#i-paper', root).innerHTML = `<div class="doc-label">Part I page (not numbered)</div><div class="sheet isheet">${html[0]}</div>` +
+          `<div class="doc-label">Independent Auditor's Report (page${pages.length > 1 ? 's 1–' + pages.length : ' 1'})</div>` + html.slice(1).map((x) => `<div class="sheet isheet">${x}</div>`).join('');
+        const n = list.filter((b) => $(`[data-bon="${b.id}"]`, root).checked).length;
+        $('#i-bcount', root).textContent = `${n} ticked`;
+        $$('[data-b]', root).forEach((x) => x.classList.toggle('dim', !$(`[data-bon="${x.dataset.b}"]`, root).checked));
+        list.forEach((b) => { const r1 = $(`[data-bre="${b.id}"]`, root); if (r1) r1.hidden = $(`[data-btx="${b.id}"]`, root).value === b.own; });
+        const ld = { ...d.iar, bases: Object.fromEntries(list.map((b) => [b.id, { on: $(`[data-bon="${b.id}"]`, root).checked }])) };
+        const miss = iarMissing(op, ld, list.map((b) => ({ on: $(`[data-bon="${b.id}"]`, root).checked })));
+        $('#b-p04', root).innerHTML = p04Pill(miss); $('#b-p04', root).title = miss.length ? 'Still needed: ' + miss.join(', ') : '';
+      };
+      async function save() {
+        const d = collect();
+        const clean = { ...d.iar, bases: Object.fromEntries(Object.entries(d.iar.bases).map(([k, v]) => [k, v.text === undefined ? { on: v.on } : v])) };
+        const rec = await store.get('letters', recId(ctx.rec.id));
+        const base = rec && !rec.deleted ? rec.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
+        await store.save('letters', recId(ctx.rec.id), { ...base, opinion: d.opinion, iar: clean }, { silent: true });
+        B.opinion = d.opinion; Object.assign(I, clone(clean));
+        await store.log('saved the Independent Auditor’s Report', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
+      }
+      const changed = () => { if (!canEdit) return; setDirty(true, save); draw(); };
+      root.querySelector('.xform').addEventListener('input', changed);
+      root.querySelector('.xform').addEventListener('change', changed);
+      $$('[data-op]', root).forEach((b) => { b.onclick = () => {
+        keepOp(); op = b.dataset.op;
+        $$('[data-op]', root).forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); });
+        showOp(); changed();
+      }; });
+      $$('[data-bre]', root).forEach((b) => { b.onclick = () => { const x = list.find((y) => y.id === b.dataset.bre); $(`[data-btx="${x.id}"]`, root).value = x.own; changed(); }; });
+      const sv = $('#i-save', root); if (sv) sv.onclick = save;
+      const rs = $('#i-reset', root);
+      if (rs) rs.onclick = () => { IAR_KEYS.forEach((k) => { $('#i-' + k, root).value = iStandard[k]; }); if (op) { I.opSent[op] = iStdOp[op] || ''; showOp(); } changed(); toast('Standard wording put back. Click Save to keep it.', 'ok'); };
+      const st = $('#i-std', root);
+      if (st) st.onclick = async () => {
+        if (!(await confirmBox('Save as Standard', 'Use this wording and the opinion paragraphs for every new Independent Auditor’s Report from now on? BAARs already started keep their own wording.', 'Save as Standard', 'success'))) return;
+        const d = collect();
+        const wording = Object.fromEntries(IAR_KEYS.map((k) => [k, d.iar[k]]));
+        const opSent = Object.fromEntries(OPINIONS.map((o) => [o, String(d.iar.opSent[o] || '').trim() ? d.iar.opSent[o] : (iStdOp[o] || '')]));
+        await store.save('letters', iarStdId(ctx.teamId), { type: 'standard', kind: 'baar-iar', teamId: ctx.teamId, wording, opSent, savedBy: me.email, savedAt: new Date().toISOString() }, { silent: true });
+        await store.log('saved the standard Independent Auditor’s Report wording', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        Object.assign(iStandard, wording); Object.assign(iStdOp, opSent);
+        toast('Saved as the standard wording for new BAARs.', 'ok');
+      };
+      const cur = () => { const d = collect(); return ia(d); };
+      $('#i-print', root).onclick = async () => { const r = cur(); const p = iarPrint(r, paginateIar(r.items, measureBox())); printPages(p.css, p.html, `BAAR ${audit.auditYear} · ${lgu.name} · 04 Independent Auditor's Report`);
+        await store.log('printed the Independent Auditor’s Report', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email); };
+      $('#i-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); const r = cur(); await saveDocx(await iarSections(r), r.fileName, 'BAAR Independent Auditor’s Report'); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded the Independent Auditor’s Report (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      showOp(); draw(); setDirty(false, save);
     }
   };
 }
