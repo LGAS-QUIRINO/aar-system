@@ -74,6 +74,8 @@ export function buildTransmittal(info) {
     { k: 'p', t: 'PROVINCIAL SATELLITE AUDITING OFFICE', al: 'c' }, { k: 'p', t: 'Capitol Hills, Cabarroguis, Quirino', al: 'c', size: 18 },
     { k: 'bl' }, { k: 'p', t: office, b: true, al: 'c', rule: true }, { k: 'bl' }];
   const para = (s) => (String(s || '').trim() ? [{ k: 'p', t: fill(s), al: 'j' }, { k: 'bl' }] : []);
+  // The last paragraph stays on the same page as "Very truly yours," and the signature, so a second page never holds the closing alone.
+  const lastPara = (s) => keepTogether(para(s));
   const pos = (u) => (u && u.position) || '', des = (u) => (u && u.designation) || '';
 
   // 1 · SA to the Punong Barangay
@@ -81,7 +83,7 @@ export function buildTransmittal(info) {
     { k: 'p', t: t.saDate ? longDate(t.saDate) : blank }, { k: 'bl' },
     { k: 'p', t: upper(t.pbName) || blank, b: true }, { k: 'p', t: t.pbPos || 'Punong Barangay' }, { k: 'p', t: brgy }, { k: 'bl' },
     { k: 'p', t: t.salutation || 'Dear Punong Barangay:' }, { k: 'bl' },
-    ...para(t.sa1), ...para(t.sa2), ...para(t.sa3), ...para(op.sa || '[Opinion sentence: type it under Report Details]'), ...para(t.sa5), ...para(t.sa6), ...para(t.sa7),
+    ...para(t.sa1), ...para(t.sa2), ...para(t.sa3), ...para(op.sa || '[Opinion sentence: type it under Report Details]'), ...para(t.sa5), ...para(t.sa6), ...lastPara(t.sa7),
     ...keepTogether([{ k: 'p', t: 'Very truly yours,' }, { k: 'bl' }, { k: 'p', t: 'COMMISSION ON AUDIT', b: true }, { k: 'bl' }, { k: 'p', t: 'By:' }, { k: 'bl' }, { k: 'bl' }]),
     { k: 'p', t: upper(sa ? sa.name : '') || blank, b: true, keep: !!(pos(sa) || des(sa)) }];
   if (pos(sa)) d1.push({ k: 'p', t: pos(sa), keep: !!des(sa) });
@@ -97,7 +99,7 @@ export function buildTransmittal(info) {
   if (saTitle) d2.push({ k: 'p', t: saTitle });
   String(t.atlAddr || '').split('\n').map((s) => s.trim()).filter(Boolean).forEach((s) => d2.push({ k: 'p', t: s }));
   d2.push({ k: 'bl' }, { k: 'p', t: t.atlSal || 'Sir:', b: true }, { k: 'bl' },
-    ...para(t.atl1), ...para(t.atl2), ...para(t.atl3), ...para(t.atl4), ...para(op.atl || '[Opinion sentence: type it under Report Details]'), ...para(t.atl6),
+    ...para(t.atl1), ...para(t.atl2), ...para(t.atl3), ...para(t.atl4), ...para(op.atl || '[Opinion sentence: type it under Report Details]'), ...lastPara(t.atl6),
     ...keepTogether([{ k: 'p', t: 'Very truly yours,' }, { k: 'bl' }, { k: 'bl' }]), { k: 'p', t: upper(atl ? atl.name : '') || blank, b: true, keep: !!(pos(atl) || des(atl)) });
   if (pos(atl)) d2.push({ k: 'p', t: pos(atl), keep: !!des(atl) });
   if (des(atl)) d2.push({ k: 'p', t: des(atl) });
@@ -109,7 +111,7 @@ export function buildTransmittal(info) {
     { k: 'p', t: periodPhrase(audit.periodFrom, audit.periodTo), al: 'c' }, { k: 'p', t: `As of ___________ ${audit.auditYear}`, al: 'c' },
     { k: 'bl' }, { k: 'aapsi', rows: 10 }, { k: 'bl' }, { k: 'bl' }, { k: 'bl' }, { k: 'p', t: 'Agency sign-off:' }, { k: 'bl' }, { k: 'bl' },
     { k: 'sign' }, { k: 'bl' }, { k: 'bl' }, { k: 'bl' }, { k: 'bl' },
-    { k: 'p', t: 'Note:\tStatus of Implementation may either be (a) Fully Implemented, or (b) Partially Implemented.', size: 16 }];
+    { k: 'p', t: 'Note:\tStatus of Implementation may either be (a) Fully Implemented, or (b) Not Implemented.', size: 16 }];
 
   const fileName = `${upper(lgu.name).replace(/[^A-Z0-9]+/g, '')}_${upper(mun.name).replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_01_Transmittal_Letters`;
   return { docs: [{ key: 'sa', title: 'Letter to the Punong Barangay', items: d1 }, { key: 'atl', title: 'Letter to the Supervising Auditor', items: d2 }, { key: 'aapsi', title: 'AAPSI Form', items: d3 }], fileName };
@@ -127,6 +129,7 @@ export const TR_CSS = `
 .bl .sign{display:flex;justify-content:space-between;font-size:10pt}
 .bl .sign span{display:inline-block;border-top:1px solid #000;padding-top:2pt}
 .bl .note{display:grid;grid-template-columns:.5in 1fr}
+.bl .keep{break-inside:avoid;page-break-inside:avoid}
 `;
 const AAPSI_HEAD = `<thead><tr><th rowspan="3">Ref.</th><th rowspan="3">Audit Observations</th><th rowspan="3">Audit Recommendations</th><th colspan="4">Agency Action Plan</th><th rowspan="3">Status of Implementation</th><th rowspan="3">Reason for Partial/ Delay/ Non-Implementation, if applicable</th><th rowspan="3">Action Taken/ Action to be taken</th></tr>
   <tr><th rowspan="2">Action Plan</th><th rowspan="2">Person/ Dept. Responsible</th><th colspan="2">Target Implementation Date</th></tr><tr><th>From</th><th>To</th></tr></thead>`;
@@ -139,7 +142,15 @@ export function itemHTML(it) {
   const cls = [it.al === 'c' ? 'c' : it.al === 'j' ? 'j' : '', it.b ? 'b' : '', it.i ? 'i' : '', it.rule ? 'rule-below' : ''].join(' ').trim();
   return `<p class="${cls}"${it.size ? ` style="font-size:${it.size / 2}pt"` : ''}>${escH(it.t)}</p>`;
 }
-export const docHTML = (doc) => doc.items.map(itemHTML).join('');
+// Lines marked keep are wrapped with the line after them so the printout does not split them across pages.
+export function docHTML(doc) {
+  let out = '', run = '';
+  doc.items.forEach((it) => {
+    if (it.keep) { run += itemHTML(it); return; }
+    if (run) { out += `<div class="keep">${run}${itemHTML(it)}</div>`; run = ''; } else out += itemHTML(it);
+  });
+  return out + run;
+}
 
 // Splits one document into Letter pages for the Print View (9" of text per page, breaking between paragraphs).
 export function paginate(doc, measureBox) {
@@ -184,7 +195,7 @@ export async function transmittalWord(d, which) {
   const seal = await load('img/lh-seal.jpg'), name = await load('img/lh-name.jpg');
   const R = (t, o = {}) => new TextRun({ text: t, font: FONT, size: o.size || 24, bold: !!o.b, italics: !!o.i });
   const al = (a) => ({ c: AlignmentType.CENTER, j: AlignmentType.JUSTIFIED }[a] || AlignmentType.LEFT);
-  const P = (t, o = {}) => new Paragraph({ alignment: al(o.al), spacing: { after: 0, line: 240 }, keepNext: !!o.keep,
+  const P = (t, o = {}) => new Paragraph({ alignment: al(o.al), spacing: { after: 0, line: 240 }, keepNext: !!o.keep, keepLines: !!o.keep,
     border: o.rule ? { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 24, color: '000000', space: 4 } } : undefined, children: [R(t, o)] });
   const W = [450, 1100, 1300, 560, 900, 700, 470, 1100, 1250, 810];   // AAPSI columns, 8640 twips (6")
   const thin = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
