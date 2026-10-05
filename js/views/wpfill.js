@@ -153,7 +153,7 @@ export function allWpRefs(F, ctx) {
   ((F && F.rec && F.rec.wps) || []).forEach((w) => s.add(w.ref));
   return s;
 }
-function nextRef(F, ctx, accounts, title = '') {
+export function nextRef(F, ctx, accounts, title = '') {
   const t = (accounts || []).map((k) => (F.chart.byKey[k] || {}).title || '').join(' ') + ' ' + title;
   const p = (PREFIX.find(([re]) => re.test(t)) || [null, 'GEN'])[1];
   const used = allWpRefs(F, ctx);
