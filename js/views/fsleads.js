@@ -1,14 +1,58 @@
-// Financial Statements · Lead Schedules: one per statement line, the accounts under it (all funds combined) for the
-// current and the comparative year, the change, and the working paper reference.
+// Financial Statements · Financial Audit lead schedules.
+// Main categories follow the SAI structure used by the team:
+//   C.1 Audit Foci / Areas · C.6 Other Financial Related Issues · OMA (Other Material Accounts).
 import { store, emitChange } from '../store.js';
-import { esc, toast, $, $$ } from '../ui.js';
+import { esc, toast, $, $$, modal, pill } from '../ui.js';
 import { fsId, loadFsRec, money } from '../fs.js';
-import { LINES, LINE } from '../coa.js';
 import { printPages } from '../baar-doc.js';
 import { loadScript } from '../wp.js';
 import { openNewWp } from './wpfill.js';
 
-// The WP reference of each account: a finding's working paper, a supporting working paper, or one typed here.
+const FOCI = [
+  { id:'a', title:'Cash in Bank – Local Currency, Current Account', cls:'Assets', re:[/^cash in bank\s*-?\s*local currency,? current account$/i] },
+  { id:'b', title:'Cash in Bank – Local Currency, Savings Account', cls:'Assets', re:[/^cash in bank\s*-?\s*local currency,? savings account$/i] },
+  { id:'c', title:'Loans Receivable – Others', cls:'Assets', re:[/^loans receivable\s*-?\s*others$/i,/^allowance for impairment\s*-?\s*loans receivable\s*-?\s*others$/i] },
+  { id:'d', title:'Due from Local Government Units', cls:'Assets', re:[/^due from local government units$/i] },
+  { id:'e', title:'Advances to Officers and Employees', cls:'Assets', re:[/^advances to officers and employees$/i] },
+  { id:'f', title:'Other Receivables', cls:'Assets', re:[/^other receivables$/i,/^allowance for impairment\s*-?\s*other receivables$/i] },
+  { id:'g', title:'Advances to Contractors', cls:'Assets', re:[/^advances to contractors$/i] },
+  { id:'h', title:'Welfare Goods for Distribution', cls:'Assets', re:[/^welfare goods for distribution$/i] },
+  { id:'i', title:'Other Supplies and Materials for Distribution', cls:'Assets', re:[/^other supplies and materials for distribution$/i] },
+  { id:'j', title:'Construction Materials Inventory', cls:'Assets', re:[/^construction materials inventory$/i] },
+  { id:'k', title:'Flood Control Systems', cls:'Assets', re:[/^flood control systems$/i,/^(accumulated depreciation|accumulated impairment losses)\s*-?\s*flood control systems$/i] },
+  { id:'l', title:'Disaster Response and Rescue Equipment', cls:'Assets', re:[/^disaster response and rescue equipment$/i,/^(accumulated depreciation|accumulated impairment losses)\s*-?\s*disaster response and rescue equipment$/i] },
+  { id:'m', title:'Other Structures', cls:'Assets', re:[/^other structures$/i,/^(accumulated depreciation|accumulated impairment losses)\s*-?\s*other structures$/i] },
+  { id:'n', title:'Other Property, Plant and Equipment', cls:'Assets', re:[/^other property,? plant and equipment$/i,/^(accumulated depreciation|accumulated impairment losses)\s*-?\s*other property,? plant and equipment$/i] },
+  { id:'o', title:'Breeding Stocks', cls:'Assets', re:[/^breeding stocks$/i] },
+  { id:'p', title:'Accounts Payable', cls:'Liabilities', re:[/^accounts payable$/i] },
+  { id:'q', title:'Due to National Government Agencies', cls:'Liabilities', re:[/^due to national government agencies$/i] },
+  { id:'r', title:'Due to Local Government Units', cls:'Liabilities', re:[/^due to local government units$/i] },
+  { id:'s', title:'Trust Liabilities', cls:'Liabilities', re:[/^trust liabilities$/i] },
+  { id:'t', title:'Trust Liabilities – DRRM', cls:'Liabilities', re:[/^trust liabilities\s*-?\s*(disaster risk reduction and management fund|drrm|drrmf)$/i] },
+  { id:'u', title:'Guaranty/Security Deposits Payable', cls:'Liabilities', re:[/^guaranty\/security deposits payable$/i] },
+  { id:'v', title:'Subsidy to Local Government Units', cls:'Expenses', re:[/^subsidy to local government units$/i] },
+  { id:'w', title:'Government Equity', cls:'Equity', re:[/^government equity$/i] },
+  { id:'x', title:'Transfers from General Fund of Unspent DRRMF', cls:'Revenue', re:[/^transfers from general fund of unspent drrmf$/i] },
+  { id:'y', title:'Donations', cls:'Expenses', re:[/^donations$/i] },
+  { id:'z', title:'Other Maintenance and Operation Expenses', cls:'Expenses', re:[/^other maintenance and operat(ing|ion) expenses$/i] }
+];
+
+const C6 = [
+  'Taxes withheld from employees and suppliers and remittances to the Bureau of Internal Revenue (BIR)',
+  'GSIS and HDMF remittances',
+  'Premium contributions and remittance to PhilHealth',
+  'Foreign-assisted projects / Official Development Assistance (ODA)',
+  'National Task Force to End Local Communist Armed Conflict (NTF-ELCAC) Funds',
+  'LGSP – Support to Barangay Development Program of the NTF-ELCAC',
+  '20% Development Fund',
+  'Payments to casuals, job order, contractuals and consultants',
+  'LDRRM Funds / QRF',
+  'Gender and Development (GAD) Funds'
+].map((title,i)=>({ id:String(i+1), title }));
+
+const norm = s => String(s || '').replace(/[–—]/g,'-').replace(/\s+/g,' ').trim();
+const isFocusAccount = (a,f) => f.re.some(re => re.test(norm(a.title)));
+
 export function wpRefs(F, ctx) {
   const out = {};
   const put = (key, ref, t) => { if (key && ref && !out[key]) out[key] = { ref, t }; };
@@ -21,65 +65,123 @@ export function wpRefs(F, ctx) {
   Object.entries((F.rec && F.rec.leadRefs) || {}).forEach(([k, ref]) => { if (ref) out[k] = { ref, t: '', typed: true }; });
   return out;
 }
-export function leadData(F) {
+
+function allAccounts(F) {
   const keys = new Set([...Object.keys(F.figY.accts || {}), ...Object.keys(F.figP.accts || {})]);
-  const by = {};
-  keys.forEach((k) => { const a = F.chart.byKey[k]; if (!a || !LINE[a.line]) return; const cy = F.figY.accts[k] || 0, py = F.figP.accts[k] || 0; if (!cy && !py) return; (by[a.line] = by[a.line] || []).push({ k, a, cy, py }); });
-  Object.values(by).forEach((l) => l.sort((x, y) => x.a.code.localeCompare(y.a.code)));
-  return LINES.filter((l) => by[l.k]).map((l) => ({ line: l, rows: by[l.k], cy: by[l.k].reduce((t, x) => t + x.cy, 0), py: by[l.k].reduce((t, x) => t + x.py, 0) }));
+  return [...keys].map(k => {
+    const a = F.chart.byKey[k]; if (!a) return null;
+    const cy = F.figY.accts[k] || 0, py = F.figP.accts[k] || 0;
+    if (!cy && !py) return null;
+    return { k, a, cy, py };
+  }).filter(Boolean).sort((x,y)=>x.a.code.localeCompare(y.a.code));
 }
-const lineName = (l) => `${l.label}${l.note ? ` (Note ${l.note})` : ''}`;
+
+function focusData(F) {
+  const accts = allAccounts(F);
+  return FOCI.map(f => {
+    const rows = accts.filter(x => isFocusAccount(x.a,f));
+    return { ...f, rows, cy:rows.reduce((s,x)=>s+x.cy,0), py:rows.reduce((s,x)=>s+x.py,0), status:rows.length?'Applicable':'Not Applicable' };
+  });
+}
+
+function omaData(F) {
+  const accts = allAccounts(F);
+  return accts.filter(x => !FOCI.some(f => isFocusAccount(x.a,f))).map((x,i)=>({
+    id:String(i+1), title:x.a.title, cls:x.a.cls || 'Account', rows:[x], cy:x.cy, py:x.py, status:'For Verification'
+  }));
+}
+
+function workingPapersFor(item, F, ctx) {
+  const refs = wpRefs(F,ctx), seen = new Set(), out = [];
+  (item.rows || []).forEach(r => {
+    const z=refs[r.k]; if(z && !seen.has(z.ref)){ seen.add(z.ref); out.push({ref:z.ref,title:z.t || 'Working Paper',status:'Linked'}); }
+  });
+  ((F.rec && F.rec.wps) || []).forEach(w => {
+    if ((w.accounts || []).some(k => (item.rows || []).some(r=>r.k===k)) && !seen.has(w.ref)) {
+      seen.add(w.ref); out.push({ref:w.ref,title:w.title || 'Supporting Working Paper',status:'Supporting'});
+    }
+  });
+  return out;
+}
+
+const statusPill = st => st === 'Applicable' ? pill('● Applicable','ok') : st === 'Not Applicable' ? pill('● Not Applicable','grey') : pill('● For Verification','warn');
+
+function detailTable(item,F,refs){
+  if(!item.rows || !item.rows.length) return '<div class="empty">No matching account balance was found in the trial balances.</div>';
+  return `<table class="pf"><thead><tr><th>Code</th><th>Account Title</th><th class="n">CY ${F.y}</th><th class="n">CY ${F.yp}</th><th class="n">Change</th><th>WP Ref.</th></tr></thead><tbody>
+    ${item.rows.map(r=>`<tr><td class="mono">${esc(r.a.code)}</td><td>${esc(r.a.title)}</td><td class="n">${money(r.cy)}</td><td class="n">${money(r.py)}</td><td class="n">${money(r.cy-r.py)}</td><td>${esc((refs[r.k]||{}).ref||'')}</td></tr>`).join('')}
+    <tr style="font-weight:700"><td></td><td>Total</td><td class="n">${money(item.cy||0)}</td><td class="n">${money(item.py||0)}</td><td class="n">${money((item.cy||0)-(item.py||0))}</td><td></td></tr>
+  </tbody></table>`;
+}
 
 export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
-  const all = leadData(F);
-  if (!all.length) return { body: '<section class="panel"><div class="panel-body"><div class="empty">The lead schedules come from the trial balances. Enter them on the Trial Balance tab first.</div></div></section>', mount() {} };
-  const cur = all.find((x) => x.line.k === q.get('l')) || all[0];
-  const refs = wpRefs(F, ctx);
-  const body = `<section class="panel" data-transient><div class="panel-head"><h2>Lead Schedules</h2><span class="hint" style="margin-left:8px">all funds combined · CY ${F.y} and CY ${F.yp}</span>
-      <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="ls-print">Print</button><button class="btn sm primary" type="button" id="ls-xl">Excel</button></span></div><div class="panel-body">
-    <div class="tabs2">${all.map((x) => `<a class="t ${x === cur ? 'on' : ''}" href="${base}&s=leads&l=${x.line.k}">${esc(x.line.label)}</a>`).join('')}</div>
-    <table class="pf"><colgroup><col style="width:120px"><col><col style="width:130px"><col style="width:130px"><col style="width:130px"><col style="width:220px"></colgroup>
-      <thead><tr><th>Code</th><th>Account Title</th><th class="n">CY ${F.y}</th><th class="n">CY ${F.yp}</th><th class="n">Change</th><th>WP Ref.</th></tr></thead><tbody>
-      ${cur.rows.map((x) => { const r = refs[x.k]; return `<tr><td class="mono">${esc(x.a.code)}</td><td>${esc(x.a.title)}</td><td class="n">${money(x.cy)}</td><td class="n">${money(x.py)}</td><td class="n">${money(x.cy - x.py)}</td>
-        <td>${r && !r.typed ? `<b>${esc(r.ref)}</b> <span class="hint">${esc(r.t)}</span>` : `<span class="btn-row" style="justify-content:flex-start"><input class="input" style="height:30px;width:96px" data-lref="${esc(x.k)}" value="${esc(r ? r.ref : '')}" placeholder="No WP" aria-label="WP reference for ${esc(x.a.title)}" ${canEdit ? '' : 'disabled'}>${canEdit ? `<button class="reset" type="button" data-lnew="${esc(x.k)}">+ New WP</button>` : ''}</span>`}</td></tr>`; }).join('')}
-      <tr style="font-weight:700"><td></td><td>Total ${esc(lineName(cur.line))}</td><td class="n">${money(cur.cy)}</td><td class="n">${money(cur.py)}</td><td class="n">${money(cur.cy - cur.py)}</td><td></td></tr></tbody></table>
-    <p class="hint" style="margin:8px 0 0">One lead schedule per statement line, from the trial balances (all funds combined${F.confirmed ? ', as confirmed' : ''}). The WP Ref. fills in by itself when a finding's working paper covers the account; otherwise type your own reference, or add a supporting working paper with + New WP.</p></div></section>`;
+  const cat = ['focus','c6','oma'].includes(q.get('cat')) ? q.get('cat') : 'focus';
+  const focus = focusData(F), oma = omaData(F);
+  const list = cat==='focus' ? focus : cat==='c6' ? C6.map(x=>({...x,cls:'Financial Issue',rows:[],status:'For Review'})) : oma;
+  const selectedId = q.get('item') || (list[0] && list[0].id);
+  const cur = list.find(x=>x.id===selectedId) || list[0] || null;
+  const refs = wpRefs(F,ctx);
+  const wps = cur ? workingPapersFor(cur,F,ctx) : [];
+  const counts = cat==='focus' ? {
+    all:focus.length,
+    app:focus.filter(x=>x.status==='Applicable').length,
+    na:focus.filter(x=>x.status==='Not Applicable').length,
+    ver:focus.filter(x=>x.status==='For Verification').length
+  } : null;
+
+  const catLink=(k)=>`${base}&s=leads&cat=${k}`;
+  const rowLink=(x)=>`${base}&s=leads&cat=${cat}&item=${encodeURIComponent(x.id)}`;
+
+  const body = `<div class="fa-head"><div><h1>C. Financial Audit</h1><p>Review and assess material accounts and other financial matters.</p></div>
+    <div class="btn-row"><button class="btn sm ghost" id="ls-print" type="button">Print</button><button class="btn sm primary" id="ls-xl" type="button">Export to Excel</button></div></div>
+    <div class="fa-cats">
+      <a class="${cat==='focus'?'on':''}" href="${catLink('focus')}"><b>Audit Foci (26)</b><span>Key accounts and areas of focus</span></a>
+      <a class="${cat==='c6'?'on':''}" href="${catLink('c6')}"><b>Other Financial Related Issues</b><span>Other audit areas and compliance matters</span></a>
+      <a class="${cat==='oma'?'on':''}" href="${catLink('oma')}"><b>OMA – Other Material Accounts</b><span>Accounts not under the 26 audit foci</span></a>
+    </div>
+    <div class="fa-grid">
+      <section class="panel fa-list"><div class="panel-body">
+        ${counts?`<div class="fa-filters"><span class="on">All (${counts.all})</span><span>● Applicable (${counts.app})</span><span>● Not Applicable (${counts.na})</span><span>● For Verification (${counts.ver})</span></div>`:''}
+        <div class="fa-search"><input class="input" id="fa-search" placeholder="Search ${cat==='focus'?'audit foci':'items'}…"></div>
+        <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus / Lead Schedule':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Classification</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+          ${list.map((x,i)=>`<tr data-fa-row data-fa-text="${esc((x.title+' '+(x.cls||'')).toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
+            <td>${cat==='focus'?esc(x.id):i+1}</td><td><b>${esc(x.title)}</b>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:''}</td><td><span class="fa-class">${esc(x.cls||'')}</span></td>
+            <td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td><a class="btn sm ghost ${x.status==='Not Applicable'?'disabled':''}" href="${rowLink(x)}">View</a></td></tr>`).join('')}
+          ${!list.length?'<tr><td colspan="5"><div class="empty">No accounts are currently listed here.</div></td></tr>':''}
+        </tbody></table>
+      </div></section>
+      <aside class="panel fa-wp"><div class="panel-body">
+        ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2>${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}<div style="margin-top:8px">${statusPill(cur.status==='For Review'?'For Verification':cur.status)}</div></div></div>
+          <h3>Working Papers (${wps.length})</h3>
+          <div class="btn-row fa-wp-actions">${cur.rows&&cur.rows.length?'<button class="btn sm ghost" type="button" id="fa-detail">View Lead Schedule</button>':''}${canEdit&&cur.status!=='Not Applicable'&&cur.rows&&cur.rows.length?`<button class="btn sm primary" type="button" id="fa-newwp">+ Add Working Paper</button>`:''}</div>
+          ${wps.length?`<table class="pf"><thead><tr><th>WP Ref.</th><th>Working Paper Title</th><th>Status</th></tr></thead><tbody>${wps.map(w=>`<tr><td><b>${esc(w.ref)}</b></td><td>${esc(w.title)}</td><td><span class="fa-class">${esc(w.status)}</span></td></tr>`).join('')}</tbody></table>`:'<div class="empty" style="padding:26px 8px">No working paper linked yet.</div>'}`
+          :'<div class="empty">Select an item to view its working papers.</div>'}
+      </div></aside>
+    </div>`;
+
   return {
     body,
     mount(root) {
       const saveRec = async (patch) => {
-        const rec = (await loadFsRec(F.lguId, F.y)) || { type: 'fs', teamId: ctx.teamId, lguId: F.lguId, year: F.y, auditId: ctx.rec.id };
-        await store.save('letters', fsId(F.lguId, F.y), { ...rec, ...patch(rec) }, { silent: true });
-        emitChange('local');
+        const rec = (await loadFsRec(F.lguId,F.y)) || { type:'fs',teamId:ctx.teamId,lguId:F.lguId,year:F.y,auditId:ctx.rec.id };
+        await store.save('letters',fsId(F.lguId,F.y),{...rec,...patch(rec)},{silent:true}); emitChange('local');
       };
-      $$('[data-lref]', root).forEach((el) => { el.onchange = () => saveRec((r) => ({ leadRefs: { ...(r.leadRefs || {}), [el.dataset.lref]: el.value.trim() } })); });
-      $$('[data-lnew]', root).forEach((b) => { b.onclick = async () => {
-        const w = await openNewWp({ F, ctx, me, accounts: [b.dataset.lnew], supporting: true });
-        if (!w) return;
-        await saveRec((r) => ({ wps: [...(r.wps || []), w] }));
-        await store.log('added a supporting working paper', `${ctx.lgu.name} · ${w.ref} ${w.title}`, ctx.teamId, me.email);
-        toast(`${w.ref} added.`, 'ok');
-      }; });
-      const rowsAoa = (x) => [[`${lineName(x.line)}`], ['Code', 'Account Title', `CY ${F.y}`, `CY ${F.yp}`, 'Change', 'WP Ref.'],
-        ...x.rows.map((r) => [r.a.code, r.a.title, r.cy / 100, r.py / 100, (r.cy - r.py) / 100, (refs[r.k] || {}).ref || '']), ['', 'Total', x.cy / 100, x.py / 100, (x.cy - x.py) / 100, '']];
-      $('#ls-xl', root).onclick = async () => {
-        const XLSX = await loadScript('lib/xlsx.full.min.js', 'XLSX');
-        const wb = XLSX.utils.book_new();
-        all.forEach((x, i) => {
-          const ws = XLSX.utils.aoa_to_sheet([[`Barangay ${ctx.lgu.name}, ${ctx.mun.name}, Quirino`], ['Lead Schedule'], [], ...rowsAoa(x)]);
-          ws['!cols'] = [{ wch: 14 }, { wch: 48 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 12 }];
-          XLSX.utils.book_append_sheet(wb, ws, `${i + 1} ${x.line.label.replace(/[\\/?*[\]:]/g, '')}`.slice(0, 31));
-        });
-        XLSX.writeFile(wb, `Lead Schedules ${ctx.lgu.name} ${F.y}.xlsx`);
-        await store.log('downloaded the lead schedules (Excel)', `${ctx.lgu.name} · ${ctx.audit.auditYear}`, ctx.teamId, me.email);
+      const s=$('#fa-search',root); if(s) s.oninput=()=>$$('[data-fa-row]',root).forEach(tr=>{tr.style.display=tr.dataset.faText.includes(s.value.trim().toLowerCase())?'':'none';});
+      const d=$('#fa-detail',root); if(d&&cur) d.onclick=()=>modal({title:cur.title,wide:true,body:detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
+      const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
+        const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:cur.title}); if(!w)return;
+        await saveRec(r=>({wps:[...(r.wps||[]),w]})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
       };
-      $('#ls-print', root).onclick = () => {
-        const css = '.pg{padding:.6in;font:11pt "Times New Roman",serif}.pg h2{font-size:12pt;margin:0 0 2px}.pg p{margin:0 0 8px}.pg table{width:100%;border-collapse:collapse}.pg th,.pg td{border-bottom:1px solid #999;padding:3px 4px;text-align:left}.pg .n{text-align:right}.pg tr.t td{font-weight:700;border-top:1px solid #000}.pg{page-break-after:always}';
-        const html = all.map((x) => `<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Lead Schedule · ${esc(lineName(x.line))} · December 31, ${F.y} and ${F.yp}</p>
-          <table><thead><tr><th>Code</th><th>Account Title</th><th class="n">CY ${F.y}</th><th class="n">CY ${F.yp}</th><th class="n">Change</th><th>WP Ref.</th></tr></thead><tbody>
-          ${x.rows.map((r) => `<tr><td>${esc(r.a.code)}</td><td>${esc(r.a.title)}</td><td class="n">${money(r.cy)}</td><td class="n">${money(r.py)}</td><td class="n">${money(r.cy - r.py)}</td><td>${esc((refs[r.k] || {}).ref || '')}</td></tr>`).join('')}
-          <tr class="t"><td></td><td>Total</td><td class="n">${money(x.cy)}</td><td class="n">${money(x.py)}</td><td class="n">${money(x.cy - x.py)}</td><td></td></tr></tbody></table></div>`).join('');
-        printPages(css, html, `Lead Schedules · ${ctx.lgu.name} · ${F.y}`);
+      $('#ls-xl',root).onclick=async()=>{
+        const XLSX=await loadScript('lib/xlsx.full.min.js','XLSX'); const wb=XLSX.utils.book_new();
+        const src=cat==='focus'?focus:cat==='oma'?oma:[];
+        src.forEach((x,i)=>{ if(!x.rows||!x.rows.length)return; const aoa=[[x.title],['Code','Account Title',`CY ${F.y}`,`CY ${F.yp}`,'Change','WP Ref.'],...x.rows.map(r=>[r.a.code,r.a.title,r.cy/100,r.py/100,(r.cy-r.py)/100,(refs[r.k]||{}).ref||''])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:16},{wch:50},{wch:16},{wch:16},{wch:16},{wch:14}]; XLSX.utils.book_append_sheet(wb,ws,`${i+1} ${x.title.replace(/[\\/?*[\]:]/g,'')}`.slice(0,31));});
+        XLSX.writeFile(wb,`Financial Audit ${ctx.lgu.name} ${F.y}.xlsx`);
+      };
+      $('#ls-print',root).onclick=()=>{
+        if(!cur||!cur.rows||!cur.rows.length){ toast('Select an applicable account with balances to print its lead schedule.','bad'); return; }
+        const css='.pg{padding:.6in;font:11pt "Times New Roman",serif}.pg table{width:100%;border-collapse:collapse}.pg th,.pg td{border-bottom:1px solid #999;padding:4px}.pg .n{text-align:right}';
+        printPages(css,`<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Financial Audit · ${esc(cur.title)}</p>${detailTable(cur,F,refs)}</div>`,`Financial Audit · ${ctx.lgu.name}`);
       };
     }
   };
