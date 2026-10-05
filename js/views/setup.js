@@ -1,5 +1,6 @@
 // Screen 2 · Audit Setup
 import { store, newId } from '../store.js';
+import { N1_WORKFORCE } from '../baar-notes.js';
 import { esc, toast, setDirty, guard, modal, pill, $, $$ } from '../ui.js';
 import { ST } from '../aom.js';
 import { has, myTeamIds, canEditAudits } from '../refs.js';
@@ -135,8 +136,13 @@ export async function setup(refs, params) {
         <div id="officials">${officialsRows()}</div>
         ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div></div>' : ''}
       </section>
-      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the officials list in the Notes to Financial Statements</span></div>
-        <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}></div>`).join('')}</div></div></section>
+      <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the General Information in the Notes to Financial Statements</span></div>
+        <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}></div>`).join('')}</div>
+          <div class="grid-2" id="ninfo" style="margin-top:14px;border-top:1px solid var(--line-2);padding-top:14px">
+            <div class="field"><label class="label" for="ni-loc">Location of the Barangay</label><input class="input" id="ni-loc" data-ni="loc" value="${esc((s.notesInfo || {}).loc || '')}" placeholder="e.g. Western part of Maddela" ${dis}></div>
+            <div class="field"><label class="label" for="ni-issued">Date the Financial Statements Were Issued</label><input type="date" class="input" id="ni-issued" data-ni="issued" value="${esc((s.notesInfo || {}).issued || '')}" ${dis}></div>
+            <div class="field" style="grid-column:1 / -1"><label class="label" for="ni-wf">Workforce, after the Elective Officials</label><input class="input" id="ni-wf" data-ni="workforce" value="${esc((s.notesInfo || {}).workforce ?? N1_WORKFORCE)}" ${dis}></div>
+          </div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">5</span><h2>Audit Team</h2></div></div><div class="panel-body" id="teampanel">${teamPanel()}</div></section>
       ${editable ? `<div class="panel" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;bottom:12px;z-index:5">
         <span class="save-state saved"><span class="d"></span>All Changes Saved</span>
@@ -170,10 +176,11 @@ export async function setup(refs, params) {
         s.lguId = e.target.value;
         const p = s.lguId && prevAudit(s.lguId);
         base = p ? p.data : null;
-        if (isNew && p) { s.officials = clone(p.data.officials || DEFAULT_OFFICIALS); s.kagawads = clone(p.data.kagawads || DEFAULT_KAGAWADS); }
+        if (isNew && p) { s.officials = clone(p.data.officials || DEFAULT_OFFICIALS); s.kagawads = clone(p.data.kagawads || DEFAULT_KAGAWADS); s.notesInfo = { loc: (p.data.notesInfo || {}).loc || '', workforce: (p.data.notesInfo || {}).workforce ?? N1_WORKFORCE, issued: '' }; }
         else if (isNew) { s.officials = clone(DEFAULT_OFFICIALS); s.kagawads = clone(DEFAULT_KAGAWADS); }
         s.teamId = refs.lgu[s.lguId]?.data.teamId || '';
         redrawOfficials();
+        $$('[data-ni]', root).forEach((el) => { el.value = el.dataset.ni === 'workforce' ? ((s.notesInfo || {}).workforce ?? N1_WORKFORCE) : ((s.notesInfo || {})[el.dataset.ni] || ''); });
         $$('[data-kg]', root).forEach((el) => { const i = +el.dataset.kg; el.value = s.kagawads[i].name; el.classList.toggle('changed', !!chK(i)); });
         $('#teampanel', root).innerHTML = teamPanel(); wireMember();
         carryNote(); dirty();
@@ -193,6 +200,7 @@ export async function setup(refs, params) {
       offBox.addEventListener('input', onOff); offBox.addEventListener('change', onOff);
       offBox.addEventListener('click', (e) => { const b = e.target.closest('[data-del]'); if (!b) return; s.officials.splice(+b.dataset.del, 1); redrawOfficials(); dirty(); });
       const add = $('#add-off', root); if (add) add.onclick = () => { s.officials.push({ title: 'Mr.', name: '', pos: '', acting: false, role: 'Attention' }); redrawOfficials(); dirty(); offBox.querySelector(`[data-o="${s.officials.length - 1}"][data-k="name"]`).focus(); };
+      $('#ninfo', root).addEventListener('input', (e) => { const k = e.target.dataset.ni; if (!k) return; s.notesInfo = { ...(s.notesInfo || {}), [k]: e.target.value }; dirty(); });
       $('#kagawads', root).addEventListener('input', (e) => { const i = e.target.dataset.kg; if (i === undefined) return; s.kagawads[+i].name = e.target.value; e.target.classList.toggle('changed', !!chK(+i)); dirty(); });
       const wireMember = () => { const m = $('#member', root); if (m) m.onchange = () => { s.memberId = m.value; dirty(); }; };
       wireMember();
