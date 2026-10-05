@@ -20,6 +20,7 @@ import { fsPrint, fsSections } from '../baar-fs.js';
 import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_CSS, p2List } from '../baar-p2.js';
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
+import { P3_STATUS, readPart2, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
 export const PARTS = [
@@ -31,7 +32,7 @@ const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
 const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04', '05', '06', '07', '08'];
+const BUILT = ['01', '02', '03', '04', '05', '06', '07', '08', '09'];
 // The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
 function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
@@ -167,7 +168,8 @@ function baarPages(ctx, L) {
   const s = smr + smrN;
   const notes = s + fsPageCount(L.FS);
   const p2 = notes + notesPageCount(notesOf(ctx, L));
-  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, p2, next: p2 + p2PagesOf(ctx).length };
+  const p3 = p2 + p2PagesOf(ctx).length;
+  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, p2, p3, next: p3 + p3PagesOf(L.B.p3).length };
 }
 // Part 08 · Part II, from the Final AOMs and their management comments; laid out on Letter pages.
 function p2Box() {
@@ -176,6 +178,18 @@ function p2Box() {
   return m;
 }
 const p2PagesOf = (ctx) => paginateP2(buildP2(ctx).paras, p2Box());
+// Part 09 · Part III, from the saved list of prior years' recommendations.
+function p3Box() {
+  let m = document.getElementById('b-measure-p3');
+  if (!m) { m = document.createElement('div'); m.id = 'b-measure-p3'; document.body.appendChild(m); }
+  return m;
+}
+const p3PagesOf = (p3) => { const d = buildP3(p3); return d.rows.length ? paginateP3(d, p3Box()) : []; };
+function p3Pill(p3) {
+  const d = buildP3(p3);
+  if (!d.rows.length) return pill('Not Started', 'grey');
+  return d.checks.some((c) => c.st === 'warn') ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
+}
 function p2Pill(ctx) {
   const d = buildP2(ctx);
   if (!d.count) return pill('Not Started', 'grey');
@@ -209,10 +223,11 @@ async function completeBAAR(ctx) {
   const fd = fsDoc(L.FS, pages.sfperf);
   const nd = notesOf(ctx, L);
   const p2d = buildP2(ctx), p2pages = paginateP2(p2d.paras, p2Box());
+  const p3d = buildP3(L.B.p3), p3pages = p3d.rows.length ? paginateP3(p3d, p3Box()) : [];
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2), ...(p3pages.length ? [p3Print(p3d, p3pages, pages.p3)] : [])]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2)), ...(p3d.rows.length ? await p3Sections(p3d, pages.p3) : [])], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -262,7 +277,8 @@ export async function baar(refs, params, q) {
     '05': p05Pill(L.S),
     '06': fsPill(L.FS),
     '07': notesPill(L.FS, notesOf(ctx, L)),
-    '08': p2Pill(ctx)
+    '08': p2Pill(ctx),
+    '09': p3Pill(L.B.p3)
   };
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
@@ -270,6 +286,7 @@ export async function baar(refs, params, q) {
   if (q.get('p') === '05') return smrPart({ ctx, me, refs, L, st });
   if (q.get('p') === '07') return notesPart({ ctx, me, refs, L, st });
   if (q.get('p') === '08') return p2Part({ ctx, me, L, st });
+  if (q.get('p') === '09') return p3Part({ ctx, me, refs, L, st });
   if (q.get('p') === '06') {
     return fsPart({ ctx, me, L, q, canEdit, start: baarPages(ctx, L).sfperf, head: baarHead(ctx), strip: partsStrip(ctx.rec.id, '06', st), wireComplete: (root) => wireComplete(root, ctx, me) });
   }
@@ -897,3 +914,167 @@ export function p2Part({ ctx, me, L, st }) {
   };
 }
 const aomNoOf = (ctx, a) => aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
+
+/* ── Part 09 · Part III – Status of Implementation of Prior Years' Audit Recommendations ── */
+// The previous BAAR of the same Barangay in the app (the latest audit that ended before this one began).
+async function previousBAAR(refs, ctx) {
+  const from = Number(ctx.audit.periodFrom);
+  const prev = (await store.list('audits')).filter((a) => !a.deleted && a.id !== ctx.rec.id && a.data.lguId === ctx.audit.lguId && Number(a.data.periodTo) < from)
+    .sort((a, b) => Number(b.data.periodTo) - Number(a.data.periodTo))[0];
+  if (!prev) return null;
+  const pctx = await loadAudit(refs, prev.id);
+  if (!pctx) return null;
+  const pb = await store.get('letters', recId(prev.id));
+  const recs = carryOver(pctx, pb && !pb.deleted ? pb.data : null);
+  return recs.length ? { year: Number(prev.data.periodTo), recs } : null;
+}
+export async function p3Part({ ctx, me, refs, L, st }) {
+  const { audit, lgu, mun } = ctx;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const dis = canEdit ? '' : 'disabled';
+  const saved = L.B.p3 && (L.B.p3.recs || []).length ? clone(L.B.p3) : null;
+  let carried = null;
+  if (!saved) carried = await previousBAAR(refs, ctx).catch(() => null);
+  const P = saved || (carried ? { recs: carried.recs, year: carried.year, src: { kind: 'app', year: carried.year } } : { recs: [], year: Number(audit.periodFrom) - 1, src: null });
+  P.recs.forEach((r) => { if (!r.year) r.year = P.year; });
+  const pages = baarPages(ctx, L);
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>09 · Part III</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '09', st)}</section>
+    <div class="topnote">Each recommendation is counted separately. Choose its status and type the management action; the reason is needed for those Not Implemented.</div>
+    <section class="panel p3src"><span class="p3src-ic" aria-hidden="true">✓</span><div class="p3src-t" id="p3-src"></div>
+      ${canEdit ? `<span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="p3-imp">Import Part II</button><button class="btn sm ghost" type="button" id="p3-add">+ Add Recommendation</button></span>` : ''}
+      <input type="file" id="p3-file" accept=".docx" hidden></section>
+    <div class="p3cols">
+      <section class="panel"><div class="panel-head"><h2 id="p3-count">Recommendations</h2></div><div id="p3-list"></div></section>
+      <div class="p3side">
+        <section class="panel"><div class="panel-head"><h2>Summary</h2></div><div class="panel-body" id="p3-sum"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Opening Sentence · Written Automatically</h2></div><div class="panel-body p3open" id="p3-open"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Part III Results</h2></div><div class="panel-body ck" id="p3-checks"></div></section>
+        <div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
+          <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="p3-print" type="button">Print</button><button class="btn ghost" id="p3-word" type="button">Word</button>${canEdit ? '<button class="btn primary" id="p3-save" type="button">Save</button>' : ''}</div></div>
+      </div></div>
+    <style>${P3_CSS}</style>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      const srcText = () => {
+        const s = P.src;
+        if (!P.recs.length) return '<b>No recommendations yet.</b><br><span class="hint">Import the prior year’s Part II (Word file) for the first year in the app. From the next year, the list is carried over from the app automatically.</span>';
+        if (s && s.kind === 'word') return `<b>Imported from: ${esc(s.name)}</b><br><span class="hint">BAAR CY <input class="input p3yr" id="p3-year" value="${esc(P.year || '')}" aria-label="Year of the prior BAAR" ${dis}> · ${s.obs} observation${s.obs === 1 ? '' : 's'}, ${s.recs} recommendation${s.recs === 1 ? '' : 's'} found. From next year, this list is carried over from the app automatically.</span>`;
+        if (s && s.kind === 'app') return `<b>Carried over from the CY ${esc(s.year)} BAAR in the app</b><br><span class="hint">Its Final AOMs, and the recommendations still Not Implemented in its own Part III.${saved ? '' : ' Not yet saved.'}</span>`;
+        return `<b>Typed in</b><br><span class="hint">${P.recs.length} recommendation${P.recs.length === 1 ? '' : 's'}.</span>`;
+      };
+      const rowHTML = (r, i, rows) => {
+        const prev = rows[i - 1];
+        const showLead = r.lead && !(prev && prev.year === r.year && prev.obsNo === r.obsNo);
+        const btn = (k) => `<button type="button" class="p3st ${k}${r.status === k ? ' on' : ''}" data-st="${k}" data-id="${r.id}" ${dis}>${r.status === k ? '✓ ' : ''}${P3_STATUS[k]}</button>`;
+        return `<div class="p3row" data-id="${r.id}">
+          <div class="p3ref"><b>BAAR CY ${esc(r.year)}</b><span>Obs. No. ${esc(r.obsNo)} · Rec. ${r.n}</span>${canEdit ? `<span class="p3act"><a href="#" data-edit="${r.id}">Edit</a> · <a href="#" data-rm="${r.id}">Remove</a></span>` : ''}</div>
+          <div class="p3txt"><p class="ob">${esc(r.obs)}</p>${showLead ? `<p>${esc(r.lead)}</p>` : ''}<p>${r.n}. ${esc(r.text).replace(/\n/g, '<br>')}</p></div>
+          <div class="p3btns">${btn('full')}${btn('not')}</div>
+          <div class="p3in"><textarea class="input" rows="2" data-f="action" data-id="${r.id}" placeholder="Management action" aria-label="Management action, recommendation ${r.n}" ${dis}>${esc(r.action || '')}</textarea>
+            <textarea class="input${r.status === 'not' && !String(r.reason || '').trim() ? ' need' : ''}" rows="2" data-f="reason" data-id="${r.id}" placeholder="Reason for non-implementation" aria-label="Reason, recommendation ${r.n}" ${dis}>${esc(r.reason || '')}</textarea></div></div>`;
+      };
+      const drawList = () => {
+        const d = buildP3(P);
+        $('#p3-count', root).textContent = `Recommendations · ${d.rows.length}`;
+        $('#p3-list', root).innerHTML = d.rows.length ? `<div class="p3row p3hd"><div>Reference</div><div>Observation and Recommendation</div><div>Status</div><div>Management Action / Reason</div></div>${d.rows.map(rowHTML).join('')}` : '<div class="empty">No recommendations yet.</div>';
+      };
+      const drawSide = () => {
+        const d = buildP3(P), c = d.counts;
+        $('#p3-src', root).innerHTML = srcText();
+        const pc = (n) => (c.total ? Math.round((n / c.total) * 100) : 0);
+        $('#p3-sum', root).innerHTML = c.total ? `<div class="p3sum"><span class="ok">Fully Implemented</span><b>${c.full} · ${pc(c.full)}%</b></div><div class="p3sum"><span class="warn">Not Implemented</span><b>${c.not} · ${pc(c.not)}%</b></div>${c.none ? `<div class="p3sum"><span class="hint">No status yet</span><b>${c.none}</b></div>` : ''}
+          <div class="p3bar"><span style="width:${pc(c.full)}%" class="f"></span><span style="width:${pc(c.not)}%" class="n"></span></div>` : '<span class="hint">Nothing to count yet.</span>';
+        $('#p3-open', root).textContent = d.opening || '—';
+        $('#p3-checks', root).innerHTML = d.checks.map((x) => `<span class="ck-${x.st}">${x.st === 'ok' ? '✓' : x.st === 'warn' ? '!' : '○'} ${esc(x.t)}</span>`).join('');
+        const pl = $('#b-p09', root); if (pl) pl.innerHTML = p3Pill(P);
+        $$('textarea[data-f="reason"]', root).forEach((t) => { const r = P.recs.find((x) => x.id === t.dataset.id); t.classList.toggle('need', !!r && r.status === 'not' && !t.value.trim()); });
+        const yr = $('#p3-year', root);
+        if (yr) yr.oninput = () => { const y = Number(yr.value) || ''; P.year = y; P.recs.forEach((r) => { if (r.src === 'import') r.year = y; }); changed(false); drawList(); };
+      };
+      const draw = () => { drawList(); drawSide(); };
+      async function save() {
+        const cur = await store.get('letters', recId(ctx.rec.id));
+        const base = cur && !cur.deleted ? cur.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
+        await store.save('letters', recId(ctx.rec.id), { ...base, p3: clone(P) }, { silent: true });
+        await store.log('saved Part III (Status of Prior Years’ Recommendations)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        L.B.p3 = clone(P);
+        setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
+      }
+      const changed = (full = true) => { if (!canEdit) return; setDirty(true, save); if (full) draw(); else drawSide(); };
+      root.addEventListener('click', async (e) => {
+        const b = e.target.closest('.p3st');
+        if (b && canEdit) { const r = P.recs.find((x) => x.id === b.dataset.id); r.status = r.status === b.dataset.st ? '' : b.dataset.st; changed(); return; }
+        const ed = e.target.closest('[data-edit]'), rm = e.target.closest('[data-rm]');
+        if (rm) { e.preventDefault(); const i = P.recs.findIndex((x) => x.id === rm.dataset.rm); if (i >= 0 && await confirmBox('Remove Recommendation', 'Remove this recommendation from Part III?', 'Remove')) { P.recs.splice(i, 1); changed(); } return; }
+        if (ed) { e.preventDefault(); const r = P.recs.find((x) => x.id === ed.dataset.edit); const out = await recModal(r); if (out) { Object.assign(r, out); changed(); } }
+      });
+      root.addEventListener('input', (e) => {
+        const t = e.target.closest('textarea[data-f]');
+        if (!t) return;
+        const r = P.recs.find((x) => x.id === t.dataset.id); if (r) r[t.dataset.f] = t.value;
+        changed(false);
+      });
+      // Add or edit one recommendation by hand.
+      const recModal = (r) => modal({ title: r ? 'Edit Recommendation' : 'Add Recommendation', wide: true,
+        body: `<div class="p3m"><label class="field"><span class="label">BAAR CY</span><input class="input" id="m-yr" value="${esc(r ? r.year : P.year || '')}"></label>
+          <label class="field"><span class="label">Observation No.</span><input class="input" id="m-no" value="${esc(r ? r.obsNo : '')}"></label></div>
+          <label class="field"><span class="label">Observation</span><textarea class="input" id="m-obs" rows="4">${esc(r ? r.obs : '')}</textarea></label>
+          <label class="field"><span class="label">Opening line before the recommendations (optional)</span><input class="input" id="m-lead" value="${esc(r ? r.lead || '' : '')}" placeholder="We recommended that Management:"></label>
+          <label class="field"><span class="label">Recommendation</span><textarea class="input" id="m-rec" rows="3">${esc(r ? r.text : '')}</textarea></label>`,
+        buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: r ? 'Save Changes' : 'Add Recommendation', cls: 'primary', value: 'ok',
+          check: (bg) => { const ok = $('#m-yr', bg).value.trim() && $('#m-no', bg).value.trim() && $('#m-obs', bg).value.trim() && $('#m-rec', bg).value.trim(); if (!ok) toast('Fill in the year, observation number, observation and recommendation.', 'bad'); return !!ok; } }],
+        onOpen: (bg) => { read = () => ({ year: Number($('#m-yr', bg).value) || $('#m-yr', bg).value.trim(), obsNo: Number($('#m-no', bg).value) || $('#m-no', bg).value.trim(), obs: $('#m-obs', bg).value.trim(), lead: $('#m-lead', bg).value.trim(), text: $('#m-rec', bg).value.trim() }); }
+      }).then((v) => (v === 'ok' && read ? read() : null));
+      let read = null;   // reads the modal's fields; set when it opens
+      const ad = $('#p3-add', root);
+      if (ad) ad.onclick = async () => {
+        const out = await recModal(null);
+        if (!out) return;
+        const rec = { id: 'r' + Math.random().toString(36).slice(2, 10), title: '', status: '', action: '', reason: '', src: 'manual', ...out };
+        // Placed after the last recommendation of the same year and observation, or at the end.
+        let at = -1; P.recs.forEach((x, i) => { if (String(x.year) === String(rec.year) && String(x.obsNo) === String(rec.obsNo)) at = i; });
+        if (at >= 0) P.recs.splice(at + 1, 0, rec); else P.recs.push(rec);
+        if (!P.src) P.src = { kind: 'manual' };
+        changed();
+      };
+      const fileIn = $('#p3-file', root), imp = $('#p3-imp', root);
+      if (imp) {
+        imp.textContent = P.src && P.src.kind === 'word' ? 'Re-import Part II' : 'Import Part II';
+        imp.onclick = async () => {
+          if (P.recs.length && !(await confirmBox('Import Part II', 'Replace the list with the recommendations in the Word file? Statuses, actions and reasons are kept for recommendations with the same wording.', 'Choose File'))) return;
+          fileIn.click();
+        };
+      }
+      fileIn.onchange = async () => {
+        const f = fileIn.files[0]; fileIn.value = ''; if (!f) return;
+        try {
+          const out = await readPart2(f);
+          if (!out.recs.length) { toast('No recommendations were found in that file. Is it the Part II of the prior BAAR?', 'bad'); return; }
+          const year = out.year || P.year || Number(audit.periodFrom) - 1;
+          const old = Object.fromEntries(P.recs.map((r) => [r.text, r]));
+          P.recs = out.recs.map((r) => { const o = old[r.text]; return { ...r, year, ...(o ? { status: o.status, action: o.action, reason: o.reason } : {}) }; });
+          P.year = year;
+          P.src = { kind: 'word', name: f.name.replace(/\.docx$/i, ''), obs: new Set(out.recs.map((r) => r.obsNo)).size, recs: out.recs.length, at: new Date().toISOString() };
+          if (imp) imp.textContent = 'Re-import Part II';
+          changed(); toast(`${out.recs.length} recommendations found. Check the year, then Save.`, 'ok');
+        } catch (e) { toast('Could not read the file: ' + e.message, 'bad'); }
+      };
+      const sv = $('#p3-save', root); if (sv) sv.onclick = save;
+      const fileName = p3FileName(audit, lgu, mun);
+      const doc = () => buildP3(P);
+      $('#p3-print', root).onclick = () => { const d = doc(); if (!d.rows.length) { toast('Nothing to print yet.', 'bad'); return; } const p = p3Print(d, paginateP3(d, p3Box()), pages.p3); printPages(p.css, p.html, fileName); };
+      $('#p3-word', root).onclick = async () => {
+        const d = doc(); if (!d.rows.length) { toast('Nothing to put in Word yet.', 'bad'); return; }
+        try { toast('Preparing the Word file…'); await saveDocx(await p3Sections(d, pages.p3), fileName, 'Part III – Status of Prior Years’ Audit Recommendations'); }
+        catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded Part III (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      draw();
+      if (!saved && carried) setDirty(true, save);
+    }
+  };
+}
