@@ -3,10 +3,9 @@
 // Comparison of Budget and Actual Amounts follows the newer Manual format. Letter size; page numbers continue the BAAR.
 import { loadScript } from './wp.js';
 import { upper } from './format.js';
-import { money, scbaaLine, SCBAA_NOTE } from './fs.js';
+import { money, scbaaLine } from './fs.js';
 
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const SUP = ['', '¹', '²', '³', '⁴', '⁵'];
 const amt = (v) => (v === null || v === undefined ? '' : money(v));
 
 export const FS_CSS = `
@@ -29,14 +28,13 @@ export const FS_CSS = `
 .fsd .see{text-align:center;margin-top:.3in}
 .fsd.sm{font-size:10pt;line-height:1.18}.fsd.sm td{padding:.8pt 0}.fsd.sm .hd{margin-bottom:.15in}.fsd.sm .see{margin-top:.2in}
 .ba{font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;line-height:1.25}
-.ba .hd{text-align:center;margin-bottom:.2in;font-size:10pt}.ba .hd .ln{display:inline-block;min-width:3.6in;border-bottom:1px solid #000}.ba .hd i{display:block;font-size:9pt}
+.ba .hd{text-align:center;margin-bottom:.2in;font-size:10pt}.ba .hd b{display:block}
 .ba table{width:100%;border-collapse:collapse;table-layout:fixed}
 .ba th{font-weight:700;text-align:center;vertical-align:bottom;padding:0 2pt 6pt}
 .ba td{padding:1.5pt 2pt;vertical-align:top}
 .ba td.a{text-align:right;white-space:nowrap}
 .ba tr.h td{font-weight:700;padding-top:3pt}
 .ba td.i{padding-left:.3in}
-.ba .fn{margin-top:.25in}.ba .fnl{margin-top:.2in;border-top:1px solid #000;width:2.4in;padding-top:2pt}
 `;
 const escHead = (lgu, mun) => `Barangay ${lgu.name}, ${mun.name}, Quirino`;
 
@@ -59,7 +57,7 @@ export function stmtHTML(s, { lgu, mun, page }) {
 
 /* ── SCBAA: pages ── */
 const linesOf = (t, w = 30) => Math.max(1, Math.ceil(String(t).length / w));
-// Splits the printed rows into pages (about 44 lines a page; the note and footnotes need room on the last page).
+// Splits the printed rows into pages (about 44 lines a page).
 export function scbaaPages(rows) {
   const pages = []; let cur = [], used = 0;
   const CAP = 44;
@@ -68,24 +66,21 @@ export function scbaaPages(rows) {
     if (used + n > CAP && cur.length) { pages.push(cur); cur = []; used = 0; }
     cur.push(r); used += n;
   });
-  if (used > CAP - 7 && cur.length) { pages.push(cur); cur = []; }
   pages.push(cur);
   return pages.filter((p, i) => p.length || i === pages.length - 1);
 }
 export function scbaaHTML({ rows, data, y, lgu, mun, start }) {
   const pages = scbaaPages(rows);
-  const fns = [...new Set(rows.filter((r) => r.fn).map((r) => r.fn))].sort();
   const head = `<tr><th style="width:2.15in"></th><th>Original Budget</th><th>Adjustments</th><th>Final Budget</th><th>Actual on comparable basis</th><th>Performance Difference</th></tr>`;
   return pages.map((p, pi) => {
     const body = p.map((r) => {
       if (r.h) return `<tr class="h"><td colspan="6">${escH(r.h)}</td></tr>`;
       const x = scbaaLine(r, data);
-      return `<tr><td class="i">${escH(r.t)}${r.fn ? SUP[r.fn] : ''}</td><td class="a">${money(x.ob, { dash: '' })}</td><td class="a">${money(x.adj, { dash: '' })}</td><td class="a">${money(x.fin, { dash: '' })}</td><td class="a">${money(x.act, { dash: '' })}</td><td class="a">${money(x.diff, { dash: '' })}</td></tr>`;
+      return `<tr><td class="i">${escH(r.t)}</td><td class="a">${money(x.ob, { dash: '' })}</td><td class="a">${money(x.adj, { dash: '' })}</td><td class="a">${money(x.fin, { dash: '' })}</td><td class="a">${money(x.act, { dash: '' })}</td><td class="a">${money(x.diff, { dash: '' })}</td></tr>`;
     }).join('');
     const last = pi === pages.length - 1;
-    const hd = pi === 0 ? `<div class="hd"><b>Republic of the Philippines</b><br><span class="ln">${escH(escHead(lgu, mun))}</span><i>(Barangay, City/Municipality, Province)</i><b>Statement of Comparison of Budget and Actual Amounts</b><br>For the Year Ended December 31, ${y}</div>` : '';
-    const foot = last ? `<div class="fn">${escH(SCBAA_NOTE)}</div>${fns.length ? `<div class="fnl">${fns.map((n) => `${SUP[n]} details presented in the Notes to the FS`).join('<br>')}</div>` : ''}` : '';
-    return `<div class="fsp"><div class="ba">${hd}<table><colgroup><col style="width:2.15in"><col><col><col><col><col></colgroup><thead>${head}</thead><tbody>${body}</tbody></table>${foot}</div>${start ? `<div class="pno">${start + pi}</div>` : ''}</div>`;
+    const hd = pi === 0 ? `<div class="hd"><b>Republic of the Philippines</b><b>${escH(escHead(lgu, mun))}</b><b>Statement of Comparison of Budget and Actual Amounts</b>For the Year Ended December 31, ${y}</div>` : '';
+    return `<div class="fsp"><div class="ba">${hd}<table><colgroup><col style="width:2.15in"><col><col><col><col><col></colgroup><thead>${head}</thead><tbody>${body}</tbody></table></div>${start ? `<div class="pno">${start + pi}</div>` : ''}</div>`;
   });
 }
 
@@ -163,18 +158,14 @@ export async function fsSections(fs) {
   const trs = [head, ...brows.map((r) => {
     if (r.h) return new TableRow({ cantSplit: true, children: [c2([A(r.h, { b: true })], W.reduce((a, b) => a + b, 0), { span: 6 })] });
     const x = scbaaLine(r, data);
-    return new TableRow({ cantSplit: true, children: [c2([A(r.t + (r.fn ? SUP[r.fn] : ''))], W[0], { ind: 420 }), ...[x.ob, x.adj, x.fin, x.act, x.diff].map((v, i) => c2([A(money(v, { dash: '' }))], W[i + 1], { al: AlignmentType.RIGHT }))] });
+    return new TableRow({ cantSplit: true, children: [c2([A(r.t)], W[0], { ind: 420 }), ...[x.ob, x.adj, x.fin, x.act, x.diff].map((v, i) => c2([A(money(v, { dash: '' }))], W[i + 1], { al: AlignmentType.RIGHT }))] });
   })];
-  const fns = [...new Set(brows.filter((r) => r.fn).map((r) => r.fn))].sort();
   out.push(page(fs.pages.scbaa, [
     new Paragraph({ alignment: AlignmentType.CENTER, children: [A('Republic of the Philippines', { b: true, size: 20 })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: escHead(fs.lgu, fs.mun), font: 'Arial', size: 20, underline: {} })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, children: [A('(Barangay, City/Municipality, Province)', { i: true, size: 18 })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, children: [A(escHead(fs.lgu, fs.mun), { b: true, size: 20 })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, children: [A('Statement of Comparison of Budget and Actual Amounts', { b: true, size: 20 })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 240 }, children: [A(`For the Year Ended December 31, ${fs.y}`, { size: 20 })] }),
-    new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { ...nb, insideHorizontal: none, insideVertical: none }, rows: trs }),
-    new Paragraph({ spacing: { before: 300 }, children: [A(SCBAA_NOTE)] }),
-    ...(fns.length ? [new Paragraph({ spacing: { before: 240 }, border: { top: single }, children: [] }), ...fns.map((n) => new Paragraph({ children: [A(`${SUP[n]} details presented in the Notes to the FS`)] }))] : [])
+    new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { ...nb, insideHorizontal: none, insideVertical: none }, rows: trs })
   ]));
   return out;
 }

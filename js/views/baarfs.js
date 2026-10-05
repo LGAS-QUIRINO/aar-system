@@ -402,7 +402,7 @@ function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
   const num = (r, f) => { const v = (work.scbaa.rows[r.k] || {})[f]; return v === undefined || v === null ? '' : esc(v); };
   const vis = bRows.filter(bShow).filter((r, i, arr) => !r.h || arr.slice(i + 1).findIndex((x) => x.h && (r.sub || !x.sub)) !== 0 && arr.slice(i + 1).some((x) => !x.h));
   const bHTML = vis.map((r) => r.h ? `<tr class="${r.sub ? 'h2' : 'h'}"><td colspan="6">${esc(r.h)}</td></tr>`
-    : `<tr><td class="i">${esc(r.t)}${r.fn ? ` <span class="hint">(${r.fn})</span>` : ''}${r.extra ? ' <span class="hint">(account in the trial balance)</span>' : ''}</td>
+    : `<tr><td class="i">${esc(r.t)}${r.extra ? ' <span class="hint">(account in the trial balance)</span>' : ''}</td>
       <td><input class="amt" data-b="${r.k}" data-f="ob" value="${num(r, 'ob')}" aria-label="${esc(r.t)} original budget" ${dis}></td>
       <td><input class="amt" data-b="${r.k}" data-f="adj" value="${num(r, 'adj')}" aria-label="${esc(r.t)} adjustments" ${dis}></td>
       <td class="n" data-bf="${r.k}"></td>

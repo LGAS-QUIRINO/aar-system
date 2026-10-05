@@ -274,7 +274,7 @@ export function buildScf(sy, sp, fy, fp, begY, begP, y) {
 }
 
 /* ── Statement of Comparison of Budget and Actual Amounts (newer Manual format) ── */
-// codes: accounts that show this row has an amount in the trial balance (prefixes allowed). fn: footnote number.
+// codes: accounts that show this row has an amount in the trial balance (prefixes allowed).
 export const SCBAA = [
   { h: 'Revenue' },
   ...[['Real Property Tax', '4-01-01-010'], ['Business Tax', '4-01-02-010'], ['Share on the tax from sand, gravel and other quarry products', '4-01-02-020'],
@@ -304,14 +304,13 @@ export const SCBAA = [
   { h: 'Financial Expenses', sub: true, screenOnly: true },
   ...[['Interest Expenses', '5-03-01-010'], ['Bank Charges', '5-03-01-020'], ['Other Financial Charges', '5-03-01-990']].map(([t, c]) => ({ t, codes: [c], sec: 'fin' })),
   { h: 'Statutory Allocations', sub: true, screenOnly: true },
-  { t: '5% LDRRMF', fn: 1, sec: 'stat', always: true }, { t: '10% SK allocation', fn: 2, sec: 'stat', always: true }, { t: '20% Development Fund', fn: 3, sec: 'stat', always: true },
-  { t: '1% for the Elderly and Disabled', fn: 4, sec: 'stat', always: true }, { t: '1% Barangay Council for the Protection of Children', sec: 'stat', always: true },
+  { t: '5% LDRRMF', sec: 'stat', always: true }, { t: '10% SK allocation', sec: 'stat', always: true }, { t: '20% Development Fund', sec: 'stat', always: true },
+  { t: '1% for the Elderly and Disabled', sec: 'stat', always: true }, { t: '1% Barangay Council for the Protection of Children', sec: 'stat', always: true },
   { h: 'Capital Outlays' },
   ...['Land', 'Repairs and Maintenance - Land Improvements', 'Infrastructure Assets', 'Buildings and Other Structures', 'Machinery and Equipment', 'Transportation Equipment',
     'Furniture, Fixtures and Books', 'Leased Assets', 'Leased Assets Improvements', 'Other Property Plant and Equipment'].map((t) => ({ t, codes: [], sec: 'co', always: true }))
 ];
 SCBAA.forEach((r, i) => { if (!r.h) r.k = 's' + i; });
-export const SCBAA_NOTE = 'The presentation adopted reflects the presentation adopted for budgeting purposes.';
 
 // The rows of the SCBAA for this BAAR: the Manual rows, plus a row for any revenue or expense account in the
 // trial balance that the Manual rows do not cover (so nothing is left out). accts: { code: centavos } for the year.
