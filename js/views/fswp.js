@@ -78,6 +78,8 @@ export function newBody(focusId, me) {
 }
 
 /* ── Helpers ── */
+// Working papers saved before the wording change.
+export const OLD_RESULT = { 'No exceptions noted': 'No Findings', 'With exception – for AOM': 'With Finding' };
 const amtOf = (v) => { const n = parseAmt(v); return n === null || isNaN(n) ? 0 : cents(n); };
 const yearEnd = (F) => new Date(`${F.y}-12-31T00:00:00`);
 function ageDays(d, F) {
@@ -140,7 +142,7 @@ function sheetHTML(w, item, F, ctx) {
       ${tb.rows.map((r) => `<tr>${tb.cols.map((c, i) => `<td class="${c.type === 'amt' ? 'n' : ''}">${c.type === 'amt' ? money(amtOf(r[i])) : esc(r[i] || '')}</td>`).join('')}${tb.age && di >= 0 ? `<td>${esc(ageLabel(r[di], tb, F))}</td>` : ''}</tr>`).join('')}
       ${ai >= 0 ? `<tr style="font-weight:700">${tb.cols.map((c, i) => `<td class="${i === ai ? 'n' : ''}">${i === 0 ? 'Total' : i === ai ? money(tableTotal(tb)) : ''}</td>`).join('')}${tb.age && di >= 0 ? '<td></td>' : ''}</tr>` : ''}
     </tbody></table>` : '<p class="hint">No details entered.</p>'}
-    <h4>Conclusion</h4><p>${b.result ? `<b>${esc(b.result)}.</b> ` : ''}${esc(b.conclusion || '—')}</p>
+    <h4>Conclusion</h4><p>${(b.result = OLD_RESULT[b.result] || b.result) ? `<b>${esc(b.result)}.</b> ` : ''}${esc(b.conclusion || '—')}</p>
     ${b.notes ? `<h4>Notes</h4><p>${esc(b.notes)}</p>` : ''}
     <table class="wps-sign"><tr><td>Prepared by: <b>${esc(b.prepBy || '')}</b><br>Date: ${esc(b.prepAt || '')}</td><td>Reviewed by: <b>${esc(b.revBy || '')}</b><br>Date: ${esc(b.revAt || '')}</td></tr></table>
   </div>`;
@@ -158,8 +160,9 @@ function ageLabel(d, tb, F) {
 export async function openWp({ w, item, F, ctx, me, canEdit }) {
   if (!w.wpb) w = { ...w, wpb: newBody(item.id, me) };
   const b = JSON.parse(JSON.stringify(w.wpb));
+  b.result = OLD_RESULT[b.result] || b.result;
   const tb = b.table, ai = amtCol(tb), di = dateCol(tb);
-  const RESULTS = ['No exceptions noted', 'With exception – for AOM'];
+  const RESULTS = ['No Findings', 'With Finding'];
 
   const drawRows = (bg) => {
     $('#wp-rows', bg).innerHTML = tb.rows.map((r, ri) => `<tr>${tb.cols.map((c, ci) => `<td><input class="input wp-in ${c.type === 'amt' ? 'n' : ''}" ${c.type === 'date' ? 'type="date"' : ''} data-wr="${ri}:${ci}" value="${esc(r[ci] || '')}" aria-label="${esc(c.t)}"></td>`).join('')}

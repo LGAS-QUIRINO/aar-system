@@ -239,9 +239,9 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         if (!b) { emitChange('local'); return; }   // redraw so a just-created paper still shows
         const k = resultKey(cat,cur);
         await saveRec(r=>({ wps:(r.wps||[]).map(x=>x.ref===ref?{...x,wpb:b}:x),
-          auditResults: b.result==='No exceptions noted' && !relatedAoms(cur,ctx).length ? {...(r.auditResults||{}),[k]:'No Findings'} : (r.auditResults||{}) }));
+          auditResults: b.result==='No Findings' && !relatedAoms(cur,ctx).length ? {...(r.auditResults||{}),[k]:'No Findings'} : (r.auditResults||{}) }));
         await store.log('updated a supporting working paper',`${ctx.lgu.name} · ${ref}`,ctx.teamId,me.email);
-        toast(b.result==='With exception – for AOM' ? `${ref} saved. Add the exception in Findings to draft the AOM.` : `${ref} saved.`,'ok');
+        toast(b.result==='With Finding' ? `${ref} saved. Add the finding in Findings to draft the AOM.` : `${ref} saved.`,'ok');
       };
 
       const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
