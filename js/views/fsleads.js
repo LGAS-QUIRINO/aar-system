@@ -87,21 +87,54 @@ function focusData(F) {
 function omaData(F) {
   const accts = allAccounts(F);
   return accts.filter(x => !FOCI.some(f => isFocusAccount(x.a,f))).map((x,i)=>({
-    id:String(i+1), title:x.a.title, cls:x.a.cls || 'Account', rows:[x], cy:x.cy, py:x.py, status:'For Verification'
+    id:x.k, title:x.a.title, cls:x.a.cls || 'Account', rows:[x], cy:x.cy, py:x.py, status:'For Verification'
   }));
 }
 
+function relatedAoms(item, ctx) {
+  const keys = new Set((item.rows || []).map(r => r.k));
+  const codes = new Set((item.rows || []).map(r => r.a.code));
+  return (ctx.aoms || []).filter(a => {
+    const d = a.data || {};
+    return (d.wpDef && d.wpDef.accounts || []).some(k => keys.has(k)) || (d.flagCodes || []).some(code => codes.has(code));
+  });
+}
+
 function workingPapersFor(item, F, ctx) {
-  const refs = wpRefs(F,ctx), seen = new Set(), out = [];
-  (item.rows || []).forEach(r => {
-    const z=refs[r.k]; if(z && !seen.has(z.ref)){ seen.add(z.ref); out.push({ref:z.ref,title:z.t || 'Working Paper',status:'Linked'}); }
+  const seen = new Set(), out = [];
+  relatedAoms(item, ctx).forEach(a => {
+    const d = a.data || {};
+    if (d.wp && !seen.has(d.wp)) {
+      seen.add(d.wp);
+      out.push({ ref:d.wp, title:(d.wpDef && d.wpDef.title) || d.title || 'Working Paper', status:d.status || 'Draft', kind:'aom', id:a.id });
+    }
   });
   ((F.rec && F.rec.wps) || []).forEach(w => {
-    if ((w.accounts || []).some(k => (item.rows || []).some(r=>r.k===k)) && !seen.has(w.ref)) {
-      seen.add(w.ref); out.push({ref:w.ref,title:w.title || 'Supporting Working Paper',status:'Supporting'});
+    if ((w.accounts || []).some(k => (item.rows || []).some(r => r.k === k)) && !seen.has(w.ref)) {
+      seen.add(w.ref);
+      out.push({ ref:w.ref, title:w.title || 'Supporting Working Paper', status:'Supporting', kind:'supporting' });
     }
   });
   return out;
+}
+
+const resultKey = (cat, item) => cat + ':' + item.id;
+function auditResultOf(item, cat, F, ctx) {
+  if (!item || item.status !== 'Applicable') return '';
+  if (relatedAoms(item, ctx).length) return 'With Finding';
+  const saved = F.rec && F.rec.auditResults && F.rec.auditResults[resultKey(cat,item)];
+  if (saved) return saved;
+  return workingPapersFor(item,F,ctx).length ? 'In Progress' : 'Not Started';
+}
+function auditResultHTML(item, cat, F, ctx, canEdit) {
+  const v = auditResultOf(item,cat,F,ctx);
+  if (!v) return '<span class="hint">—</span>';
+  if (v === 'With Finding') return pill('With Finding','warn');
+  if (!canEdit) return pill(v, v === 'No Findings' ? 'ok' : v === 'In Progress' ? 'warn' : 'grey');
+  const k = resultKey(cat,item);
+  return '<select class="sel fa-result" data-fa-result="' + esc(k) + '">' +
+    ['Not Started','In Progress','No Findings'].map(x => '<option' + (x === v ? ' selected' : '') + '>' + x + '</option>').join('') +
+    '</select>';
 }
 
 const statusPill = st => st === 'Applicable' ? pill('● Applicable','ok') : st === 'Not Applicable' ? pill('● Not Applicable','grey') : pill('● For Verification','warn');
@@ -142,19 +175,18 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
     <div class="fa-grid">
       <section class="panel fa-list"><div class="panel-body">
         ${counts?`<div class="fa-filters"><span class="on">All (${counts.all})</span><span>● Applicable (${counts.app})</span><span>● Not Applicable (${counts.na})</span><span>● For Verification (${counts.ver})</span></div>`:''}
-        <div class="fa-search"><input class="input" id="fa-search" placeholder="Search ${cat==='focus'?'audit foci':'items'}…"></div>
-        <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus / Lead Schedule':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Classification</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-          ${list.map((x,i)=>`<tr data-fa-row data-fa-text="${esc((x.title+' '+(x.cls||'')).toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
-            <td>${cat==='focus'?esc(x.id):i+1}</td><td><b>${esc(x.title)}</b>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:''}</td><td><span class="fa-class">${esc(x.cls||'')}</span></td>
-            <td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td><a class="btn sm ghost ${x.status==='Not Applicable'?'disabled':''}" href="${rowLink(x)}">View</a></td></tr>`).join('')}
-          ${!list.length?'<tr><td colspan="5"><div class="empty">No accounts are currently listed here.</div></td></tr>':''}
+        <div class="fa-search"><select class="sel" id="fa-result-filter" aria-label="Filter by audit result"><option value="">All audit results</option><option>Not Started</option><option>In Progress</option><option>No Findings</option><option>With Finding</option></select><input class="input" id="fa-search" placeholder="Search ${cat==='focus'?'audit foci':'items'}…"></div>
+        <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus / Lead Schedule':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Applicability</th><th>Audit Result</th></tr></thead><tbody>
+          ${list.map((x,i)=>`<tr data-fa-row data-fa-href="${rowLink(x)}" data-fa-result-value="${esc(auditResultOf(x,cat,F,ctx))}" data-fa-text="${esc((x.title+' '+(x.cls||'')).toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
+            <td>${cat==='focus'?esc(x.id):i+1}</td><td><b>${esc(x.title)}</b>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:''}</td><td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td>${auditResultHTML(x,cat,F,ctx,canEdit)}</td></tr>`).join('')}
+          ${!list.length?'<tr><td colspan="4"><div class="empty">No accounts are currently listed here.</div></td></tr>':''}
         </tbody></table>
       </div></section>
       <aside class="panel fa-wp"><div class="panel-body">
         ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2>${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}<div style="margin-top:8px">${statusPill(cur.status==='For Review'?'For Verification':cur.status)}</div></div></div>
           <h3>Working Papers (${wps.length})</h3>
           <div class="btn-row fa-wp-actions">${cur.rows&&cur.rows.length?'<button class="btn sm ghost" type="button" id="fa-detail">View Lead Schedule</button>':''}${canEdit&&cur.status!=='Not Applicable'&&cur.rows&&cur.rows.length?`<button class="btn sm primary" type="button" id="fa-newwp">+ Add Working Paper</button>`:''}</div>
-          ${wps.length?`<table class="pf"><thead><tr><th>WP Ref.</th><th>Working Paper Title</th><th>Status</th></tr></thead><tbody>${wps.map(w=>`<tr><td><b>${esc(w.ref)}</b></td><td>${esc(w.title)}</td><td><span class="fa-class">${esc(w.status)}</span></td></tr>`).join('')}</tbody></table>`:'<div class="empty" style="padding:26px 8px">No working paper linked yet.</div>'}`
+          ${wps.length?`<table class="pf"><thead><tr><th>WP Ref.</th><th>Working Paper Title</th><th>Status</th><th>Action</th></tr></thead><tbody>${wps.map((w,i)=>`<tr><td><b>${esc(w.ref)}</b></td><td>${esc(w.title)}</td><td><span class="fa-class">${esc(w.status)}</span></td><td><button class="btn sm ghost" type="button" data-wp-open="${i}">Open</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty" style="padding:26px 8px">No working paper linked yet.</div>'}`
           :'<div class="empty">Select an item to view its working papers.</div>'}
       </div></aside>
     </div>`;
@@ -166,12 +198,21 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         const rec = (await loadFsRec(F.lguId,F.y)) || { type:'fs',teamId:ctx.teamId,lguId:F.lguId,year:F.y,auditId:ctx.rec.id };
         await store.save('letters',fsId(F.lguId,F.y),{...rec,...patch(rec)},{silent:true}); emitChange('local');
       };
-      const s=$('#fa-search',root); if(s) s.oninput=()=>$$('[data-fa-row]',root).forEach(tr=>{tr.style.display=tr.dataset.faText.includes(s.value.trim().toLowerCase())?'':'none';});
+      const s=$('#fa-search',root), rf=$('#fa-result-filter',root);
+            const applyFilters=()=>$('[data-fa-row]',root).forEach(tr=>{ const okText=!s||tr.dataset.faText.includes(s.value.trim().toLowerCase()); const okResult=!rf||!rf.value||tr.dataset.faResultValue===rf.value; tr.style.display=okText&&okResult?'':'none'; });
+            if(s) s.oninput=applyFilters; if(rf) rf.onchange=applyFilters;
+            $('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
+            $('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
       const d=$('#fa-detail',root); if(d&&cur) d.onclick=()=>modal({title:cur.title,wide:true,body:detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
       const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
         const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:cur.title}); if(!w)return;
-        await saveRec(r=>({wps:[...(r.wps||[]),w]})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
+        await saveRec(r=>({wps:[...(r.wps||[]),w],auditResults:{...(r.auditResults||{}),[resultKey(cat,cur)]:'In Progress'}})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
       };
+      $('[data-wp-open]',root).forEach(b=>{ b.onclick=()=>{
+        const w=wps[+b.dataset.wpOpen]; if(!w)return;
+        if(w.kind==='aom'){ location.hash='#/audits/'+ctx.rec.id+'/findings?sel='+encodeURIComponent(w.id); return; }
+        modal({title:w.ref+' · '+w.title,wide:true,body:'<p class="hint" style="margin:0 0 10px">Supporting working paper for this audit focus.</p>'+detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
+      }; });
       $('#ls-xl',root).onclick=async()=>{
         const XLSX=await loadScript('lib/xlsx.full.min.js','XLSX'); const wb=XLSX.utils.book_new();
         const src=cat==='focus'?focus:cat==='oma'?oma:[];
