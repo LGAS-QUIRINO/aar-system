@@ -195,10 +195,11 @@ export function posTotals(fig) {
 }
 // A statement: { title, period, cols: [y, y-1], rows: [{ t, k: 'h'|'sub'|'row'|'tot'|'grand'|'blank', note, v: [a, b], cur, ind }] }
 const shows = (figs, k) => figs.some((f) => L(f, k));
-export function buildPerf(fy, fp, y) {
+export function buildPerf(fy, fp, y, refs = null) {
+  const nt = (k) => (refs && refs[k] !== undefined ? refs[k] : LINE[k].note);
   const F = [fy, fp], v = (k) => F.map((f) => (f ? L(f, k) : null));
   const t = F.map((f) => (f ? perfTotals(f) : null));
-  const line = (k, ind = 1) => ({ k: 'row', t: LINE[k].label, note: LINE[k].note, v: v(k), ind });
+  const line = (k, ind = 1) => ({ k: 'row', t: LINE[k].label, note: nt(k), v: v(k), ind });
   const rows = [{ k: 'h', t: 'Revenue' }, { ...line('rev_tax'), cur: true }, line('rev_ira'), line('rev_svc'), line('rev_misc'), line('rev_grant'),
     { k: 'tot', t: 'Total Revenue', v: t.map((x) => x && x.rev), cur: true }, { k: 'blank' },
     { k: 'h', t: 'Less: Current Operating Expenses' }, line('exp_ps'), line('exp_mooe')];
@@ -206,15 +207,16 @@ export function buildPerf(fy, fp, y) {
   rows.push(line('exp_nc'), { k: 'tot', t: 'Current Operating Expenses', v: t.map((x) => x && x.opx) }, { k: 'blank' },
     { k: 'grand1', t: 'Surplus (Deficit) from Current Operation', v: t.map((x) => x && x.cur), cur: true },
     { k: 'h', t: 'Add (Deduct):', plain: true },
-    { k: 'row', t: 'Transfers, Assistance and Subsidy From', note: 11, v: v('tr_from'), ind: 2 },
-    { k: 'row', t: 'Transfers, Assistance and Subsidy To', note: 12, v: F.map((f) => (f ? -L(f, 'tr_to') : null)), ind: 2 },
+    { k: 'row', t: 'Transfers, Assistance and Subsidy From', note: nt('tr_from'), v: v('tr_from'), ind: 2 },
+    { k: 'row', t: 'Transfers, Assistance and Subsidy To', note: nt('tr_to'), v: F.map((f) => (f ? -L(f, 'tr_to') : null)), ind: 2 },
     { k: 'grand', t: 'Surplus (Deficit) for the period', v: t.map((x) => x && x.surplus), cur: true });
   return { key: 'sfperf', title: 'Statement of Financial Performance', period: `For the Year Ended December 31, ${y}`, cmp: `(With Comparative Figures for CY ${y - 1})`, cols: [y, y - 1], note: true, rows };
 }
-export function buildPos(fy, fp, y) {
+export function buildPos(fy, fp, y, refs = null) {
+  const nt = (k) => (refs && refs[k] !== undefined ? refs[k] : LINE[k].note);
   const F = [fy, fp], v = (k) => F.map((f) => (f ? L(f, k) : null));
   const t = F.map((f) => (f ? posTotals(f) : null));
-  const line = (k, cur) => ({ k: 'row', t: LINE[k].label, note: LINE[k].note, v: v(k), ind: 2, cur });
+  const line = (k, cur) => ({ k: 'row', t: LINE[k].label, note: nt(k), v: v(k), ind: 2, cur });
   const opt = (k) => (shows(F, k) ? [line(k)] : []);
   const rows = [{ k: 'h', t: 'ASSETS' }, { k: 'sub', t: 'Current Assets' }, line('cash', true), ...opt('invest'), line('recv'), line('inv'), ...opt('prepay'),
     { k: 'tot', t: 'Total Current Assets', v: t.map((x) => x && x.ca), cur: true, ind: 2 }, { k: 'blank' },
