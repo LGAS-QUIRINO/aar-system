@@ -662,3 +662,13 @@ body.has-pdfside .main{margin-right:44vw}
 .nt-km td:first-child{width:42%}
 .nt-ppe{margin-bottom:12px}.nt-ppe td:first-child{width:34%;font-size:12px}
 .lr-row .amt-in{max-width:170px}
+/* Boxes that open on click (Part 07) */
+details.acc>summary{list-style:none;cursor:pointer;user-select:none;flex-wrap:nowrap}
+details.acc>summary::-webkit-details-marker{display:none}
+details.acc>summary::before{content:'';width:8px;height:8px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex-shrink:0}
+details.acc[open]>summary::before{transform:rotate(45deg)}
+details.acc>summary:hover h2{color:var(--primary)}
+details.acc:not([open])>summary{border-bottom:0}
+details.acc>summary h2{margin-right:auto;min-width:0}
+.acc-st{white-space:nowrap}
+.acc-st{font-size:12px;font-weight:600}.acc-st .ok{color:var(--ok-ink)}.acc-st .warn{color:var(--warn-ink)}
