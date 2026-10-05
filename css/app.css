@@ -705,3 +705,8 @@ details.acc>summary h2{margin-right:auto;min-width:0}
 .p3open{font-family:var(--serif);font-size:14.5px;line-height:1.55;text-align:justify;color:var(--ink-2)}
 .p3m{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media (max-width:760px){.p3row{grid-template-columns:1fr}.p3row.p3hd{display:none}}
+
+/* BAAR Part 10 · Part IV Annexes */
+.axrow{display:flex;flex-direction:column;gap:6px;padding:14px 20px;border-top:1px solid var(--line-2)}
+.axrow:first-child{border-top:0}
+.axl{color:var(--navy)}

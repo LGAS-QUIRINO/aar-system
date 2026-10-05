@@ -20,6 +20,7 @@ import { fsPrint, fsSections } from '../baar-fs.js';
 import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_CSS, p2List } from '../baar-p2.js';
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
+import { annexLetter, excelSheets, cleanRows, annexPagesHTML, annexPrint, annexToc, annexFileName, annexSections, ANNEX_CSS } from '../baar-annex.js';
 import { P3_STATUS, readPart2, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -32,7 +33,7 @@ const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
 const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04', '05', '06', '07', '08', '09'];
+const BUILT = ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10'];
 // The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
 function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
@@ -207,8 +208,15 @@ async function smrImages(S) {
   if (!S || !S.file) return null;
   return renderPdf(await getPdf(S.file.fileId), S.file.fileId);
 }
-// Annexes added in Part 10 (not built yet).
-function baarAnnexes() { return []; }
+// Annexes added in Part 10; none → Part IV is left out of the BAAR and its Table of Contents.
+const baarAnnexes = (L) => annexToc(L.B.annexes);
+const annexCtx = (ctx) => ({ lgu: ctx.lgu.name, mun: ctx.mun.name });
+function annexBox() {
+  let m = document.getElementById('b-measure-anx');
+  if (!m) { m = document.createElement('div'); m.id = 'b-measure-anx'; document.body.appendChild(m); }
+  return m;
+}
+const annexPill = (list) => ((list || []).length ? pill('Ready to Print', 'ok') : pill('No Annexes', 'grey'));
 
 // The complete BAAR: every built part, in order, for one printout or one Word file.
 async function completeBAAR(ctx) {
@@ -217,7 +225,7 @@ async function completeBAAR(ctx) {
   const tr = buildTransmittal({ t: { ...L.B.tr, opinion: L.B.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(L.gaa, audit.periodTo), pw: L.pw });
   const cv = buildCover({ audit, lgu, mun, pw: L.pw });
   const pages = baarPages(ctx, L);
-  const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages, annexes: baarAnnexes() });
+  const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages, annexes: baarAnnexes(L) });
   const ia = iarOf(ctx, L);
   const sm = { r: buildSmr({ s: L.S, audit, lgu, mun }), imgs: await smrImages(L.S).catch(() => null), start: pages.smr };
   const fd = fsDoc(L.FS, pages.sfperf);
@@ -226,8 +234,8 @@ async function completeBAAR(ctx) {
   const p3d = buildP3(L.B.p3), p3pages = p3d.rows.length ? paginateP3(p3d, p3Box()) : [];
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2), ...(p3pages.length ? [p3Print(p3d, p3pages, pages.p3)] : [])]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2)), ...(p3d.rows.length ? await p3Sections(p3d, pages.p3) : [])], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2), ...(p3pages.length ? [p3Print(p3d, p3pages, pages.p3)] : []), ...((L.B.annexes || []).length ? [annexPrint(L.B.annexes, annexCtx(ctx), annexBox())] : [])]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2)), ...(p3d.rows.length ? await p3Sections(p3d, pages.p3) : []), ...(await annexSections(L.B.annexes || [], annexCtx(ctx)))], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -278,7 +286,8 @@ export async function baar(refs, params, q) {
     '06': fsPill(L.FS),
     '07': notesPill(L.FS, notesOf(ctx, L)),
     '08': p2Pill(ctx),
-    '09': p3Pill(L.B.p3)
+    '09': p3Pill(L.B.p3),
+    '10': annexPill(L.B.annexes)
   };
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
@@ -287,6 +296,7 @@ export async function baar(refs, params, q) {
   if (q.get('p') === '07') return notesPart({ ctx, me, refs, L, st });
   if (q.get('p') === '08') return p2Part({ ctx, me, L, st });
   if (q.get('p') === '09') return p3Part({ ctx, me, refs, L, st });
+  if (q.get('p') === '10') return annexPart({ ctx, me, refs, L, st });
   if (q.get('p') === '06') {
     return fsPart({ ctx, me, L, q, canEdit, start: baarPages(ctx, L).sfperf, head: baarHead(ctx), strip: partsStrip(ctx.rec.id, '06', st), wireComplete: (root) => wireComplete(root, ctx, me) });
   }
@@ -513,7 +523,7 @@ function coverPart({ ctx, me, pw, st }) {
 /* ── Part 03 · Table of Contents ── */
 function tocPart({ ctx, me, pw, st, L }) {
   const { audit, lgu, mun } = ctx;
-  const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(ctx, L), annexes: baarAnnexes() });
+  const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(ctx, L), annexes: baarAnnexes(L) });
   const status03 = t.missing ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
   const rows = t.rows.map((r) => r.k === 'part'
     ? `<tr class="h"><td>${esc(r.text)}${/PART IV/.test(r.text) ? ' <span class="hint" style="font-weight:400">(only the annexes added in Part 10)</span>' : ''}</td><td class="p">${r.pageHead ? '' : esc(r.page || '')}</td></tr>`
@@ -1075,6 +1085,115 @@ export async function p3Part({ ctx, me, refs, L, st }) {
       };
       draw();
       if (!saved && carried) setDirty(true, save);
+    }
+  };
+}
+
+/* ── Part 10 · Part IV – Annexes ── */
+export function annexPart({ ctx, me, refs, L, st }) {
+  const { audit, lgu, mun } = ctx;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const dis = canEdit ? '' : 'disabled';
+  const A = clone(L.B.annexes || []);
+  const uid = () => 'x' + Math.random().toString(36).slice(2, 10);
+  // AOM Tables of this audit's AOMs that can be used as an annex.
+  const aomTables = [];
+  ctx.aoms.forEach((a) => {
+    const t = (a.data.wpData && a.data.wpData.tables) || {};
+    Object.keys(t).sort().forEach((n) => { if ((t[n].rows || []).length > 1) aomTables.push({ key: `${a.id}|${n}`, aomId: a.id, n, rows: t[n].rows, label: `AOM No. ${aomNoOf(ctx, a)} · ${fillText(a.data.title || '', ctx.varsFor(a))} · AOM Table ${n}${a.data.status === ST.FINAL ? '' : ' (not yet Final)'}` }); });
+  });
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>10 · Part IV Annexes</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '10', st)}</section>
+    <div class="topnote">Part IV is blank unless annexes are added. With no annex, it is left out of the BAAR and its Table of Contents.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Annexes</h2>${canEdit ? '<button class="btn sm primary" type="button" id="x-add" style="margin-left:auto">+ Add Annex</button>' : ''}</div><div id="x-list"></div></section>
+      ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
+        <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="x-save" type="button">Save</button></div></div>` : ''}</div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="x-print" type="button">Print</button><button class="btn sm primary" id="x-word" type="button">Word</button></span></div>
+        <style>${ANNEX_CSS}</style><div class="paper-wrap big" id="x-paper"></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      const drawList = () => {
+        $('#x-list', root).innerHTML = A.length ? A.map((an, i) => `<div class="axrow">
+            <div class="lr-row"><b class="axl">Annex ${annexLetter(i)}</b><span class="btn-row">${canEdit ? `<button class="btn sm ghost" type="button" data-up="${i}" ${i ? '' : 'disabled'} aria-label="Move up">↑</button><button class="btn sm ghost" type="button" data-dn="${i}" ${i < A.length - 1 ? '' : 'disabled'} aria-label="Move down">↓</button><button class="btn sm ghost" type="button" data-rm="${i}">Remove</button>` : ''}</span></div>
+            <input class="input" data-t="${i}" value="${esc(an.title)}" aria-label="Title of Annex ${annexLetter(i)}" ${dis}>
+            <span class="hint">${esc(an.src && an.src.label ? an.src.label : '')} · ${Math.max(0, (an.rows || []).length - 1)} row${(an.rows || []).length === 2 ? '' : 's'} · pages ${annexLetter(i)}-1…</span></div>`).join('')
+          : '<div class="empty">No annexes. Part IV is not part of this BAAR.</div>';
+      };
+      const drawPaper = () => {
+        if (!document.body.contains(root)) return;
+        const pg = annexPagesHTML(A, annexCtx(ctx), annexBox());
+        $('#x-paper', root).innerHTML = pg.length ? pg.map((x) => `<div class="sheet isheet">${x}</div>`).join('') : '<div class="empty">Nothing to print. Part IV is left out of the BAAR.</div>';
+        const pl = $('#b-p10', root); if (pl) pl.innerHTML = annexPill(A);
+      };
+      const draw = () => { drawList(); drawPaper(); };
+      async function save() {
+        const cur = await store.get('letters', recId(ctx.rec.id));
+        const base = cur && !cur.deleted ? cur.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
+        await store.save('letters', recId(ctx.rec.id), { ...base, annexes: clone(A) }, { silent: true });
+        await store.log('saved Part IV Annexes', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        L.B.annexes = clone(A);
+        setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
+      }
+      let timer = null;
+      const changed = (list = true) => { if (!canEdit) return; setDirty(true, save); if (list) drawList(); clearTimeout(timer); timer = setTimeout(drawPaper, 200); };
+      root.querySelector('.xform').addEventListener('input', (e) => { const t = e.target.closest('[data-t]'); if (t) { A[+t.dataset.t].title = t.value; changed(false); } });
+      root.querySelector('.xform').addEventListener('click', async (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (b.dataset.up) { const i = +b.dataset.up; [A[i - 1], A[i]] = [A[i], A[i - 1]]; changed(); }
+        else if (b.dataset.dn) { const i = +b.dataset.dn; [A[i + 1], A[i]] = [A[i], A[i + 1]]; changed(); }
+        else if (b.dataset.rm) { const i = +b.dataset.rm; if (await confirmBox('Remove Annex', `Remove Annex ${annexLetter(i)} · ${esc(A[i].title)}? The annexes after it move up a letter.`, 'Remove')) { A.splice(i, 1); changed(); } }
+      });
+      // Add Annex: a title and a table, from an AOM Table of this audit or from an Excel sheet.
+      const add = $('#x-add', root);
+      if (add) add.onclick = async () => {
+        let sheets = [], read = null;
+        const v = await modal({ title: 'Add Annex', wide: true,
+          body: `<label class="field"><span class="label">Title</span><input class="input" id="m-title" placeholder="Schedule of Payments through Reimbursement Basis"></label>
+            <div class="lr-row" style="margin-top:6px"><span class="label" style="margin:0">Table from</span><span class="seg" role="group" aria-label="Table from">
+              <button type="button" class="btn sm ${aomTables.length ? 'primary' : 'ghost'}" data-src="aom" ${aomTables.length ? '' : 'disabled'}>AOM Table</button><button type="button" class="btn sm ${aomTables.length ? 'ghost' : 'primary'}" data-src="xls">Excel File</button></span></div>
+            <div id="m-aom" ${aomTables.length ? '' : 'hidden'}><select class="input" id="m-tbl" aria-label="AOM Table">${aomTables.map((t) => `<option value="${esc(t.key)}">${esc(t.label)}</option>`).join('')}</select></div>
+            <div id="m-xls" ${aomTables.length ? 'hidden' : ''}><div class="lr-row"><span class="hint" id="m-fname">No file chosen. The sheet's title lines above the table are left out; the app prints the heading.</span><label class="btn sm ghost" style="cursor:pointer">Choose Excel File<input type="file" id="m-file" accept=".xlsx,.xlsm,.xls" hidden></label></div>
+              <select class="input" id="m-sheet" aria-label="Sheet" hidden></select></div>`,
+          buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Add Annex', cls: 'primary', value: 'ok', check: () => { const r = read(); if (!r.title) { toast('Type the title of the annex.', 'bad'); return false; } if (!r.rows || r.rows.length < 2) { toast('Choose a table with at least one row.', 'bad'); return false; } return true; } }],
+          onOpen: (bg) => {
+            let src = aomTables.length ? 'aom' : 'xls';
+            $$('[data-src]', bg).forEach((b) => { b.onclick = () => { src = b.dataset.src; $$('[data-src]', bg).forEach((x) => { x.classList.toggle('primary', x === b); x.classList.toggle('ghost', x !== b); }); $('#m-aom', bg).hidden = src !== 'aom'; $('#m-xls', bg).hidden = src !== 'xls'; }; });
+            $('#m-file', bg).onchange = async (e) => {
+              const f = e.target.files[0]; if (!f) return;
+              try { sheets = await excelSheets(f); } catch (err) { toast('Could not read the file: ' + err.message, 'bad'); return; }
+              $('#m-fname', bg).textContent = f.name;
+              const sel = $('#m-sheet', bg); sel.hidden = !sheets.length;
+              sel.innerHTML = sheets.map((s, i) => `<option value="${i}">${esc(s.name)} · ${s.rows.length - 1} rows</option>`).join('');
+              sel.dataset.file = f.name;
+              if (!sheets.length) toast('No filled sheet found in that file.', 'bad');
+            };
+            read = () => {
+              const title = $('#m-title', bg).value.trim();
+              if (src === 'aom') { const t = aomTables.find((x) => x.key === $('#m-tbl', bg).value); return { title, rows: t ? cleanRows(t.rows) : [], src: t ? { kind: 'aom', aomId: t.aomId, n: t.n, label: `From ${t.label.split(' · ')[0]} · AOM Table ${t.n}` } : null }; }
+              const sel = $('#m-sheet', bg), s = sheets[+sel.value];
+              return { title, rows: s ? s.rows : [], src: s ? { kind: 'excel', label: `From ${sel.dataset.file} · ${s.name}` } : null };
+            };
+          } });
+        if (v !== 'ok') return;
+        const r = read();
+        A.push({ id: uid(), title: r.title, rows: r.rows, src: r.src });
+        changed();
+      };
+      const sv = $('#x-save', root); if (sv) sv.onclick = save;
+      const fileName = annexFileName(audit, lgu, mun);
+      $('#x-print', root).onclick = () => { if (!A.length) { toast('No annexes to print.', 'bad'); return; } const p = annexPrint(A, annexCtx(ctx), annexBox()); printPages(p.css, p.html, fileName); };
+      $('#x-word', root).onclick = async () => {
+        if (!A.length) { toast('No annexes to put in Word.', 'bad'); return; }
+        try { toast('Preparing the Word file…'); await saveDocx(await annexSections(A, annexCtx(ctx)), fileName, 'Part IV – Annexes'); }
+        catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded Part IV Annexes (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      draw();
     }
   };
 }
