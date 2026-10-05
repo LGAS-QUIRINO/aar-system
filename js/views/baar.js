@@ -17,6 +17,7 @@ import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
 import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
 import { fsPrint, fsSections } from '../baar-fs.js';
+import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_CSS, p2List } from '../baar-p2.js';
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
@@ -30,7 +31,7 @@ const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
 const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04', '05', '06', '07'];
+const BUILT = ['01', '02', '03', '04', '05', '06', '07', '08'];
 // The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
 function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
@@ -165,7 +166,20 @@ function baarPages(ctx, L) {
   const smrN = L.S && L.S.file ? L.S.file.pages || 1 : 1;
   const s = smr + smrN;
   const notes = s + fsPageCount(L.FS);
-  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, next: notes + notesPageCount(notesOf(ctx, L)) };
+  const p2 = notes + notesPageCount(notesOf(ctx, L));
+  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, p2, next: p2 + p2PagesOf(ctx).length };
+}
+// Part 08 · Part II, from the Final AOMs and their management comments; laid out on Letter pages.
+function p2Box() {
+  let m = document.getElementById('b-measure-p2');
+  if (!m) { m = document.createElement('div'); m.id = 'b-measure-p2'; document.body.appendChild(m); }
+  return m;
+}
+const p2PagesOf = (ctx) => paginateP2(buildP2(ctx).paras, p2Box());
+function p2Pill(ctx) {
+  const d = buildP2(ctx);
+  if (!d.count) return pill('Not Started', 'grey');
+  return d.checks.some((c) => c.st === 'warn') ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
 }
 // Part 07 · Notes to Financial Statements, from the confirmed trial balances and the details typed in Part 07.
 const notesOf = (ctx, L, N) => buildNotes(L.FS, N || L.B.notes || {}, { lgu: ctx.lgu, mun: ctx.mun, audit: ctx.audit });
@@ -194,10 +208,11 @@ async function completeBAAR(ctx) {
   const sm = { r: buildSmr({ s: L.S, audit, lgu, mun }), imgs: await smrImages(L.S).catch(() => null), start: pages.smr };
   const fd = fsDoc(L.FS, pages.sfperf);
   const nd = notesOf(ctx, L);
+  const p2d = buildP2(ctx), p2pages = paginateP2(p2d.paras, p2Box());
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2))], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -246,13 +261,15 @@ export async function baar(refs, params, q) {
     '04': p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I))),
     '05': p05Pill(L.S),
     '06': fsPill(L.FS),
-    '07': notesPill(L.FS, notesOf(ctx, L))
+    '07': notesPill(L.FS, notesOf(ctx, L)),
+    '08': p2Pill(ctx)
   };
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
   if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, st });
   if (q.get('p') === '05') return smrPart({ ctx, me, refs, L, st });
   if (q.get('p') === '07') return notesPart({ ctx, me, refs, L, st });
+  if (q.get('p') === '08') return p2Part({ ctx, me, L, st });
   if (q.get('p') === '06') {
     return fsPart({ ctx, me, L, q, canEdit, start: baarPages(ctx, L).sfperf, head: baarHead(ctx), strip: partsStrip(ctx.rec.id, '06', st), wireComplete: (root) => wireComplete(root, ctx, me) });
   }
@@ -838,3 +855,45 @@ export function notesPart({ ctx, me, refs, L, st }) {
     }
   };
 }
+
+/* ── Part 08 · Part II – Observations and Recommendations ── */
+export function p2Part({ ctx, me, L, st }) {
+  const { audit, lgu, mun } = ctx;
+  const pages = baarPages(ctx, L);
+  const d = buildP2(ctx), lists = p2List(ctx);
+  const row = (a) => {
+    const m = a.data.mgmt || {}, has = !!String(m.comment || '').trim(), dec = has && (m.noRejoinder || String(m.rejoinder || '').trim());
+    return `<tr><td class="mono" style="width:1%;white-space:nowrap;font-size:12px">${esc(aomNoOf(ctx, a))}</td><td>${esc(fillText(a.data.title || '', ctx.varsFor(a)))}</td>
+      <td style="text-align:right;white-space:nowrap">${has ? (dec ? pill('Comment ✓', 'ok') : pill('Rejoinder?', 'warn')) : pill('No comment', 'warn')}</td></tr>`;
+  };
+  const sec = (k, name) => lists[k].length ? `<tr class="h"><td colspan="3">${k}. ${esc(name)}</td></tr>${lists[k].map(row).join('')}` : '';
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>08 · Part II</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '08', st)}</section>
+    <div class="topnote">Part II is built from the Final AOMs and their management comments, in the form of the issued Balligui BAAR. Nothing is typed here.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Observations</h2><a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/comments">Management Comments</a></div><div class="panel-body">
+        ${d.count ? `<table class="pgt"><tbody>${sec('A', 'Financial Audit')}${sec('B', 'Other Financial Related Issues')}</tbody></table>` : '<div class="empty">No Final AOMs yet.</div>'}
+        ${lists.notFinal.length ? `<p class="hint" style="margin:8px 0 0">${lists.notFinal.length} AOM${lists.notFinal.length > 1 ? 's are' : ' is'} not yet Final and not included.</p>` : ''}</div></section>
+      <section class="panel"><div class="panel-head"><h2>Part II Results</h2></div><div class="panel-body ck">${d.checks.map((c) => `<span class="ck-${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '!' : '○'} ${esc(c.t)}</span>`).join('')}</div></section></div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint" id="p2-pg"></span>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="p2-print" type="button">Print</button><button class="btn sm primary" id="p2-word" type="button">Word</button></span></div>
+        <style>${P2_CSS}</style><div class="paper-wrap big" id="p2-paper"></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      const pg = paginateP2(d.paras, p2Box());
+      $('#p2-paper', root).innerHTML = p2PagesHTML(pg, pages.p2, true).map((x) => `<div class="sheet isheet">${x}</div>`).join('');
+      $('#p2-pg', root).textContent = pg.length ? `Pages ${pages.p2}–${pages.p2 + pg.length - 1}` : '';
+      const fileName = p2FileName(audit, lgu, mun);
+      $('#p2-print', root).onclick = () => { const p = p2Print(paginateP2(d.paras, p2Box()), pages.p2); printPages(p.css, p.html, fileName); };
+      $('#p2-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); await saveDocx(await p2Sections(d, pages.p2), fileName, 'Part II – Observations and Recommendations'); }
+        catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded Part II (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+    }
+  };
+}
+const aomNoOf = (ctx, a) => aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
