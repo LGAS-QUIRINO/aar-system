@@ -1,7 +1,7 @@
 // Admin · LGU Master List
 import { store, emitChange } from '../store.js';
 import { esc, modal, toast, pill, confirmBox, setDirty, $, $$ } from '../ui.js';
-import { OFFICIAL_BARANGAYS, slug } from '../seed.js';
+import { OFFICIAL_BARANGAYS, OLD_NAMES, slug } from '../seed.js';
 import { FUND_NAMES, periodPhrase } from '../format.js';
 
 export async function lgus(refs, params, q) {
@@ -88,10 +88,19 @@ export async function lgus(refs, params, q) {
       $('#official', root).onclick = async () => {
         const list = OFFICIAL_BARANGAYS[munId];
         if (!list) { await modal({ title: 'Official List', body: `<p style="margin:0">The official Barangay list for ${esc(mun.data.name)} is not built in yet. Add its Barangays one at a time with <b>+ Add Barangay</b>, or ask for the list to be added.</p>` }); return; }
-        const have = new Set(brgys.map((b) => b.data.name.toLowerCase()));
+        // Barangays saved under an older spelling are renamed to the PSA name, not added again.
+        const old = OLD_NAMES[munId] || {};
+        const renames = brgys.filter((b) => old[b.data.name] && !brgys.some((x) => x.data.name === old[b.data.name]));
+        const have = new Set([...brgys.map((b) => b.data.name.toLowerCase()), ...renames.map((b) => old[b.data.name].toLowerCase())]);
         const missing = list.filter((n) => !have.has(n.toLowerCase()));
-        if (!missing.length) { toast(`All ${list.length} Barangays of ${mun.data.name} are already in the list.`, 'ok'); return; }
-        if (await confirmBox('Add Barangays from Official List', `Add ${missing.length} Barangay${missing.length > 1 ? 's' : ''} of ${esc(mun.data.name)}: ${esc(missing.join(', '))}?`, 'Add')) await addMany(missing);
+        if (!missing.length && !renames.length) { toast(`All ${list.length} Barangays of ${mun.data.name} are already in the list.`, 'ok'); return; }
+        const parts = [];
+        if (renames.length) parts.push(`Rename ${renames.length} to the PSA spelling: ${renames.map((b) => `${b.data.name} → ${old[b.data.name]}`).join(', ')}.`);
+        if (missing.length) parts.push(`Add ${missing.length} Barangay${missing.length > 1 ? 's' : ''}: ${missing.join(', ')}.`);
+        if (!(await confirmBox('Add Barangays from Official List', esc(parts.join(' ')), renames.length && !missing.length ? 'Rename' : 'Add'))) return;
+        for (const b of renames) await store.save('lgus', b.id, { ...b.data, name: old[b.data.name] }, { silent: true });
+        if (renames.length) await store.log('renamed barangays to the PSA spelling', `${renames.length} · ${mun.data.name}`, '', refs.me.email);
+        if (missing.length) await addMany(missing); else emitChange('local');
       };
       $('#add-brgy', root).onclick = async () => {
         const r = await modal({
