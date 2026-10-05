@@ -586,3 +586,33 @@ button.reset{background:none;border:0;padding:0;color:var(--primary);text-decora
 .pdfside .bar button{margin-left:auto}
 .pdfside iframe{flex:1;border:0;width:100%}
 body.has-pdfside .main{margin-right:44vw}
+
+
+/* Financial Audit dashboard */
+.fa-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin:2px 0 12px}
+.fa-head h1{margin:0;color:var(--navy);font-size:30px;line-height:1.1}
+.fa-head p{margin:5px 0 0;color:var(--muted);font-size:14px}
+.fa-cats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:14px}
+.fa-cats a{display:flex;flex-direction:column;gap:3px;padding:13px 16px;border:1px solid var(--line);border-radius:10px;background:#fff;color:inherit;text-decoration:none}
+.fa-cats a b{color:var(--navy);font-size:15px}
+.fa-cats a span{color:var(--muted);font-size:12px}
+.fa-cats a.on{border-color:var(--primary);box-shadow:0 0 0 2px #C9D8EA;background:#F8FBFF}
+.fa-grid{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(330px,.9fr);gap:14px;align-items:start}
+.fa-list .panel-body,.fa-wp .panel-body{padding:12px}
+.fa-filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fa-filters span{border:1px solid var(--line);border-radius:999px;padding:6px 11px;background:#fff;color:var(--ink-2);font-size:12px}
+.fa-filters span.on{background:var(--primary);color:#fff;border-color:var(--primary);font-weight:600}
+.fa-search{display:flex;justify-content:flex-end;margin-bottom:8px}
+.fa-search .input{max-width:260px;height:34px}
+.fa-table tr.sel td{background:#EAF3FF}
+.fa-table tr.na td{color:#8A96A3;background:#F8FAFC}
+.fa-table tr.na .btn{opacity:.45;pointer-events:none}
+.fa-table td small{display:block;color:var(--muted);font-size:11px;margin-top:2px}
+.fa-class{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:var(--soft);font-size:11px;color:var(--ink-2);white-space:nowrap}
+.fa-wp{position:sticky;top:76px}
+.fa-wp-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.fa-wp-head h2{margin:0;color:var(--navy);font-size:20px}
+.fa-wp h3{margin:20px 0 8px;color:var(--primary);font-size:14px;border-bottom:2px solid var(--primary);padding-bottom:8px}
+.fa-wp-actions{justify-content:flex-end;margin-bottom:10px}
+.fa-wp .empty{padding:24px 6px}
+@media (max-width:1100px){.fa-grid{grid-template-columns:1fr}.fa-wp{position:static}.fa-cats{grid-template-columns:1fr}}
