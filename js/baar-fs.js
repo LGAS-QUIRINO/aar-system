@@ -15,7 +15,7 @@ export const FS_CSS = `
 .fsd .hd{text-align:center;margin-bottom:.25in}.fsd .hd b{display:block}
 .fsd table{width:100%;border-collapse:collapse;table-layout:fixed}
 .fsd td{padding:1.5pt 0;vertical-align:bottom}
-.fsd .nt{width:.45in;text-align:center}.fsd .py{width:.18in;text-align:left}.fsd .a{width:1.2in;text-align:right;white-space:nowrap}.fsd .gp{width:.14in}
+.fsd .nt{width:.8in;text-align:center;font-size:9pt}.fsd .py{width:.18in;text-align:left}.fsd .a{width:1.2in;text-align:right;white-space:nowrap}.fsd .gp{width:.14in}
 .fsd tr.yr td{font-weight:700;padding-bottom:5pt}.fsd tr.yr td.a{text-align:right}
 .fsd tr.ch td{font-weight:700;text-align:center;padding-bottom:2pt}
 .fsd tr.h td.t{font-weight:700;padding-top:6pt}.fsd tr.h.plain td.t{font-weight:400}
@@ -112,7 +112,7 @@ export async function fsSections(fs) {
   fs.stmts.forEach((s) => {
     base = s.key === 'scf' || s.rows.length > 32 ? 20 : 22;
     const note = !!s.note;
-    const W = note ? [4840, 560, 220, 1500, 160, 220, 1500] : [5400, 220, 1500, 160, 220, 1500];   // 9,000 = 6.25"
+    const W = note ? [4340, 1060, 220, 1500, 160, 220, 1500] : [5400, 220, 1500, 160, 220, 1500];   // 9,000 = 6.25"
     const cell = (kids, w, o = {}) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: { ...nb, ...(o.b || {}) }, verticalAlign: VerticalAlign.BOTTOM, columnSpan: o.span, margins: { top: base === 20 ? 0 : 15, bottom: base === 20 ? 0 : 15, left: 0, right: 0 },
       children: [new Paragraph({ alignment: o.al || AlignmentType.LEFT, indent: o.ind ? { left: o.ind } : undefined, spacing: { before: 0, after: 0, line: base === 20 ? 216 : 240 }, children: kids })] });
     const rows = [];
@@ -128,7 +128,7 @@ export async function fsSections(fs) {
       const ind = r.ind === 2 ? 720 : r.ind === 1 ? 360 : 0;
       const bd = r.k === 'grand' ? { top: single, bottom: dbl } : r.k === 'tot' || r.k === 'grand1' ? { top: single } : {};
       const cs = [cell([T(r.t, { b: bold, i: ital })], W[0], { ind })];
-      if (note) cs.push(cell([T(r.note ? String(r.note) : '')], W[1], { al: AlignmentType.CENTER }));
+      if (note) cs.push(cell([T(r.note ? String(r.note) : '', { size: 18 })], W[1], { al: AlignmentType.CENTER }));
       const v = r.v || [null, null];
       v.forEach((x, i) => {
         const has = x !== null && x !== undefined && r.v;

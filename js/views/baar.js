@@ -17,6 +17,7 @@ import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
 import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
 import { fsPrint, fsSections } from '../baar-fs.js';
+import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -29,7 +30,7 @@ const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
 const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04', '05', '06'];
+const BUILT = ['01', '02', '03', '04', '05', '06', '07'];
 // The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
 function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
@@ -163,7 +164,15 @@ function baarPages(ctx, L) {
   const smr = 1 + iarN;
   const smrN = L.S && L.S.file ? L.S.file.pages || 1 : 1;
   const s = smr + smrN;
-  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, next: s + fsPageCount(L.FS) };
+  const notes = s + fsPageCount(L.FS);
+  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, next: notes + notesPageCount(notesOf(ctx, L)) };
+}
+// Part 07 · Notes to Financial Statements, from the confirmed trial balances and the details typed in Part 07.
+const notesOf = (ctx, L, N) => buildNotes(L.FS, N || L.B.notes || {}, { lgu: ctx.lgu, mun: ctx.mun });
+function notesPill(F, doc) {
+  if (!F.figY.any) return pill('Not Started', 'grey');
+  if (!F.confirmed) return pill('Not Confirmed', 'warn');
+  return doc.checks.some((c) => c.st === 'warn' || c.st === 'wait') ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
 }
 // The signed copy's pages as pictures (or null when none is uploaded yet).
 async function smrImages(S) {
@@ -184,10 +193,11 @@ async function completeBAAR(ctx) {
   const ia = iarOf(ctx, L);
   const sm = { r: buildSmr({ s: L.S, audit, lgu, mun }), imgs: await smrImages(L.S).catch(() => null), start: pages.smr };
   const fd = fsDoc(L.FS, pages.sfperf);
+  const nd = notesOf(ctx, L);
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes))], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -235,12 +245,14 @@ export async function baar(refs, params, q) {
     '03': pill('In Progress', 'warn'),
     '04': p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I))),
     '05': p05Pill(L.S),
-    '06': fsPill(L.FS)
+    '06': fsPill(L.FS),
+    '07': notesPill(L.FS, notesOf(ctx, L))
   };
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
   if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, st });
   if (q.get('p') === '05') return smrPart({ ctx, me, refs, L, st });
+  if (q.get('p') === '07') return notesPart({ ctx, me, refs, L, st });
   if (q.get('p') === '06') {
     return fsPart({ ctx, me, L, q, canEdit, start: baarPages(ctx, L).sfperf, head: baarHead(ctx), strip: partsStrip(ctx.rec.id, '06', st), wireComplete: (root) => wireComplete(root, ctx, me) });
   }
@@ -724,6 +736,90 @@ function smrPart({ ctx, me, refs, L, st }) {
       };
       draw(); setDirty(false, save);
       if (f) { $('#s-paper', root).innerHTML = '<div class="empty">Opening the signed copy…</div>'; smrImages(S).then((x) => { imgs = x; draw(); }).catch((e) => { draw(); toast(e.message, 'bad'); }); }
+    }
+  };
+}
+
+/* ── Part 07 · Notes to Financial Statements ── */
+export function notesPart({ ctx, me, refs, L, st }) {
+  const { audit, lgu, mun } = ctx;
+  const F = L.FS;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const dis = canEdit ? '' : 'disabled';
+  const N = clone(L.B.notes || {});
+  N.km = N.km || {}; N.inv = N.inv || {}; N.ppe = N.ppe || {};
+  const pages = baarPages(ctx, L);
+  const doc0 = notesOf(ctx, L, N);
+  const y = F.y, yp = F.yp;
+  const hasPs = doc0.list.some((n) => n.id === 'ps'), hasInv = doc0.list.some((n) => n.id === 'inv');
+  const ppeCols = ppeSchedule(F, N.ppe);
+  const v = (o, k) => esc((o || {})[k] ?? '');
+  const amtIn = (path, val, label) => `<input class="input amt-in" data-n="${path}" value="${esc(val ?? '')}" aria-label="${esc(label)}" ${dis}>`;
+  const kmRows = KM.map(([k, label]) => `<tr><td>${esc(label)}</td><td>${amtIn(`km.${k}.cy`, (N.km[k] || {}).cy, `${label} CY ${y}`)}</td><td>${amtIn(`km.${k}.py`, (N.km[k] || {}).py, `${label} CY ${yp}`)}</td></tr>`).join('');
+  const ppeTable = (yr, fields) => `<table class="pgt nt-ppe"><thead><tr><th>CY ${yr}</th>${fields.map(([, t]) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
+      ${ppeCols.map((c) => `<tr><td>${esc(c.label)}</td>${fields.map(([f, t]) => `<td>${amtIn(`ppe.${c.k}.${f}`, (N.ppe[c.k] || {})[f], `${c.label} ${t} ${yr}`)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>07 · Notes to FS</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '07', st)}</section>
+    <div class="topnote">The notes follow Annex 40 of the Manual on the Financial Management of Barangays. The tables come from the confirmed trial balances; type only the details below.</div>
+    ${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Note 1 · General Information</h2></div><div class="panel-body">
+        <div class="field"><label class="label" for="n-issued">Date the financial statements were issued</label><input class="input" id="n-issued" data-n="issued" value="${v(N, 'issued')}" placeholder="e.g. February 14, ${y + 1}" ${dis}></div>
+        <div class="field"><label class="label" for="n-loc">Location of the barangay</label><input class="input" id="n-loc" data-n="loc" value="${v(N, 'loc')}" placeholder="e.g. the northern part of ${esc(mun.name)}" ${dis}></div>
+        <div class="field"><label class="label" for="n-hall">Address of the barangay hall</label><input class="input" id="n-hall" data-n="hall" value="${v(N, 'hall')}" placeholder="Barangay ${esc(lgu.name)}, ${esc(mun.name)}, Quirino" ${dis}></div>
+      </div></section>
+      ${hasPs ? `<section class="panel"><div class="panel-head"><h2>Remuneration of Key Management Personnel</h2></div><div class="panel-body">
+        <table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></section>` : ''}
+      ${hasInv ? `<section class="panel"><div class="panel-head"><h2>Inventories</h2></div><div class="panel-body">
+        <div class="lr-row"><label class="label" for="n-inv-rec" style="margin:0">Inventories recognized during the period</label>${amtIn('inv.rec', N.inv.rec, 'Inventories recognized').replace('class="input amt-in"', 'id="n-inv-rec" class="input amt-in"')}</div>
+        <div class="lr-row"><label class="label" for="n-inv-wd" style="margin:0">Write-down recognized as an expense</label>${amtIn('inv.wd', N.inv.wd, 'Write-down').replace('class="input amt-in"', 'id="n-inv-wd" class="input amt-in"')}</div>
+        <span class="hint">Leave blank to leave the sentence out.</span></div></section>` : ''}
+      ${ppeCols.length ? `<section class="panel"><div class="panel-head"><h2>Property, Plant and Equipment · Movements</h2></div><div class="panel-body">
+        ${ppeTable(y, [['ca', 'Additions'], ['cd', 'Disposals'], ['ct', 'Transfers/Adj']])}
+        ${ppeTable(`${y} · Depreciation`, [['dd', 'Disposals'], ['dt', 'Transfers/Adj']])}
+        ${ppeTable(yp, [['pa', 'Additions'], ['pd', 'Disposals'], ['pt', 'Transfers/Adj']])}
+        <span class="hint">Balances and depreciation for the year come from the trial balances. The results show any amount the movements do not explain.</span></div></section>` : ''}
+      <section class="panel"><div class="panel-head"><h2>Notes Results</h2></div><div class="panel-body ck" id="n-checks"></div></section>
+      ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
+        <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="n-save" type="button">Save</button></div></div>` : ''}</div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b><span class="hint" id="n-pg"></span>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="n-print" type="button">Print</button><button class="btn sm primary" id="n-word" type="button">Word</button></span></div>
+        <style>${NOTES_CSS}</style><div class="paper-wrap big" id="n-paper"></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      const setPath = (o, path, val) => { const ks = path.split('.'); let x = o; ks.slice(0, -1).forEach((k) => { x[k] = x[k] || {}; x = x[k]; }); x[ks[ks.length - 1]] = val; };
+      const collect = () => { $$('[data-n]', root).forEach((el) => setPath(N, el.dataset.n, el.value.trim())); return N; };
+      const draw = () => {
+        if (!document.body.contains(root)) return;
+        const d = notesOf(ctx, L, collect());
+        const { html, land } = notesPagesHTML(d, pages.notes);
+        $('#n-paper', root).innerHTML = html.map((x, i) => `<div class="sheet fsheet${i === land ? ' land' : ''}">${x}</div>`).join('');
+        $('#n-pg', root).textContent = html.length ? `Pages ${pages.notes}–${pages.notes + html.length - 1}` : '';
+        $('#n-checks', root).innerHTML = d.checks.map((c) => `<span class="ck-${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '!' : c.st === 'info' ? '•' : '○'} ${esc(c.t)}</span>`).join('');
+        const pl = $('#b-p07', root); if (pl) pl.innerHTML = notesPill(F, d);
+      };
+      async function save() {
+        const cur = await store.get('letters', recId(ctx.rec.id));
+        const base = cur && !cur.deleted ? cur.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
+        await store.save('letters', recId(ctx.rec.id), { ...base, notes: clone(collect()) }, { silent: true });
+        await store.log('saved the Notes to Financial Statements', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
+      }
+      let timer = null;
+      const changed = () => { if (!canEdit) return; setDirty(true, save); clearTimeout(timer); timer = setTimeout(draw, 150); };
+      root.querySelector('.xform').addEventListener('input', changed);
+      const sv = $('#n-save', root); if (sv) sv.onclick = save;
+      const fileName = notesFileName(audit, lgu, mun);
+      $('#n-print', root).onclick = () => { const p = notesPrint(notesOf(ctx, L, collect()), pages.notes); printPages(p.css, p.html, fileName); };
+      $('#n-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); await saveDocx(await notesSections(notesOf(ctx, L, collect()), pages.notes), fileName, 'Notes to Financial Statements'); }
+        catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded the Notes to Financial Statements (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      draw();
     }
   };
 }

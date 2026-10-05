@@ -12,6 +12,7 @@ import { interChoice, isCombined, keyCode, zeroRow, fundsOf, tbId, fsId, loadTb,
 import { readTbFile, readTbPaste } from '../tbimport.js';
 import { FS_CSS, stmtHTML, scbaaHTML, scbaaPages, fsPrint, fsSections, fsFileName } from '../baar-fs.js';
 import { printPages, saveDocx } from '../baar-doc.js';
+import { noteRefs } from '../baar-notes.js';
 import { openAddAccount, pickAccount, canEditChart } from './coa.js';
 import { acctOf as acctOfKey } from '../coa.js';
 import { aomAmount, peso } from '../saor.js';
@@ -143,7 +144,7 @@ export function fsDoc(F, start, work = {}) {
   const pages = s ? { sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, next: s + 4 + nB } : { next: 0 };
   return {
     y: F.y, lgu: ctx.lgu, mun: ctx.mun, pages, allRows, scbaa: { rows: prows, data: scbaa },
-    stmts: [buildPerf(fy, fp, F.y), buildPos(fy, fp, F.y), buildScne(fy, fp, F.y), buildScf(scfY, scfP, fy, fp, begY, begP, F.y)],
+    stmts: [buildPerf(fy, fp, F.y, noteRefs(F)), buildPos(fy, fp, F.y, noteRefs(F)), buildScne(fy, fp, F.y), buildScf(scfY, scfP, fy, fp, begY, begP, F.y)],
     scfNums: { begY, begP, scfY, scfP }
   };
 }
