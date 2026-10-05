@@ -17,7 +17,7 @@ const amtOf = (v) => { const n = parseAmt(v); return n === null || isNaN(n) ? nu
 export const N1_SERVICES = 'Agricultural support services; Health and Social welfare service; Services and facilities related to general Hygiene and Sanitation, Beautification, and Solid Waste Collection; Maintenance of Katarungang Pambarangay; maintenance of Barangay roads and Bridges and Water Supply Systems; Infrastructure facilities; Information and Reading Center; and Satellite or Public Market within the premises of the Barangay hall';
 export const N1_WORKFORCE = "a Barangay Secretary, a Barangay Treasurer, BPAT's, Driver, BHW/BNS, Utility Workers";
 const N21 = [
-  'The financial statements have been prepared in accordance with and comply with the Philippine Public Sector Accounting Standards. The financial statements are presented in Peso and the figures are rounded to the nearest pesos.',
+  'The financial statements have been prepared in accordance with and comply with the International Public Sector Accounting Standards (IPSAS). The financial statements are presented in Peso and the figures are rounded to the nearest pesos.',
   'The financial statements are prepared on the basis of historical cost. The cash flow statement is prepared using the direct method. The Statement of Comparison of Budget and Actual Amounts is presented according to the classification adopted for budgeting purposes.'
 ];
 const POLICIES = [
