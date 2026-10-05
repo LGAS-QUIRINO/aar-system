@@ -239,7 +239,7 @@ export function wpListHTML(items, F, ctx) {
     const miss = ph.filter((p) => v[p] === undefined).length + tn.filter((n) => !(d.wpData && d.wpData.tables && d.wpData.tables[n])).length;
     rows.push({ ref: d.wp || '—', title: d.wpDef ? d.wpDef.title : d.title, for: `AOM (${d.poolCode || 'new'})`, st: !d.wpData ? pill('Not started', 'grey') : miss ? pill(`${miss} missing`, 'warn') : pill('Complete', 'ok'), sel: it.id });
   });
-  ((F && F.rec && F.rec.wps) || []).forEach((w) => rows.push({ ref: w.ref, title: w.title, for: `Supporting · ${(w.accounts || []).map((k) => (F.chart.byKey[k] || {}).title || k).join(', ')}`, st: pill('Supporting', 'grey') }));
+  ((F && F.rec && F.rec.wps) || []).forEach((w) => rows.push({ ref: w.ref, title: w.title, for: `Supporting · ${(w.accounts || []).map((k) => (F.chart.byKey[k] || {}).title || k).join(', ') || (w.c6 ? 'Other Financial Related Issue' : '')}`, st: pill('Supporting', 'grey') }));
   if (!rows.length) return '';
   return `<section class="panel"><div class="panel-head"><h2>Working Papers of this audit</h2></div><div class="panel-body"><table class="pf"><thead><tr><th>WP Ref.</th><th>Title</th><th>For</th><th>Status</th></tr></thead><tbody>
     ${rows.sort((a, b) => a.ref.localeCompare(b.ref)).map((r) => `<tr${r.sel ? ` class="click" data-sel="${r.sel}"` : ''}><td class="mono">${esc(r.ref)}</td><td>${esc(r.title)}</td><td>${esc(r.for)}</td><td>${r.st}</td></tr>`).join('')}</tbody></table></div></section>`;

@@ -1,6 +1,6 @@
-// Financial Audit · supporting working papers for the audit foci.
+// Financial Audit · supporting working papers for the audit foci and the Other Financial Related Issues (C.6).
 // Each working paper follows one layout: header, objective, procedures, detail table, conclusion, sign-off.
-// The balance comes from the lead schedule so the working paper always ties to it.
+// The balance comes from the lead schedule (or, for C.6, the linked Due to account) so the working paper always ties to it.
 import { esc, toast, modal, $, $$ } from '../ui.js';
 import { money, cents, parseAmt } from '../fs.js';
 import { printPages } from '../baar-doc.js';
@@ -61,17 +61,145 @@ const GENERIC = {
   ],
   table: { label: 'Details of Balance', cols: [{ t: 'Particulars', type: 'text' }, { t: 'Reference', type: 'text' }, { t: 'Amount', type: 'amt' }], tie: true }
 };
-export const wpTemplate = (focusId) => TEMPLATES[focusId] || GENERIC;
 
-/** A new working paper body from the template of an audit focus. */
-export function newBody(focusId, me) {
-  const t = wpTemplate(focusId);
+// Templates for the Other Financial Related Issues (C.6), keyed by C.6 item id.
+// Column types: text, date, amt, sel (opts), fixed (pre-filled, not editable) and calc (of: [a, b] → column a less column b).
+// months: twelve rows, January to December. due: the calc column total should equal the Due to account balance.
+// over: [a, b] flags a row where column b is more than column a.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+const REMIT_COLS = [{ t: 'Month', type: 'fixed' }, { t: 'Withheld', type: 'amt' }, { t: 'Remitted', type: 'amt' }, { t: 'Date Remitted', type: 'date' }, { t: 'Unremitted', type: 'calc', of: [1, 2] }];
+const GENERAL_COLS = [{ t: 'Particulars', type: 'text' }, { t: 'Reference', type: 'text' }, { t: 'Date', type: 'date' }, { t: 'Amount', type: 'amt' }];
+const C6_TEMPLATES = {
+  bir: {
+    title: 'Withholding and Remittance of Taxes to the BIR',
+    objective: 'To determine whether taxes were withheld from the compensation of officials and employees and from payments to suppliers, and whether these were remitted to the Bureau of Internal Revenue (BIR) in full and on time.',
+    procedures: [
+      'Obtain the monthly remittance returns and proofs of payment to the BIR for the year.',
+      'Compare the taxes withheld per payroll and disbursement vouchers with the amounts remitted each month.',
+      'Check that the remittances were made within the BIR deadlines (on or before the 10th day of the following month).',
+      'Agree the year-end unremitted taxes with the balance of Due to BIR.',
+      'Inquire into long-outstanding balances and any penalties or surcharges paid for late remittance.'
+    ],
+    table: { label: 'Monthly Withholding and Remittances', cols: REMIT_COLS, months: true, due: true }
+  },
+  gsis: {
+    title: 'GSIS and HDMF Contributions and Remittances',
+    objective: 'To determine whether the personal and government shares of GSIS and Pag-IBIG (HDMF) contributions and loan amortizations were deducted and remitted in full and on time.',
+    procedures: [
+      'Obtain the GSIS and Pag-IBIG remittance lists, official receipts and billing statements for the year.',
+      'Compare the contributions and loan amortizations deducted per payroll with the amounts remitted each month.',
+      'Check that the remittances were made within the prescribed period (within the first ten days of the following month).',
+      'Agree the year-end unremitted balance with Due to GSIS and Due to Pag-IBIG.',
+      'Inquire into delayed remittances and any interest or penalties charged.'
+    ],
+    table: { label: 'Monthly Deductions and Remittances (GSIS and HDMF)', cols: REMIT_COLS, months: true, due: true }
+  },
+  philhealth: {
+    title: 'PhilHealth Premium Contributions and Remittances',
+    objective: 'To determine whether the personal and government shares of PhilHealth premium contributions were deducted, computed at the prescribed rate and remitted in full and on time.',
+    procedures: [
+      'Obtain the PhilHealth remittance reports and official receipts for the year.',
+      'Check that the premiums were computed at the rate prescribed for the year.',
+      'Compare the premiums deducted per payroll plus the government share with the amounts remitted each month.',
+      'Check that the remittances were made on time.',
+      'Agree the year-end unremitted balance with Due to PhilHealth.'
+    ],
+    table: { label: 'Monthly Premiums and Remittances', cols: REMIT_COLS, months: true, due: true }
+  },
+  oda: {
+    title: 'Foreign-Assisted Projects / ODA',
+    objective: 'To determine whether funds received for foreign-assisted projects or Official Development Assistance were recorded, used for the purposes agreed and reported as required.',
+    procedures: [
+      'Obtain the agreement or memorandum covering the project and the list of funds received.',
+      'Check that the receipts were recorded in the books and deposited.',
+      'Examine the disbursements charged to the project for consistency with the agreement.',
+      'Determine the status of the project and any unutilized balance.'
+    ],
+    table: { label: 'Receipts and Utilization', cols: GENERAL_COLS }
+  },
+  ntf: {
+    title: 'NTF-ELCAC Funds',
+    objective: 'To determine whether funds received under the National Task Force to End Local Communist Armed Conflict were recorded and used for the programs and activities they were given for.',
+    procedures: [
+      'Obtain the list of NTF-ELCAC funds received, with the issuing agency and purpose.',
+      'Check that the funds were recorded in the books and deposited.',
+      'Examine the disbursements charged to the funds against the approved programs and activities.',
+      'Determine any unutilized balance and whether it was returned or reported.'
+    ],
+    table: { label: 'Receipts and Utilization', cols: GENERAL_COLS }
+  },
+  bdp: {
+    title: 'Support to the Barangay Development Program (SBDP)',
+    objective: 'To determine whether the LGSP-SBDP funds were received, recorded and used for the projects approved under the Barangay Development Program, and the status of those projects.',
+    procedures: [
+      'Obtain the list of approved SBDP projects with their allocations.',
+      'Check that the funds received were recorded in the books and deposited.',
+      'Examine the disbursements for each project against the program of work.',
+      'Inspect or confirm the status of each project and any delays.',
+      'Determine any unutilized balance and its intended disposition.'
+    ],
+    table: { label: 'SBDP Projects', cols: [{ t: 'Project', type: 'text' }, { t: 'Allocation', type: 'amt' }, { t: 'Utilized', type: 'amt' }, { t: 'Status', type: 'sel', opts: ['Completed', 'Ongoing', 'Not Started'] }], over: [1, 2] }
+  },
+  df20: {
+    title: '20% Development Fund Utilization',
+    objective: 'To determine whether at least 20% of the National Tax Allotment was appropriated for development projects, and whether the projects were implemented and the fund used for its purpose.',
+    procedures: [
+      'Obtain the Annual Investment Program and the appropriation ordinance for the 20% Development Fund.',
+      'Check that the appropriation is at least 20% of the National Tax Allotment for the year.',
+      'Compare the projects implemented with the approved list and the amounts used.',
+      'Check that no expenses outside the allowed development projects were charged to the fund.',
+      'Determine the status of each project and the unutilized balance at year-end.'
+    ],
+    table: { label: 'Development Projects', cols: [{ t: 'Project', type: 'text' }, { t: 'Appropriation', type: 'amt' }, { t: 'Utilized', type: 'amt' }, { t: 'Status', type: 'sel', opts: ['Completed', 'Ongoing', 'Not Started'] }], over: [1, 2] }
+  },
+  casuals: {
+    title: 'Payments to Casuals, Job Orders, Contractuals and Consultants',
+    objective: 'To determine whether payments to casual, job order, contract of service workers and consultants were supported by valid contracts or appointments and accomplishment reports, and charged to the proper account.',
+    procedures: [
+      'Obtain the list of casual, job order and contract of service workers and consultants for the year.',
+      'Check that each payment is supported by an appointment or contract, daily time record and accomplishment report.',
+      'Check that the hiring and the services rendered follow the CSC-COA-DBM rules on contract of service and job order workers.',
+      'Check that the required taxes were withheld from the payments.',
+      'Agree the total payments with the expense accounts in the trial balance.'
+    ],
+    table: { label: 'Payments Made', cols: [{ t: 'Name', type: 'text' }, { t: 'Nature of Work', type: 'text' }, { t: 'Period Covered', type: 'text' }, { t: 'Amount Paid', type: 'amt' }] }
+  },
+  ldrrm: {
+    title: 'LDRRM Fund and Quick Response Fund',
+    objective: 'To determine whether at least 5% of the estimated revenue was set aside for the LDRRM Fund, 30% of it for the Quick Response Fund, and whether the fund was used for its purpose and any unexpended balance transferred to the special trust fund.',
+    procedures: [
+      'Obtain the LDRRM plan, the appropriation ordinance and the statement of funds utilized.',
+      'Check that the LDRRMF is at least 5% of the estimated revenue and that 30% of it is set aside as the QRF.',
+      'Examine the disbursements charged to the fund for consistency with the plan.',
+      'Check that QRF disbursements were made only upon a declaration of a state of calamity.',
+      'Check that the unexpended balance was transferred to the special trust fund (Trust Liabilities – DRRMF).'
+    ],
+    table: { label: 'Utilization of LDRRMF / QRF', cols: GENERAL_COLS }
+  },
+  gad: {
+    title: 'Gender and Development (GAD) Funds',
+    objective: 'To determine whether at least 5% of the total appropriations was set aside for Gender and Development, and whether the GAD Plan and Budget was implemented as approved.',
+    procedures: [
+      'Obtain the GAD Plan and Budget and the GAD Accomplishment Report for the year.',
+      'Check that the GAD budget is at least 5% of the total appropriations.',
+      'Compare the activities implemented with those in the approved GAD Plan.',
+      'Examine the disbursements charged to GAD for consistency with the plan.'
+    ],
+    table: { label: 'GAD Activities and Expenses', cols: [{ t: 'Activity', type: 'text' }, { t: 'Reference', type: 'text' }, { t: 'Date', type: 'date' }, { t: 'Amount', type: 'amt' }] }
+  }
+};
+export const wpTemplate = (id) => TEMPLATES[id] || C6_TEMPLATES[id] || GENERIC;
+
+/** A new working paper body from the template of an audit focus or C.6 item. */
+export function newBody(id, me) {
+  const t = wpTemplate(id), cols = t.table.cols;
   return {
-    tpl: TEMPLATES[focusId] ? focusId : 'generic',
+    tpl: TEMPLATES[id] || C6_TEMPLATES[id] ? id : 'generic',
     objective: t.objective,
     procedures: t.procedures.map((x) => ({ t: x, done: false })),
     recon: t.recon ? { bank: '', dit: '', oc: '', other: '' } : null,
-    table: { label: t.table.label, cols: t.table.cols.map((c) => ({ ...c })), age: !!t.table.age, stale: t.table.stale || 0, tie: !!t.table.tie, rows: [] },
+    table: { label: t.table.label, cols: cols.map((c) => ({ ...c })), age: !!t.table.age, stale: t.table.stale || 0, tie: !!t.table.tie, due: !!t.table.due, over: t.table.over || null,
+      rows: t.table.months ? MONTHS.map((m) => cols.map((c, i) => (i === 0 ? m : ''))) : [] },
     conclusion: '', result: '', notes: '',
     prepBy: (me && (me.name || me.email)) || '', prepAt: new Date().toISOString().slice(0, 10), revBy: '', revAt: ''
   };
@@ -95,7 +223,14 @@ function bucket(days) {
 }
 const amtCol = (tb) => tb.cols.findIndex((c) => c.type === 'amt');
 const dateCol = (tb) => tb.cols.findIndex((c) => c.type === 'date');
-const tableTotal = (tb) => { const i = amtCol(tb); return i < 0 ? 0 : tb.rows.reduce((s, r) => s + amtOf(r[i]), 0); };
+const isNum = (c) => c.type === 'amt' || c.type === 'calc';
+// A cell in cents; a calc column is one amount column less another.
+const cellAmt = (tb, r, i) => { const c = tb.cols[i]; return c.type === 'calc' ? amtOf(r[c.of[0]]) - amtOf(r[c.of[1]]) : amtOf(r[i]); };
+const colTotal = (tb, i) => tb.rows.reduce((s, r) => s + cellAmt(tb, r, i), 0);
+const tableTotal = (tb) => { const i = amtCol(tb); return i < 0 ? 0 : colTotal(tb, i); };
+const cellText = (tb, r, i) => (isNum(tb.cols[i]) ? money(cellAmt(tb, r, i)) : r[i] || '');
+// The balance shown at the top. A C.6 item has one only when a Due to account is linked to it.
+const balInfo = (item) => (item.c6 ? (item.due && item.due.length ? { label: `Balance per trial balance (${item.due.map((r) => r.a.title).join(', ')})`, v: item.cy || 0 } : null) : { label: 'Balance per lead schedule', v: item.cy || 0 });
 function reconFigures(b, bookBal) {
   const r = b.recon; if (!r) return null;
   const adj = amtOf(r.bank) + amtOf(r.dit) - amtOf(r.oc) + amtOf(r.other);
@@ -109,6 +244,19 @@ function checks(b, item) {
   const rf = reconFigures(b, item.cy || 0);
   if (rf && b.recon.bank !== '') out.push(rf.diff === 0 ? { ok: true, t: 'Adjusted bank balance agrees with the balance per books.' } : { ok: false, t: `Adjusted bank balance differs from the books by ${money(rf.diff, { paren: false })}.` });
   if (rf && b.recon.oc !== '' && tb.rows.length && tot !== amtOf(b.recon.oc)) out.push({ ok: false, t: `Listed outstanding checks (${money(tot)}) do not equal the outstanding checks in the reconciliation (${money(amtOf(b.recon.oc))}).` });
+  // Remittances: the year-end unremitted total should equal the Due to balance.
+  const ci = tb.cols.findIndex((c) => c.type === 'calc');
+  if (tb.due && ci >= 0 && tb.rows.some((r) => tb.cols.some((c, i) => c.type === 'amt' && String(r[i] || '').trim()))) {
+    const un = colTotal(tb, ci), names = (item.due || []).map((r) => r.a.title).join(' and ');
+    if (item.due && item.due.length) out.push(un === (item.cy || 0) ? { ok: true, t: `Unremitted total agrees with the ${names} balance.` } : { ok: false, t: `Unremitted total (${money(un)}) differs from the ${names} balance (${money(item.cy || 0)}) by ${money(un - (item.cy || 0), { paren: false })}.` });
+    else out.push(un === 0 ? { ok: true, t: 'Everything withheld was remitted; no Due to balance is in the trial balance.' } : { ok: false, t: `Unremitted total of ${money(un)}, but no matching Due to balance is in the trial balance.` });
+    const late = tb.rows.filter((r) => cellAmt(tb, r, ci) < 0).length;
+    if (late) out.push({ ok: false, t: `${late} month${late > 1 ? 's show' : ' shows'} more remitted than withheld; check for catch-up remittances or errors.` });
+  }
+  if (tb.over) {
+    const [a, u] = tb.over, n = tb.rows.filter((r) => amtOf(r[u]) > amtOf(r[a])).length;
+    if (n) out.push({ ok: false, t: `${n} row${n > 1 ? 's' : ''} used more than ${tb.cols[a].t.toLowerCase()}.` });
+  }
   return out;
 }
 function staleCheck(b, F) {
@@ -119,12 +267,12 @@ function staleCheck(b, F) {
 
 /* ── The working paper as a printable sheet (also used for the read-only view) ── */
 function sheetHTML(w, item, F, ctx) {
-  const b = w.wpb, tb = b.table, ai = amtCol(tb), di = dateCol(tb);
-  const rf = reconFigures(b, item.cy || 0);
+  const b = w.wpb, tb = b.table, di = dateCol(tb);
+  const rf = reconFigures(b, item.cy || 0), bal = balInfo(item), tot = tb.cols.some(isNum);
   return `<div class="wps">
     <table class="wps-head"><tr><td>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</td><td class="n"><b>${esc(w.ref)}</b></td></tr>
       <tr><td>${esc(w.title)} · ${esc(item.title)}</td><td class="n">CY ${esc(F.y)}</td></tr></table>
-    <p><b>Balance per lead schedule:</b> ${money(item.cy || 0)}</p>
+    ${bal ? `<p><b>${esc(bal.label)}:</b> ${money(bal.v)}</p>` : ''}
     <h4>Objective</h4><p>${esc(b.objective)}</p>
     <h4>Procedures Performed</h4><ol>${b.procedures.map((p) => `<li>${p.done ? '✓ ' : ''}${esc(p.t)}</li>`).join('')}</ol>
     ${rf ? `<h4>Bank Reconciliation</h4><table class="pf"><tbody>
@@ -136,9 +284,9 @@ function sheetHTML(w, item, F, ctx) {
       <tr><td>Balance per books</td><td class="n">${money(rf.book)}</td></tr>
       <tr style="font-weight:700"><td>Difference</td><td class="n">${money(rf.diff, { dash: '0.00' })}</td></tr></tbody></table>` : ''}
     <h4>${esc(tb.label)}</h4>
-    ${tb.rows.length ? `<table class="pf"><thead><tr>${tb.cols.map((c) => `<th class="${c.type === 'amt' ? 'n' : ''}">${esc(c.t)}</th>`).join('')}${tb.age && di >= 0 ? '<th>Age</th>' : ''}</tr></thead><tbody>
-      ${tb.rows.map((r) => `<tr>${tb.cols.map((c, i) => `<td class="${c.type === 'amt' ? 'n' : ''}">${c.type === 'amt' ? money(amtOf(r[i])) : esc(r[i] || '')}</td>`).join('')}${tb.age && di >= 0 ? `<td>${esc(ageLabel(r[di], tb, F))}</td>` : ''}</tr>`).join('')}
-      ${ai >= 0 ? `<tr style="font-weight:700">${tb.cols.map((c, i) => `<td class="${i === ai ? 'n' : ''}">${i === 0 ? 'Total' : i === ai ? money(tableTotal(tb)) : ''}</td>`).join('')}${tb.age && di >= 0 ? '<td></td>' : ''}</tr>` : ''}
+    ${tb.rows.length ? `<table class="pf"><thead><tr>${tb.cols.map((c) => `<th class="${isNum(c) ? 'n' : ''}">${esc(c.t)}</th>`).join('')}${tb.age && di >= 0 ? '<th>Age</th>' : ''}</tr></thead><tbody>
+      ${tb.rows.map((r) => `<tr>${tb.cols.map((c, i) => `<td class="${isNum(c) ? 'n' : ''}">${esc(cellText(tb, r, i))}</td>`).join('')}${tb.age && di >= 0 ? `<td>${esc(ageLabel(r[di], tb, F))}</td>` : ''}</tr>`).join('')}
+      ${tot ? `<tr style="font-weight:700">${tb.cols.map((c, i) => `<td class="${isNum(c) ? 'n' : ''}">${i === 0 ? 'Total' : isNum(c) ? money(colTotal(tb, i)) : ''}</td>`).join('')}${tb.age && di >= 0 ? '<td></td>' : ''}</tr>` : ''}
     </tbody></table>` : '<p class="hint">No details entered.</p>'}
     <h4>Conclusion</h4><p>${b.result ? `<b>${esc(b.result)}.</b> ` : ''}${esc(b.conclusion || '—')}</p>
     ${b.notes ? `<h4>Notes</h4><p>${esc(b.notes)}</p>` : ''}
@@ -158,18 +306,25 @@ function ageLabel(d, tb, F) {
 export async function openWp({ w, item, F, ctx, me, canEdit }) {
   if (!w.wpb) w = { ...w, wpb: newBody(item.id, me) };
   const b = JSON.parse(JSON.stringify(w.wpb));
-  const tb = b.table, ai = amtCol(tb), di = dateCol(tb);
+  const tb = b.table, di = dateCol(tb), bal = balInfo(item);
   const RESULTS = ['No exceptions noted', 'With exception – for AOM'];
 
   const drawRows = (bg) => {
-    $('#wp-rows', bg).innerHTML = tb.rows.map((r, ri) => `<tr>${tb.cols.map((c, ci) => `<td><input class="input wp-in ${c.type === 'amt' ? 'n' : ''}" ${c.type === 'date' ? 'type="date"' : ''} data-wr="${ri}:${ci}" value="${esc(r[ci] || '')}" aria-label="${esc(c.t)}"></td>`).join('')}
+    $('#wp-rows', bg).innerHTML = tb.rows.map((r, ri) => `<tr>${tb.cols.map((c, ci) => `<td>${cellInput(r, ri, c, ci)}</td>`).join('')}
       ${tb.age && di >= 0 ? `<td class="hint wp-age" data-age="${ri}">${esc(ageLabel(r[di], tb, F))}</td>` : ''}
       <td><button class="x sm" type="button" data-wrm="${ri}" aria-label="Remove row">✕</button></td></tr>`).join('')
       || `<tr><td colspan="${tb.cols.length + 2}" class="hint" style="padding:10px 4px">No rows yet. Add one below.</td></tr>`;
     drawChecks(bg);
   };
+  const cellInput = (r, ri, c, ci) => {
+    if (c.type === 'fixed') return `<span class="wp-fixed">${esc(r[ci] || '')}</span>`;
+    if (c.type === 'calc') return `<span class="wp-calc" data-calc="${ri}:${ci}"></span>`;
+    if (c.type === 'sel') return `<select class="sel wp-in" data-wr="${ri}:${ci}" aria-label="${esc(c.t)}"><option value=""></option>${c.opts.map((o) => `<option ${o === r[ci] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>`;
+    return `<input class="input wp-in ${c.type === 'amt' ? 'n' : ''}" ${c.type === 'date' ? 'type="date"' : ''} data-wr="${ri}:${ci}" value="${esc(r[ci] || '')}" aria-label="${esc(c.t)}">`;
+  };
   const drawChecks = (bg) => {
-    const total = $('#wp-total', bg); if (total) total.textContent = money(tableTotal(tb), { dash: '0.00' });
+    $$('[data-wtot]', bg).forEach((x) => { x.textContent = money(colTotal(tb, +x.dataset.wtot), { dash: '0.00' }); });
+    $$('[data-calc]', bg).forEach((x) => { const [ri, ci] = x.dataset.calc.split(':').map(Number); if (tb.rows[ri]) x.textContent = money(cellAmt(tb, tb.rows[ri], ci), { dash: '0.00' }); });
     const rf = reconFigures(b, item.cy || 0);
     if (rf) { $('#wp-adj', bg).textContent = money(rf.adj, { dash: '0.00' }); $('#wp-diff', bg).textContent = money(rf.diff, { dash: '0.00' }); }
     const c = checks(b, item); const st = staleCheck(b, F); if (st) c.push(st);
@@ -179,7 +334,7 @@ export async function openWp({ w, item, F, ctx, me, canEdit }) {
   const field = (id, label, val, type = 'text') => `<div class="field"><label class="label" for="${id}">${label}</label><input class="input" id="${id}" type="${type}" value="${esc(val || '')}"></div>`;
   const body = `<div class="wp-ed">
     <div class="wp-ed-top"><div><span class="hint">Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)} · CY ${esc(F.y)}</span><div><b>${esc(item.title)}</b></div></div>
-      <div class="wp-bal"><span>Balance per lead schedule</span><b>${money(item.cy || 0, { dash: '0.00' })}</b></div></div>
+      ${bal ? `<div class="wp-bal"><span>${esc(bal.label)}</span><b>${money(bal.v, { dash: '0.00' })}</b></div>` : ''}</div>
     <div class="field"><label class="label" for="wp-obj">Objective</label><textarea class="input wp-ta" id="wp-obj" rows="3">${esc(b.objective)}</textarea></div>
     <div class="field"><span class="label">Procedures Performed</span><div class="wp-procs">${b.procedures.map((p, i) => `<label class="check"><input type="checkbox" data-wp="${i}" ${p.done ? 'checked' : ''}><span>${esc(p.t)}</span></label>`).join('')}</div></div>
     ${b.recon ? `<div class="field"><span class="label">Bank Reconciliation</span><table class="pf wp-recon"><tbody>
@@ -191,9 +346,9 @@ export async function openWp({ w, item, F, ctx, me, canEdit }) {
       <tr><td>Balance per books (lead schedule)</td><td class="n">${money(item.cy || 0, { dash: '0.00' })}</td></tr>
       <tr class="tot"><td>Difference</td><td class="n" id="wp-diff"></td></tr></tbody></table></div>` : ''}
     <div class="field"><span class="label">${esc(tb.label)}</span>
-      <div class="wp-tbl"><table class="pf"><thead><tr>${tb.cols.map((c) => `<th class="${c.type === 'amt' ? 'n' : ''}">${esc(c.t)}</th>`).join('')}${tb.age && di >= 0 ? '<th>Age at Dec 31</th>' : ''}<th></th></tr></thead>
+      <div class="wp-tbl"><table class="pf"><thead><tr>${tb.cols.map((c) => `<th class="${isNum(c) ? 'n' : ''}">${esc(c.t)}</th>`).join('')}${tb.age && di >= 0 ? '<th>Age at Dec 31</th>' : ''}<th></th></tr></thead>
         <tbody id="wp-rows"></tbody>
-        ${ai >= 0 ? `<tfoot><tr class="tot">${tb.cols.map((c, i) => `<td class="${i === ai ? 'n' : ''}" ${i === ai ? 'id="wp-total"' : ''}>${i === 0 ? 'Total' : ''}</td>`).join('')}${tb.age && di >= 0 ? '<td></td>' : ''}<td></td></tr></tfoot>` : ''}</table></div>
+        ${tb.cols.some(isNum) ? `<tfoot><tr class="tot">${tb.cols.map((c, i) => `<td class="${isNum(c) ? 'n' : ''}" ${isNum(c) ? `data-wtot="${i}"` : ''}>${i === 0 ? 'Total' : ''}</td>`).join('')}${tb.age && di >= 0 ? '<td></td>' : ''}<td></td></tr></tfoot>` : ''}</table></div>
       <button class="reset" type="button" id="wp-addrow">+ Row</button></div>
     <div class="ck" id="wp-checks"></div>
     <div class="field"><span class="label">Conclusion</span>
@@ -218,7 +373,7 @@ export async function openWp({ w, item, F, ctx, me, canEdit }) {
     onOpen: (bg) => {
       $('.modal', bg).classList.add('wp-modal');
       drawRows(bg);
-      $('#wp-addrow', bg).onclick = () => { tb.rows.push(tb.cols.map(() => '')); drawRows(bg); const ins = $$('#wp-rows input', bg); if (ins.length) ins[ins.length - tb.cols.length].focus(); };
+      $('#wp-addrow', bg).onclick = () => { tb.rows.push(tb.cols.map(() => '')); drawRows(bg); const last = $('#wp-rows tr:last-child [data-wr]', bg); if (last) last.focus(); };
       bg.addEventListener('input', (e) => {
         const t = e.target;
         if (t.dataset.wr) { const [ri, ci] = t.dataset.wr.split(':').map(Number); tb.rows[ri][ci] = t.value; if (ci === di) { const a = $(`[data-age="${ri}"]`, bg); if (a) a.textContent = ageLabel(t.value, tb, F); } drawChecks(bg); }
@@ -249,15 +404,15 @@ export function printWp(w, item, F, ctx) {
 }
 export async function excelWp(w, item, F, ctx) {
   const XLSX = await loadScript('lib/xlsx.full.min.js', 'XLSX');
-  const b = w.wpb, tb = b.table, di = dateCol(tb), ai = amtCol(tb);
+  const b = w.wpb, tb = b.table, di = dateCol(tb), bal = balInfo(item);
   const aoa = [[`Barangay ${ctx.lgu.name}, ${ctx.mun.name}, Quirino`, '', '', w.ref], [`${w.title} · ${item.title}`, '', '', `CY ${F.y}`], [],
-    ['Balance per lead schedule', (item.cy || 0) / 100], [], ['OBJECTIVE'], [b.objective], [], ['PROCEDURES PERFORMED'],
+    ...(bal ? [[bal.label, bal.v / 100], []] : []), ['OBJECTIVE'], [b.objective], [], ['PROCEDURES PERFORMED'],
     ...b.procedures.map((p, i) => [`${i + 1}. ${p.t}`, p.done ? 'Done' : '']), []];
   const rf = reconFigures(b, item.cy || 0);
   if (rf) aoa.push(['BANK RECONCILIATION'], ['Balance per bank', amtOf(b.recon.bank) / 100], ['Add: Deposits in transit', amtOf(b.recon.dit) / 100], ['Less: Outstanding checks', amtOf(b.recon.oc) / 100], ['Add/(Less): Other reconciling items', amtOf(b.recon.other) / 100], ['Adjusted balance per bank', rf.adj / 100], ['Balance per books', rf.book / 100], ['Difference', rf.diff / 100], []);
   aoa.push([tb.label.toUpperCase()], [...tb.cols.map((c) => c.t), ...(tb.age && di >= 0 ? ['Age at Dec 31'] : [])]);
-  tb.rows.forEach((r) => aoa.push([...tb.cols.map((c, i) => (c.type === 'amt' ? amtOf(r[i]) / 100 : r[i] || '')), ...(tb.age && di >= 0 ? [ageLabel(r[di], tb, F)] : [])]));
-  if (ai >= 0) aoa.push(tb.cols.map((c, i) => (i === 0 ? 'Total' : i === ai ? tableTotal(tb) / 100 : '')));
+  tb.rows.forEach((r) => aoa.push([...tb.cols.map((c, i) => (isNum(c) ? cellAmt(tb, r, i) / 100 : r[i] || '')), ...(tb.age && di >= 0 ? [ageLabel(r[di], tb, F)] : [])]));
+  if (tb.cols.some(isNum)) aoa.push(tb.cols.map((c, i) => (i === 0 ? 'Total' : isNum(c) ? colTotal(tb, i) / 100 : '')));
   aoa.push([], ['CONCLUSION'], [[b.result, b.conclusion].filter(Boolean).join('. ')], []);
   if (b.notes) aoa.push(['NOTES'], [b.notes], []);
   aoa.push(['Prepared by:', b.prepBy, 'Reviewed by:', b.revBy], ['Date:', b.prepAt, 'Date:', b.revAt]);

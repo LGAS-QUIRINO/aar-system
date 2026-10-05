@@ -38,18 +38,21 @@ const FOCI = [
   { id:'z', title:'Other Maintenance and Operation Expenses', cls:'Expenses', re:[/^other maintenance and operat(ing|ion) expenses$/i] }
 ];
 
+// C.6 is a compliance checklist. Applicability is suggested from the trial balance (re), or fixed by default;
+// remit: the matched accounts are the Due to balance the remittance working paper ties to. The auditor can override it.
 const C6 = [
-  'Taxes withheld from employees and suppliers and remittances to the Bureau of Internal Revenue (BIR)',
-  'GSIS and HDMF remittances',
-  'Premium contributions and remittance to PhilHealth',
-  'Foreign-assisted projects / Official Development Assistance (ODA)',
-  'National Task Force to End Local Communist Armed Conflict (NTF-ELCAC) Funds',
-  'LGSP – Support to Barangay Development Program of the NTF-ELCAC',
-  '20% Development Fund',
-  'Payments to casuals, job order, contractuals and consultants',
-  'LDRRM Funds / QRF',
-  'Gender and Development (GAD) Funds'
-].map((title,i)=>({ id:String(i+1), title }));
+  { id:'bir', title:'Taxes withheld from employees and suppliers and remittances to the Bureau of Internal Revenue (BIR)', remit:true, re:[/^due to bir$/i] },
+  { id:'gsis', title:'GSIS and HDMF remittances', remit:true, re:[/^due to gsis$/i,/^due to pag-?ibig$/i] },
+  { id:'philhealth', title:'Premium contributions and remittance to PhilHealth', remit:true, re:[/^due to philhealth$/i] },
+  { id:'oda', title:'Foreign-assisted projects / Official Development Assistance (ODA)', fixed:'Not Applicable' },
+  { id:'ntf', title:'National Task Force to End Local Communist Armed Conflict (NTF-ELCAC) Funds', fixed:'Not Applicable' },
+  { id:'bdp', title:'LGSP – Support to Barangay Development Program of the NTF-ELCAC', fixed:'Not Applicable' },
+  { id:'df20', title:'20% Development Fund', fixed:'Applicable' },
+  { id:'casuals', title:'Payments to casuals, job order, contractuals and consultants', re:[/^salaries and wages\s*-?\s*casual\/?\s*contractual$/i,/^labor and wages\b/i,/\bjob orders?\b/i,/^direct labor$/i,/^consultancy services$/i] },
+  { id:'ldrrm', title:'LDRRM Funds / QRF', re:[/^trust liabilities\s*-?\s*(disaster risk reduction and management fund|drrm|drrmf)\b/i,/\bl?drrmf\b/i] },
+  { id:'gad', title:'Gender and Development (GAD) Funds', fixed:'Applicable' }
+];
+const C6_SRC = { tb:'Suggested from trial balance', default:'Suggested by default', none:'No trial balance yet', auditor:'Set by auditor' };
 
 const norm = s => String(s || '').replace(/[–—]/g,'-').replace(/\s+/g,' ').trim();
 const isFocusAccount = (a,f) => f.re.some(re => re.test(norm(a.title)));
@@ -92,9 +95,24 @@ function omaData(F) {
   }));
 }
 
+function c6Data(F) {
+  const accts = allAccounts(F), saved = (F.rec && F.rec.c6) || {};
+  return C6.map(x => {
+    const tb = x.re ? accts.filter(a => x.re.some(re => re.test(norm(a.a.title)))) : [];
+    const due = x.remit ? tb : [];
+    const suggested = x.fixed || (!accts.length ? 'For Verification' : tb.length ? 'Applicable' : 'Not Applicable');
+    const o = saved[x.id] && saved[x.id].status ? saved[x.id] : null;
+    return { ...x, cls:'Financial Issue', c6:true, rows:[], tb, due, cy:due.reduce((s,r)=>s+r.cy,0), py:due.reduce((s,r)=>s+r.py,0),
+      suggested, src: o ? 'auditor' : x.fixed ? 'default' : accts.length ? 'tb' : 'none',
+      status: o ? o.status : suggested, reason: o && o.status === 'Not Applicable' ? (o.reason || '') : '' };
+  });
+}
+
+// A C.6 item answers for its Due to accounts; the others for their lead schedule rows.
+const acctRows = item => (item.c6 ? item.due : item.rows) || [];
 function relatedAoms(item, ctx) {
-  const keys = new Set((item.rows || []).map(r => r.k));
-  const codes = new Set((item.rows || []).map(r => r.a.code));
+  const keys = new Set(acctRows(item).map(r => r.k));
+  const codes = new Set(acctRows(item).map(r => r.a.code));
   return (ctx.aoms || []).filter(a => {
     const d = a.data || {};
     return (d.wpDef && d.wpDef.accounts || []).some(k => keys.has(k)) || (d.flagCodes || []).some(code => codes.has(code));
@@ -111,7 +129,8 @@ function workingPapersFor(item, F, ctx) {
     }
   });
   ((F.rec && F.rec.wps) || []).forEach(w => {
-    if ((w.accounts || []).some(k => (item.rows || []).some(r => r.k === k)) && !seen.has(w.ref)) {
+    const mine = item.c6 ? w.c6 === item.id : (w.accounts || []).some(k => (item.rows || []).some(r => r.k === k));
+    if (mine && !seen.has(w.ref)) {
       seen.add(w.ref);
       const b = w.wpb || {};
       out.push({ ref:w.ref, title:w.title || 'Supporting Working Paper', status:b.revBy ? 'Reviewed' : b.result ? 'Completed' : 'Draft', kind:'supporting' });
@@ -165,30 +184,50 @@ function leadPanel(cur, F, refs) {
     </tbody></table>` : ''}`;
 }
 
+function c6Panel(cur, F, canEdit) {
+  const src = C6_SRC[cur.src] + (cur.src === 'auditor' && cur.suggested !== cur.status ? ` · suggested: ${cur.suggested}` : '');
+  const opts = [['', `Use suggestion (${cur.suggested})`], ['Applicable','Applicable'], ['Not Applicable','Not Applicable'], ['For Verification','For Verification']];
+  const v = cur.src === 'auditor' ? cur.status : '';
+  const tbList = cur.tb.length && !cur.due.length ? `<h3>Trial Balance Accounts</h3><table class="pf ls-lines"><thead><tr><th>Account</th><th class="n">CY ${esc(F.y)}</th></tr></thead><tbody>
+      ${cur.tb.map(r=>`<tr><td><span class="mono">${esc(r.a.code)}</span><br>${esc(r.a.title)}</td><td class="n">${money(r.cy)}</td></tr>`).join('')}</tbody></table>` : '';
+  return `<h3>Applicability</h3><div class="c6-app">
+      <div class="c6-src">${esc(src)}</div>
+      ${cur.reason ? `<div class="c6-reason"><b>Reason:</b> ${esc(cur.reason)}</div>` : ''}
+      ${canEdit ? `<select class="sel" id="c6-status" aria-label="Applicability">${opts.map(([k,l])=>`<option value="${esc(k)}"${k===v?' selected':''}>${esc(l)}</option>`).join('')}</select>
+        <textarea class="input wp-ta" id="c6-reason" rows="2" maxlength="200" placeholder="Why is this not applicable? (required)" aria-label="Reason"${v==='Not Applicable'?'':' hidden'}>${esc(cur.reason)}</textarea>
+        <div><button class="btn sm ghost" type="button" id="c6-save">Save Applicability</button></div>` : ''}
+    </div>
+    ${cur.due.length ? `<h3>${esc(cur.due.map(r=>r.a.title).join(' / '))}</h3>${leadPanel({ rows:cur.due, cy:cur.cy, py:cur.py }, F, {})}` : cur.remit ? '<h3>Due to Balance</h3><div class="empty" style="padding:12px 6px">No Due to balance in the trial balance.</div>' : ''}
+    ${tbList}`;
+}
+
 export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
   const cat = ['focus','c6','oma'].includes(q.get('cat')) ? q.get('cat') : 'focus';
-  const focus = focusData(F), oma = omaData(F);
-  const all = cat==='focus' ? focus : cat==='c6' ? C6.map(x=>({...x,cls:'Financial Issue',rows:[],status:'For Review'})) : oma;
+  const focus = focusData(F), oma = omaData(F), c6 = c6Data(F);
+  const all = cat==='focus' ? focus : cat==='c6' ? c6 : oma;
   // Applicability filter. The audit foci open on Applicable so the 16 or so not-applicable rows stay out of the way.
   const FILTERS = { all:'All', app:'Applicable', na:'Not Applicable', ver:'For Verification' };
-  const f = cat==='focus' ? (FILTERS[q.get('f')] ? q.get('f') : 'app') : 'all';
+  const chips = cat==='focus' || cat==='c6';
+  const f = chips && FILTERS[q.get('f')] ? q.get('f') : cat==='focus' ? 'app' : 'all';
   const match = (x) => f==='all' || (f==='app' && x.status==='Applicable') || (f==='na' && x.status==='Not Applicable') || (f==='ver' && x.status==='For Verification');
   const list = all.filter(match);
   const selectedId = q.get('item') || (list[0] && list[0].id);
   const cur = all.find(x=>x.id===selectedId) || list[0] || null;
   const refs = wpRefs(F,ctx);
   const wps = cur ? workingPapersFor(cur,F,ctx) : [];
-  const counts = cat==='focus' ? {
-    all:focus.length,
-    app:focus.filter(x=>x.status==='Applicable').length,
-    na:focus.filter(x=>x.status==='Not Applicable').length,
-    ver:focus.filter(x=>x.status==='For Verification').length
+  const counts = chips ? {
+    all:all.length,
+    app:all.filter(x=>x.status==='Applicable').length,
+    na:all.filter(x=>x.status==='Not Applicable').length,
+    ver:all.filter(x=>x.status==='For Verification').length
   } : null;
 
   const catLink=(k)=>`${base}&s=leads&cat=${k}`;
   const fLink=(k)=>`${base}&s=leads&cat=${cat}&f=${k}`;
-  const rowLink=(x)=>`${base}&s=leads&cat=${cat}${cat==='focus'?`&f=${f}`:''}&item=${encodeURIComponent(x.id)}`;
-  const canAddWp = canEdit && cur && cur.status!=='Not Applicable' && cur.rows && cur.rows.length;
+  const rowLink=(x)=>`${base}&s=leads&cat=${cat}${chips?`&f=${f}`:''}&item=${encodeURIComponent(x.id)}`;
+  // C.6 items have no lead schedule rows of their own; any applicable one can take a working paper.
+  const canAddWp = canEdit && cur && (cur.c6 ? cur.status==='Applicable' : cur.status!=='Not Applicable' && cur.rows && cur.rows.length);
+  const small = (x) => { const r = x.c6 ? x.tb : x.rows; return r && r.length===1 ? `<small>${esc(r[0].a.code)}</small>` : r && r.length>1 ? `<small>${r.length} accounts</small>` : ''; };
 
   const body = `<div class="fa-head"><div><h1>C. Financial Audit</h1><p>Review and assess material accounts and other financial matters.</p></div>
     <div class="btn-row"><button class="btn sm ghost" id="ls-print" type="button">Print</button><button class="btn sm primary" id="ls-xl" type="button">Export to Excel</button></div></div>
@@ -205,16 +244,16 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         </div>
         <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Applicability</th><th>Audit Result</th></tr></thead><tbody>
           ${list.map((x,i)=>`<tr data-fa-row data-fa-href="${rowLink(x)}" data-fa-result-value="${esc(auditResultOf(x,cat,F,ctx))}" data-fa-text="${esc((x.title+' '+(x.cls||'')).toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
-            <td>${cat==='focus'?esc(x.id):i+1}</td><td><a class="fa-link" href="${rowLink(x)}">${esc(x.title)}</a>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:x.rows&&x.rows.length>1?`<small>${x.rows.length} accounts</small>`:''}</td><td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td>${auditResultHTML(x,cat,F,ctx,canEdit)}</td></tr>`).join('')}
-          ${!list.length?`<tr><td colspan="4"><div class="empty">${cat==='focus'&&f!=='all'?`No ${esc(FILTERS[f].toLowerCase())} items. <a href="${fLink('all')}">Show all</a>`:'No accounts are currently listed here.'}</div></td></tr>`:''}
+            <td>${cat==='focus'?esc(x.id):cat==='c6'?C6.findIndex(y=>y.id===x.id)+1:i+1}</td><td><a class="fa-link" href="${rowLink(x)}">${esc(x.title)}</a>${small(x)}</td><td>${statusPill(x.status)}</td><td>${auditResultHTML(x,cat,F,ctx,canEdit)}</td></tr>`).join('')}
+          ${!list.length?`<tr><td colspan="4"><div class="empty">${chips&&f!=='all'?`No ${esc(FILTERS[f].toLowerCase())} items. <a href="${fLink('all')}">Show all</a>`:'No accounts are currently listed here.'}</div></td></tr>`:''}
         </tbody></table>
       </div></section>
       <aside class="panel fa-wp"><div class="panel-body">
-        ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2><div class="fa-wp-meta">${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}${statusPill(cur.status==='For Review'?'For Verification':cur.status)}</div></div></div>
-          ${cat!=='c6'?`<h3>Lead Schedule</h3>${leadPanel(cur,F,refs)}`:''}
+        ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2><div class="fa-wp-meta">${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}${statusPill(cur.status)}</div></div></div>
+          ${cur.c6?c6Panel(cur,F,canEdit):`<h3>Lead Schedule</h3>${leadPanel(cur,F,refs)}`}
           <div class="fa-wp-sub"><h3>Working Papers <span>${wps.length}</span></h3>${canAddWp?`<button class="btn sm primary" type="button" id="fa-newwp">+ Add Working Paper</button>`:''}</div>
           ${wps.length?`<div class="wp-list">${wps.map((w,i)=>`<button type="button" class="wp-item" data-wp-open="${i}"><span><b>${esc(w.ref)}</b><span>${esc(w.title)}</span></span>${pill(w.status, w.status==='Reviewed'||w.status==='Completed'?'ok':w.kind==='aom'?'violet':'grey')}</button>`).join('')}</div>`
-            :`<div class="empty" style="padding:18px 6px">No working paper yet.${canAddWp?`<br><span class="hint">Suggested: <b>${esc(wpTemplate(cur.id).title)}</b></span>`:''}</div>`}`
+            :`<div class="empty" style="padding:18px 6px">No working paper yet.${canAddWp?`<br><span class="hint">Suggested: <b>${esc(wpTemplate(cur.id).title)}</b></span>`:cur.c6&&canEdit?`<br><span class="hint">Set it to Applicable to add a working paper.</span>`:''}</div>`}`
           :'<div class="empty">Select an item to view its lead schedule and working papers.</div>'}
       </div></aside>
     </div>`;
@@ -222,6 +261,8 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
   return {
     body,
     mount(root) {
+      const c6Head=['#','Other Financial Related Issue','Applicability','Basis','Reason','Audit Result','Working Papers'];
+      const c6Rows=()=>c6.map((x,i)=>[i+1,x.title,x.status,C6_SRC[x.src],x.reason,auditResultOf(x,'c6',F,ctx)||'—',workingPapersFor(x,F,ctx).map(w=>w.ref).join(', ')]);
       const saveRec = async (patch) => {
         const rec = (await loadFsRec(F.lguId,F.y)) || { type:'fs',teamId:ctx.teamId,lguId:F.lguId,year:F.y,auditId:ctx.rec.id };
         await store.save('letters',fsId(F.lguId,F.y),{...rec,...patch(rec)},{silent:true}); emitChange('local');
@@ -231,6 +272,16 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
       if(s) s.oninput=applyFilters; if(rf) rf.onchange=applyFilters;
       // The whole row opens the account, like a link.
       $$('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
+      const cs=$('#c6-status',root), cr=$('#c6-reason',root);
+      if(cs&&cur&&cur.c6){
+        cs.onchange=()=>{ cr.hidden=cs.value!=='Not Applicable'; if(!cr.hidden) cr.focus(); };
+        $('#c6-save',root).onclick=async()=>{
+          const status=cs.value, reason=cr.value.trim();
+          if(status==='Not Applicable'&&!reason){ toast('Give a short reason why this is not applicable.','bad'); cr.hidden=false; cr.focus(); return; }
+          await saveRec(r=>{ const c={...(r.c6||{})}; if(status) c[cur.id]={status,reason:status==='Not Applicable'?reason:''}; else delete c[cur.id]; return {c6:c}; });
+          toast(status?'Applicability saved.':'Applicability reset to the suggestion.','ok');
+        };
+      }
       $$('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
 
       const editWp = async (ref) => {
@@ -246,6 +297,7 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
 
       const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
         const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:wpTemplate(cur.id).title}); if(!w)return;
+        if (cur.c6) w.c6 = cur.id;
         w.wpb = newBody(cur.id, me);
         await saveRec(r=>({wps:[...(r.wps||[]),w],auditResults:{...(r.auditResults||{}),[resultKey(cat,cur)]:'In Progress'}})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
         F.rec = { ...(F.rec||{}), wps:[...((F.rec&&F.rec.wps)||[]), w] };
@@ -258,11 +310,20 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
       }; });
       $('#ls-xl',root).onclick=async()=>{
         const XLSX=await loadScript('lib/xlsx.full.min.js','XLSX'); const wb=XLSX.utils.book_new();
+        if(cat==='c6'){
+          const ws=XLSX.utils.aoa_to_sheet([['Other Financial Related Issues'],[],c6Head,...c6Rows()]); ws['!cols']=[{wch:5},{wch:60},{wch:18},{wch:28},{wch:40},{wch:16},{wch:16}];
+          XLSX.utils.book_append_sheet(wb,ws,'C.6 Checklist'); XLSX.writeFile(wb,`Other Financial Related Issues ${ctx.lgu.name} ${F.y}.xlsx`); return;
+        }
         const src=cat==='focus'?focus:cat==='oma'?oma:[];
         src.forEach((x,i)=>{ if(!x.rows||!x.rows.length)return; const aoa=[[x.title],['Code','Account Title',`CY ${F.y}`,`CY ${F.yp}`,'Change','WP Ref.'],...x.rows.map(r=>[r.a.code,r.a.title,r.cy/100,r.py/100,(r.cy-r.py)/100,(refs[r.k]||{}).ref||''])]; const ws=XLSX.utils.aoa_to_sheet(aoa); ws['!cols']=[{wch:16},{wch:50},{wch:16},{wch:16},{wch:16},{wch:14}]; XLSX.utils.book_append_sheet(wb,ws,`${i+1} ${x.title.replace(/[\\/?*[\]:]/g,'')}`.slice(0,31));});
         XLSX.writeFile(wb,`Financial Audit ${ctx.lgu.name} ${F.y}.xlsx`);
       };
       $('#ls-print',root).onclick=()=>{
+        if(cat==='c6'){
+          const css='.pg{padding:.6in;font:11pt "Times New Roman",serif}.pg table{width:100%;border-collapse:collapse}.pg th,.pg td{border-bottom:1px solid #999;padding:4px;text-align:left;vertical-align:top}';
+          printPages(css,`<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Other Financial Related Issues · CY ${esc(F.y)}</p><table><thead><tr>${c6Head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${c6Rows().map(r=>`<tr>${r.map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`,`Financial Audit · ${ctx.lgu.name}`);
+          return;
+        }
         if(!cur||!cur.rows||!cur.rows.length){ toast('Select an applicable account with balances to print its lead schedule.','bad'); return; }
         const css='.pg{padding:.6in;font:11pt "Times New Roman",serif}.pg table{width:100%;border-collapse:collapse}.pg th,.pg td{border-bottom:1px solid #999;padding:4px}.pg .n{text-align:right}';
         printPages(css,`<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Lead Schedule · ${esc(cur.title)}</p>${detailTable(cur,F,refs)}</div>`,`Financial Audit · ${ctx.lgu.name}`);

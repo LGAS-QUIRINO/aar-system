@@ -667,5 +667,15 @@ body.has-pdfside .main{margin-right:44vw}
 .wp-tbl{overflow-x:auto}
 .wp-tbl .input{height:32px;font-size:13px;padding:0 8px}
 .wp-age{white-space:nowrap;vertical-align:middle}
+.wp-tbl td:has(.wp-fixed),.wp-tbl td:has(.wp-calc){vertical-align:middle}
+.wp-fixed{white-space:nowrap;font-weight:600;color:var(--navy)}
+.wp-calc{display:block;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.wp-tbl .sel{height:32px;font-size:13px}
+/* Other Financial Related Issues: applicability */
+.c6-app{display:flex;flex-direction:column;gap:8px}
+.c6-app .sel{height:34px;border:1px solid #C9D3DD;border-radius:var(--radius);padding:0 8px;background:#fff;font-size:13px}
+.c6-app .wp-ta{min-height:0}
+.c6-src{font-size:12px;color:var(--muted)}
+.c6-reason{font-size:13px;background:var(--soft);border-radius:8px;padding:8px 10px;color:var(--ink-2)}
 @media (max-width:1100px){.fa-grid{grid-template-columns:1fr}.fa-wp{position:static}}
 @media (max-width:640px){.fa-search{width:100%}.fa-search .input{flex:1;width:auto}}
