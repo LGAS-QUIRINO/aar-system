@@ -281,13 +281,12 @@ export const NOTES_CSS = `${FS_CSS}
 .nts .pi{font-style:italic;margin:4pt 0 0}
 .nts .pc{margin:2pt 0 4pt}
 .nts .pi2{margin:8pt 0 4pt}
-.nts table.amt{width:100%;border-collapse:collapse;margin:2pt 0 10pt;table-layout:fixed}
-.nts table.amt td{padding:1pt 0;vertical-align:bottom}
-.nts table.amt td.t{padding-left:.25in}
-.nts table.amt td.py{width:.18in}.nts table.amt td.a{width:1.2in;text-align:right;white-space:nowrap}.nts table.amt td.gp{width:.2in}
-.nts table.amt tr.yr td{font-weight:700;padding-bottom:4pt}.nts table.amt tr.yr td.t{padding-left:0}
-.nts table.amt tr.tot td{font-weight:700}.nts table.amt tr.tot td.t{padding-left:0}
-.nts table.amt tr.tot td.a{border-top:1px solid #000;border-bottom:3px double #000}
+.nts table.amt{width:100%;border-collapse:collapse;table-layout:fixed;margin:2pt 0 10pt}
+.nts table.amt th,.nts table.amt td{border:1px solid #000;padding:2pt 5pt;vertical-align:middle}
+.nts table.amt th{font-weight:700;text-align:center;background:#F2F2F2}
+.nts table.amt td.py{border-right:0;padding-right:0}
+.nts table.amt td.a{border-left:0;text-align:right;white-space:nowrap}
+.nts table.amt tr.tot td{font-weight:700}
 .nts table.lst{width:auto;margin:0 0 8pt .3in;border-collapse:collapse}.nts table.lst td{padding:0 12pt 0 0}
 .fsp.land{width:11in;height:8.5in;padding:.75in .7in .8in}
 .ppe{font-family:'Times New Roman',Tinos,Times,serif;font-size:8.5pt;line-height:1.2;color:#000}
@@ -347,7 +346,7 @@ export function notesPages(blocks) {
 const amtRow = (r, i) => {
   const peso = (i === 0 || r.tot) ? '₱' : '';
   const cell = (v) => `<td class="py">${v === null || v === undefined ? '' : peso}</td><td class="a">${v === null || v === undefined ? '' : money(v, { dash: '-' })}</td>`;
-  return `<tr class="${r.tot ? 'tot' : ''}"><td class="t">${escH(r.t)}</td>${cell(r.v[0])}<td class="gp"></td>${cell(r.v[1])}</tr>`;
+  return `<tr class="${r.tot ? 'tot' : ''}"><td>${escH(r.t)}</td>${cell(r.v[0])}${cell(r.v[1])}</tr>`;
 };
 const blockHTML = (b) => {
   const tx = escH(b.t);
@@ -359,8 +358,8 @@ const blockHTML = (b) => {
   if (b.k === 'pc') return `<div class="pc">${tx}</div>`;
   if (b.k === 'pi2') return `<div class="pi2">${tx}</div>`;
   if (b.k === 'list') return `<table class="lst"><tbody>${b.rows.map((r) => `<tr><td>${r.n}.</td><td>${escH(r.t)}</td><td>${escH(r.pos)}</td></tr>`).join('')}</tbody></table>`;
-  if (b.k === 'table') return `<table class="amt"><colgroup><col><col style="width:.18in"><col style="width:1.2in"><col style="width:.2in"><col style="width:.18in"><col style="width:1.2in"></colgroup><tbody>
-    <tr class="yr"><td class="t">${b.cont ? '' : 'Account'}</td><td class="py"></td><td class="a">${b.cols[0]}</td><td class="gp"></td><td class="py"></td><td class="a">${b.cols[1]}</td></tr>
+  if (b.k === 'table') return `<table class="amt"><colgroup><col><col style="width:.22in"><col style="width:1.15in"><col style="width:.22in"><col style="width:1.15in"></colgroup>
+    <thead><tr><th></th><th colspan="2">${b.cols[0]}</th><th colspan="2">${b.cols[1]}</th></tr></thead><tbody>
     ${b.rows.map((r, i) => amtRow(r, b.cont ? -1 : i)).join('')}</tbody></table>`;
   return `<p class="${b.tight ? 'tight' : ''}">${tx}</p>`;
 };
@@ -439,21 +438,23 @@ export async function notesSections(doc, start) {
       return;
     }
     if (b.k === 'table') {
-      const Wd = [4800, 260, 1730, 280, 260, 1670];   // 9,000 = 6.25"
+      const Wd = [5140, 300, 1630, 300, 1630];   // 9,000 = 6.25"
       const K = { keep: true };   // a table stays on one page in Word (each row kept with the next)
-      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: [pc([A('Account', { b: true })], Wd[0], K), pc([], Wd[1], K), pc([A(String(b.cols[0]), { b: true })], Wd[2], { al: AlignmentType.RIGHT, ...K }), pc([], Wd[3], K), pc([], Wd[4], K), pc([A(String(b.cols[1]), { b: true })], Wd[5], { al: AlignmentType.RIGHT, ...K })] })];
+      const g = (o = {}) => ({ top: line, bottom: line, left: o.l === false ? NONE : line, right: o.r === false ? NONE : line });
+      const gc = (kids2, w, o = {}) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: g(o), columnSpan: o.span, shading: o.fill ? { fill: o.fill } : undefined, margins: { top: 30, bottom: 30, left: o.l === false ? 0 : 90, right: o.r === false ? 0 : 90 },
+        children: [new Paragraph({ keepNext: !!o.keep, alignment: o.al || AlignmentType.LEFT, children: kids2 })] });
+      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: [gc([], Wd[0], { fill: 'F2F2F2', ...K }), gc([A(String(b.cols[0]), { b: true })], Wd[1] + Wd[2], { span: 2, al: AlignmentType.CENTER, fill: 'F2F2F2', ...K }), gc([A(String(b.cols[1]), { b: true })], Wd[3] + Wd[4], { span: 2, al: AlignmentType.CENTER, fill: 'F2F2F2', ...K })] })];
       b.rows.forEach((r, i) => {
-        const peso = i === 0 || r.tot, bd = r.tot ? { top: line, bottom: dbl } : {}, kp = i < b.rows.length - 1 && b.rows.length <= 20;
-        const cells = [pc([A(r.t, { b: r.tot })], Wd[0], { ind: r.tot ? 0 : 360, keep: kp })];
+        const peso = (i === 0 && !b.cont) || r.tot, kp = i < b.rows.length - 1 && b.rows.length <= 20;
+        const cells = [gc([A(r.t, { b: r.tot })], Wd[0], { keep: kp })];
         r.v.forEach((v, j) => {
           const has = v !== null && v !== undefined;
-          cells.push(pc([A(has && peso ? '₱' : '', { b: r.tot })], Wd[1 + j * 3], { keep: kp }));
-          cells.push(pc([A(has ? money(v, { dash: '-' }) : '', { b: r.tot })], Wd[2 + j * 3], { al: AlignmentType.RIGHT, bd: has ? bd : {}, keep: kp }));
-          if (j === 0) cells.push(pc([], Wd[3], { keep: kp }));
+          cells.push(gc([A(has && peso ? '₱' : '', { b: r.tot })], Wd[1 + j * 2], { r: false, keep: kp }));
+          cells.push(gc([A(has ? money(v, { dash: '-' }) : '', { b: r.tot })], Wd[2 + j * 2], { l: false, al: AlignmentType.RIGHT, keep: kp }));
         });
         rows.push(new TableRow({ cantSplit: true, children: cells }));
       });
-      kids.push(new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: Wd, borders: { ...nob, insideHorizontal: NONE, insideVertical: NONE }, rows }), new Paragraph({ spacing: { after: 160 }, children: [] }));
+      kids.push(new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: Wd, rows }), new Paragraph({ spacing: { after: 160 }, children: [] }));
       return;
     }
     const sp = { h: { before: 200, after: 120 }, h2: { before: 160, after: 60 }, h3: { before: 200, after: 80 } }[b.k] || { after: 120 };
