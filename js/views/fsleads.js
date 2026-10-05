@@ -186,7 +186,9 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
   const nApp = focus.filter(x=>x.status==='Applicable').length, nNa = focus.length - nApp;
   const result = cur ? auditResultOf(cur,cat,F,ctx) : '';
   const aoms = cur ? relatedAoms(cur, ctx, cat) : [];
-  const tpls = cur && result === 'With Finding' && !aoms.length && canEdit ? await activeTemplates('barangay') : [];
+  const tpls = cur && result === 'With Finding' && canEdit ? await activeTemplates('barangay') : [];
+  // Supporting working papers of the item (including ones already behind an AOM): any of them can fill an AOM.
+  const supWps = cur ? ((F.rec && F.rec.wps) || []).filter(w => w.item ? w.item === resultKey(cat,cur) : (w.accounts || []).some(k => (cur.rows || []).some(r => r.k === k))) : [];
 
   const link = (o) => { const p = { cat, f: cat==='focus' ? f : null, item: cur && cur.id, ...o }; return `${base}&s=leads` + Object.entries(p).filter(([,v])=>v!==null&&v!==undefined).map(([k,v])=>`&${k}=${encodeURIComponent(v)}`).join(''); };
   const tabLink = (k) => `${base}&s=leads&cat=${k}`;
@@ -228,15 +230,20 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
     const resHTML = applicable ? `<div class="fa-line fa-result-row"><span class="label">Audit Result</span>
         ${canEdit && !aoms.length ? `<div class="seg fa-res" role="group" aria-label="Audit Result">${['In Progress','No Findings','With Finding'].map(r=>`<button type="button" data-res="${r}" class="${result===r?'on r-'+RESULT_PILL[r]:''}">${r}</button>`).join('')}</div>` : resultPill(result)}</div>` : '';
     let aomHTML = '';
-    if (applicable && aoms.length) aomHTML = `<div class="fa-aom"><span class="label">AOM</span>${aoms.map(a=>`<div class="fa-aom-row"><span>${esc(a.data.poolCode?a.data.poolCode+' · ':'')}${esc(a.data.title)}</span><a href="#/audits/${esc(ctx.rec.id)}/findings?sel=${encodeURIComponent(a.id)}">Open in Findings</a></div>`).join('')}</div>`;
-    else if (applicable && result==='With Finding' && canEdit) {
-      const src = wps.find(w=>w.kind==='supporting' && w.imp) || wps.find(w=>w.kind==='supporting') || null;
+    if (applicable && (aoms.length || (result==='With Finding' && canEdit))) {
+      const used = new Set(aoms.map(a=>a.data.poolCode).filter(Boolean));
+      const avail = tpls.filter(t=>!used.has(t.code));
+      const src = supWps.find(w=>w.imp) || supWps[0] || null;
       const letters = src ? (/^WP-([A-Z]+)/i.exec(src.ref)||[])[1] : '';
-      const pick = (src && tpls.find(t=>t.wp===src.ref)) || (letters && tpls.find(t=>(/^WP-([A-Z]+)/i.exec(t.wp||'')||[])[1]===letters.toUpperCase())) || null;
-      aomHTML = `<div class="fa-aom"><div class="fa-line"><label class="label" for="fa-tpl">AOM</label>
-          <select class="sel" id="fa-tpl"><option value="">No matching AOM – blank finding</option>${tpls.map(t=>`<option value="${esc(t.id)}" ${pick===t?'selected':''}>${esc(t.code)} ${esc(t.title)}</option>`).join('')}</select></div>
-        <div class="hint">${src?(src.imp?`Filled from ${esc(src.ref)}: its imported values${Object.keys(src.imp.tables||{}).length?' and AOM Tables':''}.`:`${esc(src.ref)} has no imported Excel yet; you can import it later and the AOM will fill from it.`):'No working paper yet; the AOM can be drafted now and its working paper added later.'}</div>
-        <button class="btn sm primary" type="button" id="fa-draft" style="align-self:flex-end">Draft AOM</button></div>`;
+      const pick = (src && avail.find(t=>t.wp===src.ref)) || (letters && avail.find(t=>(/^WP-([A-Z]+)/i.exec(t.wp||'')||[])[1]===letters.toUpperCase())) || null;
+      const picker = canEdit ? `<div class="fa-pick" id="fa-pick" ${aoms.length?'hidden':''}>
+          <div class="fa-line"><label class="label" for="fa-tpl">${aoms.length?'Another AOM':'AOM'}</label>
+            <select class="sel" id="fa-tpl"><option value="">No matching AOM – blank finding</option>${avail.map(t=>`<option value="${esc(t.id)}" ${pick===t?'selected':''}>${esc(t.code)} ${esc(t.title)}</option>`).join('')}</select></div>
+          ${supWps.length>1?`<div class="fa-line"><label class="label" for="fa-src">Filled from</label><select class="sel" id="fa-src">${supWps.map(w=>`<option value="${esc(w.ref)}" ${src===w?'selected':''}>${esc(w.ref)} ${esc(w.title)}</option>`).join('')}<option value="">No working paper yet</option></select></div>`:''}
+          <div class="hint" id="fa-src-hint"></div>
+          <button class="btn sm primary" type="button" id="fa-draft" style="align-self:flex-end">Draft AOM</button></div>` : '';
+      aomHTML = `<div class="fa-aom">${aoms.length?`<span class="label">AOM</span>${aoms.map(a=>`<div class="fa-aom-row"><span>${esc(a.data.poolCode?a.data.poolCode+' · ':'')}${esc(a.data.title)}</span><a href="#/audits/${esc(ctx.rec.id)}/findings?sel=${encodeURIComponent(a.id)}">Open in Findings</a></div>`).join('')}
+          ${canEdit?'<button class="linkbtn" type="button" id="fa-another" style="align-self:flex-start">+ Draft another AOM</button>':''}`:''}${picker}</div>`;
     }
     panel = `<div class="fa-wp-head"><h2>${esc(cur.title)}</h2>${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}${cat==='oma'?`<div style="margin-top:6px">${appPill(cur.status)}</div>`:''}</div>
       ${appRow}${leadHTML}${wpHTML}${resHTML}${aomHTML}
@@ -319,9 +326,16 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         toast(`${w.ref}: ${impLine(imp).replace(/^Imported [^·]*· /,'')} imported.`,'ok');
       }; });
 
+      const srcOf=()=>{ const sel=$('#fa-src',root); if(!sel) return supWps.find(w=>w.imp)||supWps[0]||null; return supWps.find(w=>w.ref===sel.value)||null; };
+      const srcHint=()=>{ const h=$('#fa-src-hint',root); if(!h) return; const w=srcOf();
+        h.textContent = !w ? 'No working paper yet; the AOM can be drafted now and its working paper added later.'
+          : w.imp ? `Filled from ${w.ref}: its imported values${Object.keys(w.imp.tables||{}).length?' and AOM Tables':''}.`
+          : `${w.ref} has no imported Excel yet; you can import it later and the AOM will fill from it.`; };
+      srcHint(); const fs=$('#fa-src',root); if(fs) fs.onchange=srcHint;
+      const an=$('#fa-another',root); if(an) an.onclick=()=>{ const pk=$('#fa-pick',root); pk.hidden=!pk.hidden; an.textContent=pk.hidden?'+ Draft another AOM':'Cancel'; };
       const dr=$('#fa-draft',root); if(dr&&cur) dr.onclick=async()=>{
         const tid=$('#fa-tpl',root).value, t=tpls.find(x=>x.id===tid)||null;
-        const src=wps.find(w=>w.kind==='supporting'&&w.imp)||wps.find(w=>w.kind==='supporting')||null;
+        const sw=srcOf(), src=sw?{ ref:sw.ref, title:sw.title, imp:sw.imp||null, w:sw }:null;
         const now=new Date().toISOString();
         const data=t?fromTemplate(t):{...blankAom(),title:cur.title};
         const accounts=(cur.rows||[]).map(r=>r.k);
