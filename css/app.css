@@ -645,6 +645,9 @@ body.has-pdfside .main{margin-right:44vw}
 .fa-res button.on.r-ok{background:var(--ok-ink)} .fa-res button.on.r-bad{background:var(--bad-ink)}
 .fa-aom{background:var(--warn-bg);border:1px solid var(--warn-line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px}
 .fa-aom .sel{height:36px;border:1px solid #C9D3DD;border-radius:8px;padding:0 8px;background:#fff;font-size:13px;max-width:270px}
+.fa-pick{display:flex;flex-direction:column;gap:10px}
+.fa-pick[hidden]{display:none}
+.fa-aom-row+.fa-pick,.linkbtn+.fa-pick{border-top:1px solid var(--warn-line);padding-top:10px}
 .fa-aom-row{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px}
 .fa-ta{height:auto;padding:10px 12px;line-height:1.45;resize:vertical;font-family:var(--sans)}
 .fa-note{border-top:1px solid var(--line-2);padding-top:12px}

@@ -119,7 +119,7 @@ export async function findingsPanel({ F, ctx, me, base, canEdit }) {
       <tbody>${live.map(row).join('') || '<tr><td colspan="4"><div class="empty">Nothing flagged.</div></td></tr>'}</tbody></table>`}
     ${aside.length ? `<div style="margin-top:12px"><div class="label">Set aside · not a finding</div>${aside.map((f) => `<div class="lr-row" style="justify-content:flex-start;gap:8px;border-top:1px solid var(--line-2);padding:6px 0"><span><b>${esc(f.t)}</b>${f.amt ? ` ₱${money(f.amt)}` : ''} · “${esc(pf.set[f.id].reason)}” <span class="hint">${esc(nice(pf.set[f.id].byName || pf.set[f.id].by))}</span></span>${canEdit ? `<button class="reset" type="button" data-pfback="${esc(f.id)}">Put back</button>` : ''}</div>`).join('')}</div>` : ''}
     ${Object.keys(pf.del).length && canEdit ? `<div class="hint" style="margin-top:8px">${Object.keys(pf.del).length} with no balance deleted · <button class="reset" type="button" id="pf-undel">Put back</button></div>` : ''}
-    <p class="hint" style="margin:8px 0 0">Add to Findings makes a Draft AOM from the template with the amount filled in. The templates are linked to the flags in Admin › Flag Rules${has(me, 'sa') || has(me, 'admin') ? ' (<a href="#/flags">open</a>)' : ''}.</p></div></section>`;
+    <p class="hint" style="margin:8px 0 0">Add to Findings makes a Draft AOM from the template with the amount filled in. For a flag that is not a finding, use Not a finding and give the reason, so only undecided flags stay on the list. The templates are linked to the flags in Admin › Flag Rules${has(me, 'sa') || has(me, 'admin') ? ' (<a href="#/flags">open</a>)' : ''}.</p></div></section>`;
   return {
     body,
     mount(root) {
