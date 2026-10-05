@@ -2,6 +2,7 @@
 import { store, newId, emitChange } from '../store.js';
 import { esc, modal, toast, pill, $, $$ } from '../ui.js';
 import { ROLE_NAMES, nice, upper, longDate } from '../format.js';
+import { CONFIG, DEMO } from '../config.js';
 
 const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', 'State Auditor II', 'State Auditor I', 'Audit Examiner II', 'Audit Examiner I', 'Job Order'];
 const PERMS = [
@@ -46,10 +47,10 @@ export async function users(refs) {
       <span>• Users only see the LGUs assigned to their team. Only the Supervising Auditor and Admin see all teams.</span>
       <span>• <b>Same person as Audit Team Leader and Supervising Auditor</b> (Team 1 for now): their review becomes one step. When the roles are given to two people, the normal two-step review applies again automatically.</span>
       <span>• Removing a user keeps everything they did in the history.</span></div></section>
-    <section class="panel"><div class="panel-head"><h2>Test Data</h2></div><div class="panel-body" style="font-size:13px;line-height:1.5;gap:8px">
+    ${CONFIG.PRACTICE || DEMO ? `<section class="panel"><div class="panel-head"><h2>Test Data · Practice Copy Only</h2></div><div class="panel-body" style="font-size:13px;line-height:1.5;gap:8px">
       <span>Clears all audit work so testing can start from the beginning: audits, AOMs, trial balances and financial statements, SAOR, exit conference letters, BAARs and their reviews.</span>
       <span>Kept: users and teams, the LGU Master List, the AOM Library, the Chart of Accounts, Flag Rules, the standard wording and the activity log.</span>
-      <button class="btn ghost" type="button" id="clear-test">Clear Test Data…</button></div></section>
+      <button class="btn ghost" type="button" id="clear-test">Clear Test Data…</button></div></section>` : ''}
     </div></div>`;
 
   async function editUser(id) {
@@ -124,7 +125,7 @@ export async function users(refs) {
       $('#add-user', root).onclick = () => editUser(null);
       $$('[data-edit]', root).forEach((b) => { b.onclick = () => editUser(b.dataset.edit); });
       $$('[data-team]', root).forEach((b) => { b.onclick = () => editTeam(b.dataset.team); });
-      $('#clear-test', root).onclick = () => clearTestData(refs);
+      const ct = $('#clear-test', root); if (ct) ct.onclick = () => clearTestData(refs);
     }
   };
 }
@@ -133,6 +134,7 @@ export async function users(refs) {
 // Audit work only; reference lists, the AOM Library and saved standards stay. Marked deleted, so every device drops them on sync.
 const AUDIT_LETTERS = ['baar', 'baar-review-part', 'fs', 'tb', 'saor', 'exit', 'raomap'];
 async function clearTestData(refs) {
+  if (!(CONFIG.PRACTICE || DEMO)) return;   // never on the live copy
   const audits = await store.list('audits'), aoms = await store.list('aoms');
   const letters = (await store.list('letters')).filter((l) => AUDIT_LETTERS.includes(l.data.type));
   const total = audits.length + aoms.length + letters.length;
