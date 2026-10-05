@@ -17,7 +17,7 @@ import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
 import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
 import { fsPrint, fsSections } from '../baar-fs.js';
-import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule } from '../baar-notes.js';
+import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian, N1_WORKFORCE } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -168,7 +168,7 @@ function baarPages(ctx, L) {
   return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, next: notes + notesPageCount(notesOf(ctx, L)) };
 }
 // Part 07 · Notes to Financial Statements, from the confirmed trial balances and the details typed in Part 07.
-const notesOf = (ctx, L, N) => buildNotes(L.FS, N || L.B.notes || {}, { lgu: ctx.lgu, mun: ctx.mun });
+const notesOf = (ctx, L, N) => buildNotes(L.FS, N || L.B.notes || {}, { lgu: ctx.lgu, mun: ctx.mun, audit: ctx.audit });
 function notesPill(F, doc) {
   if (!F.figY.any) return pill('Not Started', 'grey');
   if (!F.confirmed) return pill('Not Confirmed', 'warn');
@@ -752,6 +752,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
   const doc0 = notesOf(ctx, L, N);
   const y = F.y, yp = F.yp;
   const hasPs = doc0.list.some((n) => n.id === 'ps'), hasInv = doc0.list.some((n) => n.id === 'inv');
+  const pbN = punongBarangay(audit), sgN = sanggunian(audit);
   const ppeCols = ppeSchedule(F, N.ppe);
   const v = (o, k) => esc((o || {})[k] ?? '');
   const amtIn = (path, val, label) => `<input class="input amt-in" data-n="${path}" value="${esc(val ?? '')}" aria-label="${esc(label)}" ${dis}>`;
@@ -765,9 +766,10 @@ export function notesPart({ ctx, me, refs, L, st }) {
     ${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>Note 1 · General Information</h2></div><div class="panel-body">
-        <div class="field"><label class="label" for="n-issued">Date the financial statements were issued</label><input class="input" id="n-issued" data-n="issued" value="${v(N, 'issued')}" placeholder="e.g. February 14, ${y + 1}" ${dis}></div>
-        <div class="field"><label class="label" for="n-loc">Location of the barangay</label><input class="input" id="n-loc" data-n="loc" value="${v(N, 'loc')}" placeholder="e.g. the northern part of ${esc(mun.name)}" ${dis}></div>
-        <div class="field"><label class="label" for="n-hall">Address of the barangay hall</label><input class="input" id="n-hall" data-n="hall" value="${v(N, 'hall')}" placeholder="Barangay ${esc(lgu.name)}, ${esc(mun.name)}, Quirino" ${dis}></div>
+        <div class="field"><label class="label" for="n-issued">Date the financial statements were issued</label><input class="input" id="n-issued" data-n="issued" value="${v(N, 'issued')}" placeholder="e.g. December 31, ${y}" ${dis}></div>
+        <div class="field"><label class="label" for="n-loc">Location of the barangay</label><input class="input" id="n-loc" data-n="loc" value="${v(N, 'loc')}" placeholder="e.g. the Western part of ${esc(mun.name)}" ${dis}></div>
+        <div class="field"><label class="label" for="n-wf">Workforce, after the elective officials</label><input class="input" id="n-wf" data-n="workforce" value="${esc(N.workforce ?? N1_WORKFORCE)}" ${dis}></div>
+        <div class="lr-row" style="border-top:1px solid var(--line-2);padding-top:10px"><span><span class="label" style="margin:0">Punong Barangay and Sanggunian</span><br><span class="hint">${esc([pbN.title, pbN.name].filter(Boolean).join(' ')) || 'No Punong Barangay'} · ${sgN.length} member${sgN.length === 1 ? '' : 's'} of the Sanggunian, from Setup</span></span><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/setup">Edit in Setup</a></div>
       </div></section>
       ${hasPs ? `<section class="panel"><div class="panel-head"><h2>Remuneration of Key Management Personnel</h2></div><div class="panel-body">
         <table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></section>` : ''}

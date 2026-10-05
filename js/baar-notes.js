@@ -7,12 +7,14 @@ import { loadScript } from './wp.js';
 import { money, cents, parseAmt } from './fs.js';
 import { LINE } from './coa.js';
 import { FS_CSS } from './baar-fs.js';
+import { punongBarangay } from './baar-transmittal.js';
 
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const amtOf = (v) => { const n = parseAmt(v); return n === null || isNaN(n) ? null : cents(n); };
 
 /* ── Standard wording (Annex 40) ── */
-export const N1_SERVICES = 'agricultural support services; health and social welfare services; services and facilities related to general hygiene and sanitation, beautification, and solid waste collection; maintenance of katarungan pambarangay; maintenance of barangay roads and bridges and water supply systems; infrastructure facilities; information and reading center; and satellite or public market';
+export const N1_SERVICES = 'Agricultural support services; Health and Social welfare service; Services and facilities related to general Hygiene and Sanitation, Beautification, and Solid Waste Collection; Maintenance of Katarungang Pambarangay; maintenance of Barangay roads and Bridges and Water Supply Systems; Infrastructure facilities; Information and Reading Center; and Satellite or Public Market within the premises of the Barangay hall';
+export const N1_WORKFORCE = "a Barangay Secretary, a Barangay Treasurer, BPAT's, Driver, BHW/BNS, Utility Workers";
 const N21 = [
   'The financial statements have been prepared in accordance with and comply with the Philippine Public Sector Accounting Standards. The financial statements are presented in Peso and the figures are rounded to the nearest pesos.',
   'The financial statements are prepared on the basis of historical cost. The cash flow statement is prepared using the direct method. The Statement of Comparison of Budget and Actual Amounts is presented according to the classification adopted for budgeting purposes.'
@@ -100,6 +102,13 @@ export function ppeClass(title) {
   return 'oth';
 }
 
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const inWords = (n) => `${WORDS[n] || n} (${n})`;
+// The Sanggunian from Setup: the Kagawads and the SK Chairperson with names, as encoded.
+export function sanggunian(audit) {
+  return (audit.kagawads || []).filter((k) => String(k.name || '').trim()).map((k) => ({ name: String(k.name).trim(), pos: k.pos || 'Barangay Kagawad' }));
+}
+
 /* ── Building ── */
 function accountsOf(F) {
   const keys = new Set([...Object.keys(F.figY.accts || {}), ...Object.keys(F.figP.accts || {})]);
@@ -180,14 +189,20 @@ export function ppeSchedule(F, P = {}) {
  * The whole Part 07. N: the typed details { loc, hall, issued, km: { pb: { cy, py }, … }, inv: { rec, wd }, ppe: { land: { pa, … } } }.
  * Returns { blocks (portrait), ppe (landscape schedule or null), checks, ctx }.
  */
-export function buildNotes(F, N = {}, { lgu, mun }) {
+export function buildNotes(F, N = {}, { lgu, mun, audit }) {
   const y = F.y, yp = F.yp, name = `Barangay ${lgu.name}`;
   const { list, by, num } = presentNotes(F);
   const blocks = [];
   blocks.push({ k: 'title', t: 'Notes to the Financial Statements' });
   blocks.push({ k: 'h', t: '1. General Information' });
-  const issued = String(N.issued || '').trim(), loc = String(N.loc || '').trim(), hall = String(N.hall || '').trim() || `${name}, ${mun.name}, Quirino`;
-  blocks.push({ k: 'p', t: `The financial statements of ${name} ${issued ? `were issued on ${issued}` : 'were issued'}. ${name} is located ${loc ? `in ${loc}` : `in ${mun.name}, Quirino`}, and the barangay hall is located in ${hall}. The barangay exercises the functions and responsibilities necessary for the efficient and effective provision of the following basic services: ${N1_SERVICES}.` });
+  // Balligui form: where the barangay is, its services, its workforce, the Punong Barangay and the Sanggunian (from Setup).
+  const issued = String(N.issued || '').trim(), loc = String(N.loc || '').trim();
+  const wf = String(N.workforce ?? '').trim() || N1_WORKFORCE;
+  const pb = punongBarangay(audit || {}), pbName = [pb.title, pb.name].filter(Boolean).join(' ').trim();
+  const sg = sanggunian(audit || {});
+  const elective = 1 + sg.filter((k) => /kagawad/i.test(k.pos)).length;
+  blocks.push({ k: 'p', t: `The financial statements of ${name} were issued${issued ? ` on ${issued}` : ''}. ${lgu.name} is located ${loc ? `in ${loc}` : `in ${mun.name}, Quirino`}. The Barangay exercises the following functions and responsibilities for the efficient and effective delivery of basic services such as: ${N1_SERVICES}. The total workforce of the Barangay consists of ${inWords(elective)} elective officials, ${wf}. It is headed by ${pbName || 'the Punong Barangay'}${sg.length ? ' and the Barangay Sanggunian are as follows:' : '.'}`, keep: !!sg.length });
+  if (sg.length) blocks.push({ k: 'list', rows: sg.map((k, i) => ({ n: i + 1, t: k.name, pos: k.pos })) });
   blocks.push({ k: 'h', t: '2.1 Statement of compliance and basis of preparation' });
   N21.forEach((x) => blocks.push({ k: 'p', t: x }));
   blocks.push({ k: 'h', t: '2.2 Summary of Significant Accounting Policies' });
@@ -231,6 +246,8 @@ export function buildNotes(F, N = {}, { lgu, mun }) {
   else {
     checks.push(issued ? { st: 'ok', t: `Note 1: date issued (${issued})` } : { st: 'warn', t: 'Note 1: type the date the financial statements were issued' });
     checks.push(loc ? { st: 'ok', t: 'Note 1: location of the barangay' } : { st: 'warn', t: 'Note 1: type where the barangay is located' });
+    checks.push(pbName && pb.name ? { st: 'ok', t: `Note 1: headed by ${pbName} (from Setup)` } : { st: 'warn', t: 'Note 1: no Punong Barangay in Setup' });
+    checks.push(sg.length ? { st: 'ok', t: `Note 1: ${sg.length} members of the Sanggunian (from Setup)` } : { st: 'warn', t: 'Note 1: no Kagawads in Setup' });
     if (by.ps.length) {
       const km = N.km || {}, filled = KM.filter(([k]) => amtOf((km[k] || {}).cy) !== null).length;
       checks.push(filled === KM.length ? { st: 'ok', t: `Note ${num.ps} b: remuneration of key management personnel` } : { st: 'warn', t: `Note ${num.ps} b: remuneration of key management personnel, ${KM.length - filled} of ${KM.length} not yet typed for CY ${y}` });
@@ -265,6 +282,7 @@ export const NOTES_CSS = `${FS_CSS}
 .nts th{text-align:center}
 .nts td.a{text-align:right;white-space:nowrap}
 .nts tr.tot td{font-weight:700}
+.nts table.lst{width:auto;margin:0 0 8pt .3in}.nts table.lst td{border:0;padding:0 8pt 0 0}
 .fsp.land{width:11in;height:8.5in;padding:.75in .7in .8in}
 .ppe{font-family:Arial,Helvetica,sans-serif;font-size:8pt;line-height:1.2;color:#000}
 .ppe .h2{font-size:10pt;margin:0 0 8pt}
@@ -278,6 +296,7 @@ export const NOTES_CSS = `${FS_CSS}
 // Lines a block takes, to lay out pages (about 48 lines a page).
 const CAP = 48, W = 92;
 const lines = (b) => {
+  if (b.k === 'list') return b.rows.length + 0.5;
   if (b.k === 'table') return 1.4 + b.rows.reduce((s, r) => s + Math.max(1, Math.ceil(r.t.length / 52)) * 1.25, 0);
   const n = Math.max(1, Math.ceil(String(b.t).length / W));
   return n + (b.k === 'h' ? 1.6 : b.k === 'title' ? 1.6 : b.k === 'h2' ? 1 : 0.5);
@@ -325,6 +344,7 @@ const blockHTML = (b, ppePage) => {
   if (b.k === 'pi') return `<div class="pi">${tx}</div>`;
   if (b.k === 'pc') return `<div class="pc">${tx}</div>`;
   if (b.k === 'pi2') return `<div class="pi2">${tx}</div>`;
+  if (b.k === 'list') return `<table class="lst"><colgroup><col style="width:.5in"><col style="width:3in"><col></colgroup><tbody>${b.rows.map((r) => `<tr><td>${r.n}.</td><td>${escH(r.t)}</td><td>${escH(r.pos)}</td></tr>`).join('')}</tbody></table>`;
   if (b.k === 'table') return `<table><colgroup><col><col style="width:1.45in"><col style="width:1.45in"></colgroup><thead><tr><th></th><th>${b.cols[0]}</th><th>${b.cols[1]}</th></tr></thead><tbody>${b.rows.map((r) => `<tr class="${r.tot ? 'tot' : ''}"><td>${escH(r.t)}</td><td class="a">${r.v[0] === null ? '' : money(r.v[0], { dash: '-' })}</td><td class="a">${r.v[1] === null ? '' : money(r.v[1], { dash: '-' })}</td></tr>`).join('')}</tbody></table>`;
   return `<p class="${b.tight ? 'tight' : ''}">${tx}</p>`;
 };
@@ -385,6 +405,14 @@ export async function notesSections(doc, start) {
   const kids = [];
   doc.blocks.forEach((b) => {
     const tx = b.ppeRef ? b.t.replace('[PPE_PAGE]', ppePage || '') : b.t;
+    if (b.k === 'list') {
+      const Wd = [600, 4300, 3600];
+      const nob = { top: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, left: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' }, right: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' } };
+      const c = (tx, w) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: nob, children: [new Paragraph({ children: [A(tx)] })] });
+      kids.push(new Table({ width: { size: 8500, type: WidthType.DXA }, columnWidths: Wd, indent: { size: 432, type: WidthType.DXA }, borders: { ...nob, insideHorizontal: nob.top, insideVertical: nob.top },
+        rows: b.rows.map((r) => new TableRow({ cantSplit: true, children: [c(`${r.n}.`, Wd[0]), c(r.t, Wd[1]), c(r.pos, Wd[2])] })) }), new Paragraph({ spacing: { after: 120 }, children: [] }));
+      return;
+    }
     if (b.k === 'table') {
       const Wd = [5400, 1800, 1800];
       const rows = [new TableRow({ tableHeader: true, children: [cell('', Wd[0]), cell(String(b.cols[0]), Wd[1], { al: AlignmentType.CENTER }), cell(String(b.cols[1]), Wd[2], { al: AlignmentType.CENTER })] }),
