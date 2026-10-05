@@ -400,6 +400,7 @@ export async function baar(refs, params, q) {
       }
       const changed = () => { if (!canEdit) return; setDirty(true, save); draw(); };
       root.querySelector('.xform').addEventListener('input', changed);
+      $$('details.acc', root).forEach((d) => { d.addEventListener('toggle', () => { if (d.open) OPEN07.add(d.dataset.acc); else OPEN07.delete(d.dataset.acc); }); });
       root.querySelector('.xform').addEventListener('change', changed);
       $$('[data-op]', root).forEach((b) => { b.onclick = () => {
         keepOp(); op = b.dataset.op;
@@ -598,6 +599,7 @@ function iarPart({ ctx, me, refs, L, st }) {
       }
       const changed = () => { if (!canEdit) return; setDirty(true, save); draw(); };
       root.querySelector('.xform').addEventListener('input', changed);
+      $$('details.acc', root).forEach((d) => { d.addEventListener('toggle', () => { if (d.open) OPEN07.add(d.dataset.acc); else OPEN07.delete(d.dataset.acc); }); });
       root.querySelector('.xform').addEventListener('change', changed);
       $$('[data-op]', root).forEach((b) => { b.onclick = () => {
         keepOp(); op = b.dataset.op;
@@ -741,6 +743,7 @@ function smrPart({ ctx, me, refs, L, st }) {
 }
 
 /* ── Part 07 · Notes to Financial Statements ── */
+const OPEN07 = new Set();   // the boxes left open, kept while moving around the app
 export function notesPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const F = L.FS;
@@ -765,24 +768,24 @@ export function notesPart({ ctx, me, refs, L, st }) {
     <div class="topnote">The notes follow Annex 40 of the Manual on the Financial Management of Barangays. The tables come from the confirmed trial balances; type only the details below.</div>
     ${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}
     <div class="xcols bcols"><div class="xform">
-      <section class="panel"><div class="panel-head"><h2>Note 1 · General Information</h2><a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/setup">Edit in Setup</a></div><div class="panel-body">
+      <details class="panel acc" data-acc="n1" ${OPEN07.has('n1') ? 'open' : ''}><summary class="panel-head"><h2>Note 1 · General Information</h2><span class="acc-st" data-st="n1"></span></summary><div class="panel-body">
+        <div class="lr-row"><span class="hint">From Audit Setup, step 4.</span><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/setup">Edit in Setup</a></div>
         <table class="pgt"><tbody>
           <tr><td style="width:40%">Location</td><td>${esc(niN.loc || '') || '<span class="hint">Not yet in Setup</span>'}</td></tr>
           <tr><td>Date issued</td><td>${niN.issued ? esc(longDate(niN.issued)) : '<span class="hint">Not yet in Setup</span>'}</td></tr>
           <tr><td>Headed by</td><td>${esc([pbN.title, pbN.name].filter(Boolean).join(' ')) || '<span class="hint">Not yet in Setup</span>'}</td></tr>
-          <tr><td>Sanggunian</td><td>${sgN.length} member${sgN.length === 1 ? '' : 's'}</td></tr></tbody></table>
-        <span class="hint">From Audit Setup, step 4.</span></div></section>
-      ${hasPs ? `<section class="panel"><div class="panel-head"><h2>Remuneration of Key Management Personnel</h2></div><div class="panel-body">
-        <table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></section>` : ''}
-      ${hasInv ? `<section class="panel"><div class="panel-head"><h2>Inventories</h2></div><div class="panel-body">
+          <tr><td>Sanggunian</td><td>${sgN.length} member${sgN.length === 1 ? '' : 's'}</td></tr></tbody></table></div></details>
+      ${hasPs ? `<details class="panel acc" data-acc="km" ${OPEN07.has('km') ? 'open' : ''}><summary class="panel-head"><h2>Remuneration of Key Management Personnel</h2><span class="acc-st" data-st="km"></span></summary><div class="panel-body">
+        <table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></details>` : ''}
+      ${hasInv ? `<details class="panel acc" data-acc="inv" ${OPEN07.has('inv') ? 'open' : ''}><summary class="panel-head"><h2>Inventories</h2><span class="acc-st" data-st="inv"></span></summary><div class="panel-body">
         <div class="lr-row"><label class="label" for="n-inv-rec" style="margin:0">Inventories recognized during the period</label>${amtIn('inv.rec', N.inv.rec, 'Inventories recognized').replace('class="input amt-in"', 'id="n-inv-rec" class="input amt-in"')}</div>
         <div class="lr-row"><label class="label" for="n-inv-wd" style="margin:0">Write-down recognized as an expense</label>${amtIn('inv.wd', N.inv.wd, 'Write-down').replace('class="input amt-in"', 'id="n-inv-wd" class="input amt-in"')}</div>
-        <span class="hint">Leave blank to leave the sentence out.</span></div></section>` : ''}
-      ${ppeCols.length ? `<section class="panel"><div class="panel-head"><h2>Property, Plant and Equipment · Movements</h2></div><div class="panel-body">
+        <span class="hint">Leave blank to leave the sentence out.</span></div></details>` : ''}
+      ${ppeCols.length ? `<details class="panel acc" data-acc="ppe" ${OPEN07.has('ppe') ? 'open' : ''}><summary class="panel-head"><h2>Property, Plant and Equipment · Movements</h2><span class="acc-st" data-st="ppe"></span></summary><div class="panel-body">
         ${ppeTable(y, [['ca', 'Additions'], ['cd', 'Disposals'], ['ct', 'Transfers/Adj']])}
         ${ppeTable(`${y} · Depreciation`, [['dd', 'Disposals'], ['dt', 'Transfers/Adj']])}
         ${ppeTable(yp, [['pa', 'Additions'], ['pd', 'Disposals'], ['pt', 'Transfers/Adj']])}
-        <span class="hint">Balances and depreciation for the year come from the trial balances. The results show any amount the movements do not explain.</span></div></section>` : ''}
+        <span class="hint">Balances and depreciation for the year come from the trial balances. The results show any amount the movements do not explain.</span></div></details>` : ''}
       <section class="panel"><div class="panel-head"><h2>Notes Results</h2></div><div class="panel-body ck" id="n-checks"></div></section>
       ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
         <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="n-save" type="button">Save</button></div></div>` : ''}</div>
@@ -803,6 +806,14 @@ export function notesPart({ ctx, me, refs, L, st }) {
         $('#n-pg', root).textContent = html.length ? `Pages ${pages.notes}–${pages.notes + html.length - 1}` : '';
         $('#n-checks', root).innerHTML = d.checks.map((c) => `<span class="ck-${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '!' : c.st === 'info' ? '•' : '○'} ${esc(c.t)}</span>`).join('');
         const pl = $('#b-p07', root); if (pl) pl.innerHTML = notesPill(F, d);
+        const st = (k, ok, t) => { const el = $(`[data-st="${k}"]`, root); if (el) el.innerHTML = `<span class="${ok ? 'ok' : 'warn'}">${ok ? '✓ ' : ''}${esc(t)}</span>`; };
+        const ni = audit.notesInfo || {};
+        st('n1', !!(ni.loc && ni.issued), ni.loc && ni.issued ? 'Complete' : 'Not yet in Setup');
+        const kmN = KM.filter(([k]) => String((N.km[k] || {}).cy || '').trim()).length;
+        st('km', kmN === KM.length, `${kmN} of ${KM.length} typed for CY ${y}`);
+        st('inv', true, [N.inv.rec, N.inv.wd].filter((x) => String(x || '').trim()).length ? 'Typed' : 'Optional');
+        const ppeW = d.checks.filter((c) => c.st === 'warn' && /unexplained/.test(c.t)).length;
+        st('ppe', !ppeW, ppeW ? `${ppeW} unexplained` : 'Explained');
       };
       async function save() {
         const cur = await store.get('letters', recId(ctx.rec.id));
@@ -814,6 +825,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
       let timer = null;
       const changed = () => { if (!canEdit) return; setDirty(true, save); clearTimeout(timer); timer = setTimeout(draw, 150); };
       root.querySelector('.xform').addEventListener('input', changed);
+      $$('details.acc', root).forEach((d) => { d.addEventListener('toggle', () => { if (d.open) OPEN07.add(d.dataset.acc); else OPEN07.delete(d.dataset.acc); }); });
       const sv = $('#n-save', root); if (sv) sv.onclick = save;
       const fileName = notesFileName(audit, lgu, mun);
       $('#n-print', root).onclick = () => { const p = notesPrint(notesOf(ctx, L, collect()), pages.notes); printPages(p.css, p.html, fileName); };
