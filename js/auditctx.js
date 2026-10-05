@@ -41,7 +41,7 @@ export async function loadAudit(refs, auditId) {
 const STEPS = ['Setup', 'Financial Statements', 'Findings and AOMs', 'AOM Review', 'SAOR and Exit Conference', 'BAAR', 'Final'];
 export function stepsBar(ctx, active) {
   const stage = Math.max(0, STEPS.indexOf(ctx.audit.stage || 'Setup'));
-  const links = { Setup: `#/audits/${ctx.rec.id}/setup`, 'Financial Statements': `#/audits/${ctx.rec.id}/fs`, 'Findings and AOMs': `#/audits/${ctx.rec.id}/findings`, 'AOM Review': `#/audits/${ctx.rec.id}/aoms`, 'SAOR and Exit Conference': `#/audits/${ctx.rec.id}/comments`, BAAR: `#/baar/${ctx.rec.id}` };
+  const links = { Setup: `#/audits/${ctx.rec.id}/setup`, 'Financial Statements': `#/audits/${ctx.rec.id}/fs`, 'Findings and AOMs': `#/audits/${ctx.rec.id}/findings`, 'AOM Review': `#/audits/${ctx.rec.id}/aoms`, 'SAOR and Exit Conference': `#/audits/${ctx.rec.id}/comments`, BAAR: `#/baar/${ctx.rec.id}`, Final: `#/baar-final/${ctx.rec.id}` };
   const anyFinal = (ctx.aoms || []).some((a) => a.data.status === ST.FINAL);
   return `<nav class="stepsbar" aria-label="Audit stages">${STEPS.map((s, i) => {
     const cls = s === active ? 'now' : i < stage ? 'done' : '';

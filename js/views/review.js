@@ -9,6 +9,7 @@ import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, sta
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { has, myTeamIds } from '../refs.js';
 import { aomPreviewHTML, checksHTML, commentsHTML } from './aoms.js';
+import { baarQueue } from './baarreview.js';
 
 const sel = { text: '', wired: false };
 
@@ -31,6 +32,10 @@ export async function reviewQueue(refs) {
 export async function reviewList(refs) {
   const q = await reviewQueue(refs);
   const audits = await Promise.all(q.map((x) => store.get('audits', x.auditId)));
+  const bq = await baarQueue(refs);
+  const bAudits = await Promise.all(bq.map((x) => store.get('audits', x.auditId)));
+  const bRows = bq.map((x, i) => { const au = bAudits[i]?.data; if (!au) return ''; const by = refs.users.find((u) => u.data.email === x.review.forwardedBy)?.data.name;
+    return `<a class="t-row click" href="#/baar-review/${x.auditId}" style="grid-template-columns:minmax(160px,1fr) 120px 1fr 140px;text-decoration:none;color:inherit"><span><b>${esc(refs.lgu[au.lguId]?.data.name || '?')}</b><br><small class="hint">BAAR CY ${esc(au.periodTo)}</small></span><span>${x.count} part${x.count > 1 ? 's' : ''}</span><span>Forwarded by ${esc(nice(by || ''))}<br><small class="hint">${esc(timeAgo(x.review.forwardedAt))}</small></span><span><span class="btn sm primary">Review →</span></span></a>`; }).join('');
   const finals = (await store.list('aoms')).filter((a) => a.data.status === ST.FINAL && refs.team[a.data.teamId]?.data.saUserId === refs.me.id);
   const rows = q.map((x, i) => {
     const au = audits[i]?.data; if (!au) return '';
@@ -43,7 +48,8 @@ export async function reviewList(refs) {
   return {
     active: '#/review', crumbs: '<b>For My Review</b>',
     body: `<div class="page-head"><div><h1>For My Review</h1><p>AOMs forwarded to you. Opening an AOM starts the review, and the member can no longer retrieve it.</p></div></div>
-      <section class="panel">${rows || '<div class="empty">Nothing waiting for your review.</div>'}</section>
+      <section class="panel">${rows || (bRows ? '<div class="empty">No AOMs waiting for your review.</div>' : '<div class="empty">Nothing waiting for your review.</div>')}</section>
+      ${bRows ? `<section class="panel"><div class="panel-head"><h2>BAARs for Review · ${bq.length}</h2></div>${bRows}</section>` : ''}
       ${has(refs.me, 'sa') && finals.length ? `<section class="panel"><div class="panel-head"><h2>Final AOMs · ${finals.length}</h2><span class="hint">Open one to reopen it if a correction is needed.</span></div>
         ${[...new Set(finals.map((a) => a.data.auditId))].map((id) => `<a class="t-row click" href="#/review/${id}" style="grid-template-columns:1fr auto;text-decoration:none;color:inherit"><span>${esc(refs.lgu[finals.find((a) => a.data.auditId === id).data.lguId]?.data.name || '')}</span><span class="hint">${finals.filter((a) => a.data.auditId === id).length} Final</span></a>`).join('')}</section>` : ''}`
   };

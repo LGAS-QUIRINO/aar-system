@@ -710,3 +710,16 @@ details.acc>summary h2{margin-right:auto;min-width:0}
 .axrow{display:flex;flex-direction:column;gap:6px;padding:14px 20px;border-top:1px solid var(--line-2)}
 .axrow:first-child{border-top:0}
 .axl{color:var(--navy)}
+
+/* BAAR review */
+.brv-strip{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;flex-direction:row;font-size:14px;line-height:1.45}
+.brv-strip>span:first-child{flex:1 1 360px;min-width:0}
+.brv-strip.ok{border-color:var(--ok);background:var(--ok-bg)}
+.brv-strip .warn-t{color:var(--warn-ink);font-size:13px}
+.brv-chips{display:flex;gap:6px;flex-wrap:wrap}
+.brv-chip{border:1px solid var(--line);background:#fff;color:var(--ink-2);border-radius:6px;padding:5px 10px;font-size:12.5px;text-decoration:none}
+.brv-chip.ok{background:var(--ok-bg);border-color:transparent;color:var(--ok-ink)}
+.brv-chip.warn{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-ink)}
+.brv-chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
+.rv-flabel{font:600 11.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
+.rv-block.t-text p{margin:0 0 6px}
