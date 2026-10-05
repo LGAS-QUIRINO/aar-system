@@ -223,7 +223,8 @@ export async function p3Sections(d, start) {
     const same = (a, b) => a && b && a.year === b.year && a.obsNo === b.obsNo;
     if (!same(prev, r)) {
       const bd = { bottom: NONE };
-      rows.push(new TableRow({ children: [cell([P(`BAAR CY ${r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`Observation No. ${r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
+      // The observation (topic sentence) row is never split: if it does not fit, it starts on the next page.
+      rows.push(new TableRow({ cantSplit: true, children: [cell([P(`BAAR CY ${r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`Observation No. ${r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
         cell(ps(r.obs, { b: true, al: J }), 1, bd), cell([P('')], 2, bd), cell([P('')], 3, bd), cell([P('')], 4, bd)] }));
     }
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };

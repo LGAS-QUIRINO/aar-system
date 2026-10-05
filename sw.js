@@ -1,5 +1,5 @@
 // Keeps the app working offline. Bump VERSION on every release so devices pick up the new files.
-const RELEASE = 'v2.17.0';
+const RELEASE = 'v2.17.1';
 const VERSION = 'aar|' + self.registration.scope + '|' + RELEASE;   // each copy of the app has its own cache
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/coa-logo.png', 'img/icon-192.png', 'img/icon-512.png', 'data-coa.json', 'data-coa-2015.json',
   'js/app.js', 'js/config.js', 'js/db.js', 'js/store.js', 'js/sync.js', 'js/api.js', 'js/auth.js', 'js/demo-server.js', 'js/seed.js', 'js/ui.js', 'js/format.js', 'js/refs.js',
