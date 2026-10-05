@@ -5,15 +5,15 @@ import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { nice, longDate, aomNo } from '../format.js';
-import { normTitle, rowKey } from '../coa.js';
-import { loadChart } from '../coa.js';
-import { zeroRow, fundsOf, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
+import { normTitle, rowKey, loadChart, CHART_NAME } from '../coa.js';
+import { interChoice, isCombined, keyCode, zeroRow, fundsOf, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
   posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb,
   money, shown, rawText, parseAmt, cents } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
 import { FS_CSS, stmtHTML, scbaaHTML, scbaaPages, fsPrint, fsSections, fsFileName } from '../baar-fs.js';
 import { printPages, saveDocx } from '../baar-doc.js';
 import { openAddAccount, pickAccount, canEditChart } from './coa.js';
+import { acctOf as acctOfKey } from '../coa.js';
 import { aomAmount, peso } from '../saor.js';
 import { ST, fillText, blockPlain } from '../aom.js';
 
@@ -49,6 +49,7 @@ function tabStatus(F, x) {
   if (!s.balanced) return { pill: pill('Not balanced', 'warn'), done: false, s };
   return { pill: pill(x.cmp && fromPrior(F, x.fund) ? `✓ From CY ${F.yp} BAAR` : '✓', 'ok'), done: true, s };
 }
+export { tabs, tabLabel, tabStatus, entered };
 export const canConfirm = (F) => tabs(F).every((x) => tabStatus(F, x).done);
 
 // FS Input checks: { st: 'ok'|'warn'|'wait', t }
@@ -74,18 +75,43 @@ function inputChecks(F) {
   const refs = aomRefs(F);
   if (refs.length) {
     if (!F.figY.all) out.push({ st: 'wait', t: 'For your reference, AOM amounts vs. the trial balance (all funds combined): runs when all funds are entered' });
-    else refs.forEach((r) => out.push({ st: 'info', t: `For your reference: AOM No. ${r.no} ${peso(r.amt)} · ${r.acct.title} (all funds, CY ${F.y}) ₱${money(F.figY.accts[r.acct.code] || 0, { dash: '0.00' })}` }));
+    else refs.forEach((r) => out.push({ st: 'info', t: `For your reference: AOM No. ${r.no} ${peso(r.amt)} · ${r.acct.title} (all funds, CY ${F.y}) ₱${money(F.figY.accts[r.acct.key] || 0, { dash: '0.00' })}` }));
   }
-  if (F.funds.length > 1) out.push(...interCheck(F.figY, F));
   return out;
 }
 function interCheck(fig, F) {
-  if (!fig.all) return [{ st: 'wait', t: 'Transfers between funds agree: runs when all funds are entered' }];
-  if (!fig.cancel) return [];
-  if (!fig.interTo && !fig.interFrom) return [{ st: 'info', t: 'No account is marked "between funds" in the Chart of Accounts, so nothing is cancelled out' }];
-  return fig.interTo === fig.interFrom ? [{ st: 'ok', t: `Subsidy between the funds (₱${money(fig.interTo)}) agrees and cancels out in the combined statements` }]
-    : [{ st: 'warn', t: `Subsidy between the funds does not agree: to other funds ₱${money(fig.interTo, { dash: '0.00' })}, from other funds ₱${money(fig.interFrom, { dash: '0.00' })}` }];
   void F;
+  if (!fig.all) return [{ st: 'wait', t: 'Combined funds (GF ↔ 5% BDRRMF): runs when all funds are entered' }];
+  if (!fig.cancel) return [];
+  const out = [];
+  if (!fig.interTo && !fig.interFrom) out.push({ st: 'info', t: 'No Subsidy row is set to Combined (GF ↔ 5% BDRRMF), so nothing is cancelled out' });
+  else out.push(fig.interTo === fig.interFrom ? { st: 'ok', t: `Subsidy to/from Other Funds ₱${money(fig.interTo)} agrees and cancels out in the combined statements` }
+    : { st: 'warn', t: `Subsidy between the funds does not agree: to other funds ₱${money(fig.interTo, { dash: '0.00' })}, from other funds ₱${money(fig.interFrom, { dash: '0.00' })}` });
+  if (fig.dueTo || fig.dueFrom) out.push(fig.dueTo === fig.dueFrom ? { st: 'ok', t: `Due to/from Other Funds ₱${money(fig.dueTo)} agrees and cancels out` }
+    : { st: 'warn', t: `Due to/from Other Funds does not agree: due to ₱${money(fig.dueTo, { dash: '0.00' })}, due from ₱${money(fig.dueFrom, { dash: '0.00' })}` });
+  return out;
+}
+// The unutilized 5% BDRRMF and Trust Liabilities – BDRRMF in the books.
+export function bdrrmfCheck(fig) {
+  const b = fig.bdrrmf;
+  if (!b) return [{ st: 'wait', t: 'Unutilized 5% BDRRMF: runs when the 5% BDRRMF trial balance is entered' }];
+  if (b.unutilized <= 0) return [{ st: 'ok', t: 'No unutilized 5% BDRRMF balance at year-end' }];
+  if (!b.recorded) return [{ st: 'warn', t: `Unutilized 5% BDRRMF ₱${money(b.unutilized)} is not recorded as Trust Liabilities – BDRRMF`, flag: 'bdrrmf' }];
+  return b.recorded === b.unutilized ? [{ st: 'ok', t: `Unutilized 5% BDRRMF ₱${money(b.unutilized)} is shown as Trust Liabilities – BDRRMF` }]
+    : [{ st: 'warn', t: `Trust Liabilities – BDRRMF ₱${money(b.recorded)} differs from the unutilized 5% BDRRMF ₱${money(b.unutilized)}`, flag: 'bdrrmf' }];
+}
+// Which chart of accounts management used, counted per account of each trial balance (matched by itself, before corrections).
+export function chartUsage(F) {
+  const n = { manual: 0, c2015: 0, added: 0, check: 0, ver: 0 };
+  [F.y].forEach((yr) => F.funds.forEach((f) => { const t = F.tb[yr][f.k]; if (!t || t.none) return; tbState(t, F.chart).rows.forEach(({ res }) => { if (res.m.st === 'ok') n[res.m.chart]++; else n[res.m.st]++; }); }));
+  return n;
+}
+export function tbResultsHTML(F) {
+  const u = chartUsage(F);
+  const usage = u.manual + u.c2015 + u.added + u.check + u.ver ? `<div style="font-weight:700;color:var(--navy)">Chart of accounts used by management (CY ${F.y})</div><div>Manual ${u.manual} · COA Circular 2015-009 ${u.c2015}${u.added ? ` · Added ${u.added}` : ''} · Check ${u.check} · For verification ${u.ver}</div>` : '';
+  const comb = F.funds.length > 1 ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Combined Funds</div>${checkHTML([...interCheck(F.figY, F), ...bdrrmfCheck(F.figY)])}` : '';
+  const checks = inputChecks(F).filter((c) => !/Combined funds|Subsidy|Due to\/from/.test(c.t));
+  return `${usage}${comb}${checks.length ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Trial balances</div>${checkHTML(checks)}` : ''}` || '<span class="hint">Runs once a trial balance is entered.</span>';
 }
 // Final AOMs with an amount, and the account their wording names.
 function aomRefs(F) {
@@ -124,20 +150,20 @@ export function fsDoc(F, start, work = {}) {
 export const fsPageCount = (F) => 4 + scbaaPages(scbaaPrintRows(scbaaRows(F.figY.accts, F.chart), (F.rec && F.rec.scbaa) || { rows: {} })).length;
 
 // Checks of the statements: { st, t } and the status of each statement.
-function afsChecks(F, doc) {
+export function afsChecks(F, doc) {
   const out = [], stat = {};
   const [perf, pos, scne, scf] = doc.stmts; void perf; void pos; void scne;
-  if (!F.figY.any) { out.push({ st: 'wait', t: `Enter the CY ${F.y} trial balances in FS Input first` }); }
+  if (!F.figY.any) { out.push({ st: 'wait', t: `Enter the CY ${F.y} trial balances on the Trial Balance tab first` }); }
   else {
     const fs = tabs(F).map((x) => tbState(F.tb[x.yr][x.fund] && !F.tb[x.yr][x.fund].none ? F.tb[x.yr][x.fund] : null, F.chart));
     const fix = fs.reduce((n, s) => n + s.fix, 0);
-    if (fix) out.push({ st: 'warn', t: `FS Input still has ${fix} item${fix > 1 ? 's' : ''} to fix` });
-    if (!F.confirmed) out.push({ st: 'warn', t: 'FS Input is not yet confirmed as submitted' });
+    if (fix) out.push({ st: 'warn', t: `The Trial Balance tab still has ${fix} item${fix > 1 ? 's' : ''} to fix` });
+    if (!F.confirmed) out.push({ st: 'warn', t: 'Not yet confirmed as submitted (Results tab)' });
     [[F.figY, F.y], [F.figP, F.yp]].forEach(([fig, yr]) => {
       if (!fig.any) return;
       const p = posTotals(fig);
       out.push(p.ta === p.tle ? { st: 'ok', t: `Financial Position ${yr}: assets equal liabilities and net assets/equity` }
-        : { st: 'warn', t: `Financial Position ${yr} is off by ₱${money(Math.abs(p.ta - p.tle))}; check the trial balance in FS Input` });
+        : { st: 'warn', t: `Financial Position ${yr} is off by ₱${money(Math.abs(p.ta - p.tle))}; check the trial balance` });
       if (p.ta !== p.tle) stat.sfpos = 'warn';
     });
     const m = equityMoves(F.figY);
@@ -161,7 +187,7 @@ function afsChecks(F, doc) {
     else out.push({ st: 'ok', t: `Budget and Actual: ${doc.scbaa.rows.filter((r) => !r.h).length} rows with amounts` });
     if (F.funds.length > 1) out.push(...interCheck(F.figY, F));
     const waitFunds = F.funds.filter((f) => !entered(F.tb[F.y][f.k]) || !entered(F.tb[F.yp][f.k])).map((f) => f.label);
-    if (waitFunds.length) out.push({ st: 'wait', t: `${waitFunds.join(' and ')}: waiting for FS Input` });
+    if (waitFunds.length) out.push({ st: 'wait', t: `${waitFunds.join(' and ')}: waiting for the trial balance` });
   }
   const base = !F.figY.any ? 'grey' : !F.confirmed ? 'warn' : 'ok';
   ['sfperf', 'sfpos', 'scne', 'scf', 'scbaa'].forEach((k) => { stat[k] = stat[k] || base; });
@@ -173,31 +199,26 @@ const stmtPill = (k, s) => pill(k === 'scbaa' && s === 'grey' ? 'Enter budget' :
 // The pill of Part 06 on the parts strip.
 export function fsPill(F, start = 1) {
   if (!F.figY.any) return pill('Not Started', 'grey');
-  if (!F.confirmed) return pill('FS Input', 'warn');
+  if (!F.confirmed) return pill('Not Confirmed', 'warn');
   const c = afsChecks(F, fsDoc(F, start));
   return c.out.some((x) => x.st === 'warn' || x.st === 'wait') ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
 }
-const checkHTML = (list) => list.map((c) => `<span class="ck-${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '!' : c.st === 'info' ? '•' : '○'} ${esc(c.t)}</span>`).join('');
+export const checkHTML = (list) => list.map((c) => `<span class="ck-${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '!' : c.st === 'info' ? '•' : '○'} ${esc(c.t)}</span>`).join('');
 
 /* ───────── The screen ───────── */
-export async function fsPart({ ctx, me, L, q, head, strip, wireComplete, canEdit, start }) {
+export async function fsPart({ ctx, me, L, q, head, strip, wireComplete, start }) {
   const F = L.FS;
-  const screen = q.get('s') === 'input' || (q.get('s') !== 'fs' && !F.confirmed) ? 'input' : 'fs';
-  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>06 · ${screen === 'input' ? 'Audited FS · FS Input' : 'Audited Financial Statements'}</b>`;
   const base = `#/baar/${ctx.rec.id}?p=06`;
-  const toggle = `<section class="panel" style="padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div class="seg" role="group" aria-label="Part 06 screen">
-      <a class="${screen === 'input' ? 'on' : ''}" href="${base}&s=input">FS Input</a><a class="${screen === 'fs' ? 'on' : ''}" href="${base}&s=fs">Audited Financial Statements</a></div>
-      <span class="hint">${screen === 'input' ? 'Enter the trial balances first; the statements are built from them.' : 'Built from the trial balances entered in FS Input.'}</span></section>`;
-  const v = screen === 'input' ? inputScreen({ F, ctx, me, q, base, canEdit }) : afsScreen({ F, ctx, me, q, base, canEdit, start });
+  const v = afsScreen({ F, ctx, me, q, base, canEdit: false, start, mode: 'baar' });
   return {
-    active: '#/baar', crumbs,
-    body: `${head}<section class="panel" style="padding:10px 12px">${strip}</section>${toggle}${v.body}`,
+    active: '#/baar', crumbs: `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>06 · Audited Financial Statements</b>`,
+    body: `${head}<section class="panel" style="padding:10px 12px">${strip}</section>${v.body}`,
     mount(root) { wireComplete(root); v.mount(root); }
   };
 }
 
-/* ── FS Input ── */
-function inputScreen({ F, ctx, me, q, base, canEdit }) {
+/* ── Trial Balance tab ── */
+export function inputScreen({ F, ctx, me, q, base, canEdit }) {
   const all = tabs(F);
   const cur = all.find((x) => x.key === q.get('t')) || all[0];
   const t = F.tb[cur.yr][cur.fund];
@@ -220,7 +241,7 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
     const ft = t.file && t.file.totals;
     content += `<div class="note ${h.known && !(h.okName && h.okYear) ? 'warn' : 'ok'}" style="display:block;font-weight:400">${t.file && t.file.name ? `Imported <b>${esc(t.file.name)}</b>` : 'Pasted rows'}${h.known ? ` · ${esc(h.text)}${h.okName && h.okYear ? ' ✓' : ''}` : ''} · ${t.rows.length} accounts${t.file && t.file.byName ? ` · by ${esc(nice(t.file.byName))}, ${esc(longDate((t.file.at || '').slice(0, 10)))}` : ''}
       ${ft ? `<br><span class="hint">Grand totals in the file: debit ${esc(shown(ft.dr))} · credit ${esc(shown(ft.cr))}</span>` : ''}</div>
-      <div class="sumc"><div><b>${s.ok}</b>Matched</div><div><b style="color:var(--warn-ink)">${s.check}</b>Check</div><div><b style="color:var(--bad-ink)">${s.none}</b>Not in Chart</div></div>`;
+      <div class="sumc" style="grid-template-columns:repeat(4,1fr)"><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart === 'manual').length}</b>Manual</div><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart !== 'manual').length}</b>COA Circular 2015-009${s.rows.some((x) => x.res.m.chart === 'added') ? ' / Added' : ''}</div><div><b style="color:var(--warn-ink)">${s.check}</b>Check</div><div><b style="color:var(--bad-ink)">${s.ver}</b>For Verification</div></div>`;
     // Amounts with more than 2 decimals
     const decRows = s.rows.filter((x) => hasDec(x.r.dr) || hasDec(x.r.cr));
     if (decRows.length) {
@@ -236,27 +257,35 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
     }
     const rowHTML = ({ r, i, res }) => {
       const m = res.m;
-      const hid = (filter === 'open' && !res.open && !needsFix(r)) || (filter === 'check' && m.st !== 'check') || (filter === 'none' && m.st !== 'none');
+      const hid = (filter === 'open' && !res.open && !needsFix(r)) || (filter === 'check' && m.st !== 'check') || (filter === 'ver' && m.st !== 'ver');
       let chart = '';
-      if (r.use && res.acct) {
-        chart = `${pill('✓ Chosen', 'ok')} <span class="hint">→ ${esc(res.acct.code)} ${esc(res.acct.title)}${r.rem ? ' · remembered from before' : ''}</span>${editable ? ` <button class="reset" type="button" data-undo="${i}">Change</button>` : ''}`;
-      } else if (m.st === 'ok') {
-        chart = pill('✓ Matched', 'ok');
+      const a = res.acct;
+      // What the file had, shown only when it differs from the account used.
+      const same = (x, y) => String(x || '').trim().replace(/\s+/g, ' ').toLowerCase() === String(y || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      const inFile = a && (!same(r.code, a.code) || !same(r.title, a.title)) ? `<div class="hint" style="margin-top:3px">In file: ${!same(r.code, a.code) ? esc(r.code) + ' ' : ''}${esc(r.title)}</div>` : '';
+      const src = a ? ` <span class="hint">${esc(CHART_NAME[a.chart] || '')}</span>` : '';
+      const inter = a && interChoice(r, a) ? `<select class="sel" data-inter="${i}" style="margin-top:4px" aria-label="Subsidy between funds" ${editable ? '' : 'disabled'}><option value="combined" ${isCombined(r, a) ? 'selected' : ''}>Combined (GF ↔ 5% BDRRMF)</option><option value="transfer" ${isCombined(r, a) ? '' : 'selected'}>Transfer to the 10% SK Fund</option></select>` : '';
+      const cn = (x) => `${CHART_NAME[x.chart]} · ${x.code} ${x.title}`;
+      if (r.use && a) {
+        chart = `${pill('✓ Corrected', 'ok')}${src}${r.rem ? ' <span class="hint">remembered from before</span>' : ''}${editable ? ` <button class="reset" type="button" data-undo="${i}">Change</button>` : ''}${inFile}${inter}`;
+      } else if (m.st === 'ok' && a) {
+        chart = `${pill('✓ Matched', 'ok')}${src}${inFile}${inter}`;
       } else if (m.st === 'check') {
-        chart = `${pill('Check', 'warn')}<div class="hint" style="margin:4px 0">${m.acct ? `The code may not have been updated. ${esc(m.acct.code)} is <b>${esc(m.acct.title)}</b>; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`
-          : `Code ${esc(r.code)} is not in the Chart of Accounts; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`}</div>
-          ${editable ? `<select class="sel" data-pick="${i}" aria-label="Account for ${esc(r.title)}"><option value="">Choose…</option><option value="${esc(m.sugg.code)}">Use the title's account (suggested)</option>${m.acct ? `<option value="${esc(m.acct.code)}">Keep the code's account</option>` : ''}<option value="other">Choose another account…</option></select>` : ''}`;
+        chart = `${pill('Check', 'warn')}<div class="hint" style="margin:4px 0">${m.acct ? `The code may not have been updated. ${esc(m.acct.code)} is <b>${esc(m.acct.title)}</b> in the ${esc(CHART_NAME[m.acct.chart])}; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`
+          : `Code ${esc(r.code)} is not in the Manual nor in COA Circular 2015-009; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`}</div>
+          ${editable ? `<select class="sel" data-pick="${i}" aria-label="Account for ${esc(r.title)}"><option value="">Choose…</option><option value="${esc(m.sugg.key)}">${esc(cn(m.sugg))} (suggested)</option>${m.sugg2 && m.sugg2 !== m.sugg ? `<option value="${esc(m.sugg2.key)}">${esc(cn(m.sugg2))}</option>` : ''}${m.acct ? `<option value="${esc(m.acct.key)}">Keep the code's account (${esc(m.acct.title)})</option>` : ''}<option value="other">Choose another account…</option></select>` : ''}`;
       } else {
-        chart = `${pill('Not in Chart', 'bad')}${m.sugg ? `<div class="hint" style="margin:4px 0">Closest: ${esc(m.sugg.code)} ${esc(m.sugg.title)}</div>` : ''}
+        chart = `${pill('For Verification', 'bad')}<div class="hint" style="margin:4px 0">Not in the Manual nor in COA Circular 2015-009.${m.codeAcct ? ` In the ${esc(CHART_NAME[m.codeAcct.chart])}, ${esc(m.codeAcct.code)} is ${esc(m.codeAcct.title)}.` : ''}${m.sugg ? ` Closest: ${esc(m.sugg.code)} ${esc(m.sugg.title)}.` : ''}</div>
           ${editable && zeroRow(r) ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-del="${i}">Delete</button></div><div class="hint">Zero balance: delete it from this trial balance.</div>` : ''}
-          ${editable && !zeroRow(r) ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-match="${i}">Match Account</button>${canChart ? `<button class="btn sm ghost" type="button" data-add="${i}">+ Add to Chart</button>` : ''}</div>${canChart ? '' : '<div class="hint">Only the SA or Admin can add an account to the Chart.</div>'}` : ''}`;
+          ${editable && !zeroRow(r) ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-match="${i}">Match Account</button>${canChart ? `<button class="btn sm ghost" type="button" data-add="${i}">+ Add Account</button>` : ''}</div>${canChart ? '' : '<div class="hint">Only the SA or Admin can add an account to the Chart.</div>'}` : ''}`;
       }
-      const cls = res.open ? (m.st === 'none' ? 'r-bad' : 'r-chk') : '';
-      return `<tr class="${cls}" ${hid ? 'hidden' : ''} data-f="${esc((r.code + ' ' + r.title).toLowerCase())}"><td class="mono">${esc(r.code)}</td><td>${esc(r.title)}</td><td class="n">${esc(shown(r.dr))}</td><td class="n">${esc(shown(r.cr))}</td><td>${chart}</td></tr>`;
+      const cls = res.open ? (m.st === 'ver' ? 'r-bad' : 'r-chk') : '';
+      const code = a && !res.open ? a.code : r.code, title = a && !res.open ? a.title : r.title;
+      return `<tr class="${cls}" ${hid ? 'hidden' : ''} data-f="${esc((code + ' ' + title + ' ' + r.code + ' ' + r.title).toLowerCase())}"><td class="mono">${esc(code)}</td><td>${esc(title)}</td><td class="n">${esc(shown(r.dr))}</td><td class="n">${esc(shown(r.cr))}</td><td>${chart}</td></tr>`;
     };
     const flink = (f, label) => `<a href="${base}&s=input&t=${cur.key}&f=${f}" class="${filter === f ? 'on' : ''}">${label}</a>`;
-    content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('none', 'Not in Chart')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
-      <div class="tbwrap"><table class="tbt fixed"><colgroup><col style="width:96px"><col><col style="width:106px"><col style="width:106px"><col style="width:250px"></colgroup><thead><tr><th>Code (as in file)</th><th>Account Title (as in file)</th><th class="n">Debit</th><th class="n">Credit</th><th>Chart of Accounts</th></tr></thead>
+    content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('ver', 'For Verification')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
+      <div class="tbwrap"><table class="tbt fixed"><colgroup><col style="width:96px"><col><col style="width:106px"><col style="width:106px"><col style="width:250px"></colgroup><thead><tr><th>Code</th><th>Account Title</th><th class="n">Debit</th><th class="n">Credit</th><th>Status</th></tr></thead>
         <tbody>${s.rows.map(rowHTML).join('')}</tbody>
         <tfoot><tr><td></td><td>Totals${s.decOpen ? ' (amounts as shown in Excel)' : ''}</td><td class="n">${money(s.dr)}</td><td class="n">${money(s.cr)}</td><td>${s.balanced ? pill('✓ Balanced', 'ok') : pill(`Off by ₱${money(Math.abs(s.dr - s.cr))}${s.decOpen ? ' after rounding' : ''}`, 'warn')}</td></tr></tfoot></table></div>
       ${s.deleted ? `<div class="lr-row" style="justify-content:flex-start;gap:10px"><span class="hint">${s.deleted} zero-balance row${s.deleted > 1 ? 's' : ''} deleted (${esc(t.rows.filter((r) => r.del).map((r) => r.title).join(', '))})</span>${editable ? '<button class="reset" type="button" id="tb-putback">Put back</button>' : ''}</div>` : ''}`;
@@ -265,14 +294,8 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
   const statusHTML = `<table class="coat"><colgroup><col style="width:30%"><col><col></colgroup><thead><tr><th>Trial Balance</th><th>CY ${F.y}</th><th>CY ${F.yp} Comparative</th></tr></thead><tbody>
     ${F.funds.map((f) => `<tr><td>${esc(f.label)}</td>${[F.y, F.yp].map((yr) => `<td>${status.find((z) => z.x.fund === f.k && z.x.yr === yr).pill}</td>`).join('')}</tr>`).join('')}</tbody></table>
     <p class="hint" style="margin:8px 0 0">This year, enter the CY ${F.yp} audited figures once: import last year's audited trial balance or paste them per account. From next year, the comparative fills in by itself from this BAAR (final audited figures); you only check it.</p>`;
-  const conf = F.rec && F.rec.confirmed;
-  const confirmHTML = conf
-    ? `<div class="note ok" style="display:block">Confirmed as submitted by ${esc(nice(conf.byName || conf.by))}, ${esc(longDate((conf.at || '').slice(0, 10)))}. The figures are locked for the statements.</div>
-       ${has(me, 'sa') || has(me, 'admin') ? '<div class="lr-row"><span class="hint">Only the SA or Admin can reopen it.</span><button class="btn sm ghost" type="button" id="tb-reopen">Reopen</button></div>' : ''}`
-    : `<span class="hint">When every fund and year is entered and nothing is left to fix, confirm the figures as submitted. They are then locked for the statements.</span>
-       ${canEdit ? `<button class="btn primary" type="button" id="tb-confirm" ${canConfirm(F) ? '' : 'disabled'}>Confirm as Submitted</button>` : ''}`;
   const noneBox = cur.fund !== 'GF' && editable && (!t || t.none) ? `<label class="check" style="min-height:0"><input type="checkbox" id="tb-none" ${t && t.none ? 'checked' : ''}>No separate trial balance for this fund</label>` : '';
-  const body = `<div class="topnote">Import each fund's trial balance from the bookkeeper's Excel file, or paste it. Accounts are matched to the Chart of Accounts; check the rows marked Check or Not in Chart.</div>
+  const body = `<div class="topnote">Import each fund's trial balance from the bookkeeper's Excel file, or paste it. Accounts are matched to the Manual first, then to COA Circular 2015-009; check the rows marked Check or For Verification.</div>
     <div class="xcols" style="grid-template-columns:minmax(0,1fr) 300px">
       <section class="panel"><div class="panel-head"><h2>Trial Balance</h2></div><div class="panel-body">
         <div class="lr-row" style="align-items:flex-start"><div class="tabs2">${tabsHTML}</div>
@@ -281,8 +304,7 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
         ${noneBox}${content}</div></section>
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Entry Status</h2></div><div class="panel-body">${statusHTML}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Trial Balance Results</h2></div><div class="panel-body ck">${checkHTML(inputChecks(F)) || '<span class="hint">Runs once a trial balance is entered.</span>'}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Confirm</h2></div><div class="panel-body">${confirmHTML}</div></section>
+        <section class="panel"><div class="panel-head"><h2>Trial Balance Results</h2></div><div class="panel-body ck">${tbResultsHTML(F)}</div></section>
       </div></div>`;
 
   return {
@@ -301,9 +323,9 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
       if (find) { find.setAttribute('data-transient', ''); find.oninput = () => { const v = find.value.trim().toLowerCase(); $$('tr[data-f]', root).forEach((r) => { if (v) r.hidden = !r.dataset.f.includes(v); else r.hidden = false; }); }; }
       // Import or paste: the rows, with this barangay's earlier choices put back.
       const take = async (got, file) => {
-        if (t && !t.none && t.rows.length && !(await confirmBox('Replace Trial Balance', `Replace the ${t.rows.length} accounts of ${esc(tabLabel(F, cur))} with the ${got.rows.length} in this ${file ? 'file' : 'paste'}? Choices made on the current rows are not kept.`, 'Replace'))) return;
+        if (t && !t.none && t.rows.length && !(await confirmBox('Replace Trial Balance', `Replace the ${t.rows.length} accounts of ${esc(tabLabel(F, cur))} with the ${got.rows.length} in this ${file ? 'file' : 'paste'}? Corrections made before for the same code and title are put back; decimal amounts are checked again.`, 'Replace'))) return;
         const mem = await rememberedChoices(F.lguId);
-        const rs = got.rows.map((r) => { const key = rowKey(r); const x = { code: r.code, title: r.title, dr: r.dr, cr: r.cr, key }; if (mem[key] && F.chart.byCode[mem[key]]) { x.use = mem[key]; x.rem = true; } return x; });
+        const rs = got.rows.map((r) => { const key = rowKey(r); const x = { code: r.code, title: r.title, dr: r.dr, cr: r.cr, key }; if (mem[key] && acctOfKey(F.chart, mem[key])) { x.use = mem[key]; x.rem = true; } return x; });
         await save({ type: 'tb', teamId: ctx.teamId, lguId: F.lguId, fund: cur.fund, year: cur.yr, kind: cur.cmp ? 'comparative' : 'current', auditId: ctx.rec.id,
           file: { name: file ? file.name : '', heading: got.heading, totals: got.totals, at: new Date().toISOString(), by: me.email, byName: me.name }, rows: rs },
           `${file ? 'imported' : 'pasted'} the trial balance`);
@@ -341,6 +363,7 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
         if (el.value === 'other') { const c = await pickAccount({ title: 'Choose Account', hintText: `${t.rows[i].code} · ${t.rows[i].title}`, start: '' }); if (c) await choose(i, c); else el.value = ''; return; }
         if (el.value) await choose(i, el.value);
       }; });
+      $$('[data-inter]', root).forEach((el) => { el.onchange = async () => { const rs = rows(); rs[+el.dataset.inter].inter = el.value; await put(rs); }; });
       $$('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
       $$('[data-del]', root).forEach((b) => { b.onclick = async () => {
         const rs = rows(), r = rs[+b.dataset.del];
@@ -355,8 +378,8 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
       }; });
       $$('[data-add]', root).forEach((b) => { b.onclick = async () => {
         const r = t.rows[+b.dataset.add];
-        const a = await openAddAccount({ me, preset: { code: F.chart.byCode[r.code] ? '' : r.code, title: r.title } });
-        if (a) await choose(+b.dataset.add, a.code);
+        const a = await openAddAccount({ me, preset: { code: F.chart.M[r.code] || F.chart.A[r.code] || F.chart.D[r.code] ? '' : r.code, title: r.title } });
+        if (a) await choose(+b.dataset.add, 'added:' + a.code);
       }; });
       $$('[data-use]', root).forEach((b) => { b.onclick = async () => { const rs = rows(), r = rs[+b.dataset.use]; r.fix = cents(r[decSide(r)]) / 100; await put(rs); }; });
       $$('[data-fix]', root).forEach((el) => { el.onchange = async () => {
@@ -366,33 +389,18 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
         else r.fix = Math.round(n * 100) / 100;
         await put(rs);
       }; });
-      const cf = $('#tb-confirm', root);
-      if (cf) cf.onclick = async () => {
-        if (!(await confirmBox('Confirm as Submitted', `Confirm the trial balances of Barangay ${esc(lgu.name)} as submitted? The figures are then locked for the statements.`, 'Confirm', 'success'))) return;
-        const cur2 = (await loadFsRec(F.lguId, F.y)) || { type: 'fs', teamId: ctx.teamId, lguId: F.lguId, year: F.y, auditId: ctx.rec.id };
-        await store.save('letters', fsId(F.lguId, F.y), { ...cur2, auditId: ctx.rec.id, confirmed: { at: new Date().toISOString(), by: me.email, byName: me.name } }, { silent: true });
-        await store.log('confirmed the trial balances as submitted', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
-        toast('Confirmed. The statements are ready to check.', 'ok');
-        location.hash = `${base}&s=fs`;
-      };
-      const ro = $('#tb-reopen', root);
-      if (ro) ro.onclick = async () => {
-        let reason = '';
-        const ok = await modal({ title: 'Reopen FS Input', body: '<p style="margin:0 0 10px;font-size:14px;line-height:1.5">Reopening lets the trial balances be changed again, and the statements change with them.</p><div class="field"><label class="label" for="ro-r">Reason</label><input class="input" id="ro-r"></div>',
-          buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Reopen', cls: 'primary', value: 'ok', check: (bg) => { reason = $('#ro-r', bg).value.trim(); if (!reason) { toast('Please give the reason.', 'bad'); return false; } return true; } }] });
-        if (!ok) return;
-        await store.save('letters', fsId(F.lguId, F.y), { ...F.rec, confirmed: null }, { silent: true });
-        await store.log('reopened the trial balances', `${lgu.name} · ${audit.auditYear} · Reason: ${reason}`, ctx.teamId, me.email);
-        emitChange('local');
-      };
     }
   };
 }
 
 /* ── Audited Financial Statements ── */
-function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
+// mode: 'baar' (Part 06: the confirmed statements, read-only), 'fs' (Statements tab: cash flows entry and the preview),
+// 'budget' (Budget tab: where the amounts come from, the RAO, the Budget and Actual entry and the statutory allocations).
+export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode = 'baar', extra = null }) {
   const KEYS = [['sfperf', 'Financial Performance'], ['sfpos', 'Financial Position'], ['scne', 'Changes in Net Assets/Equity'], ['scf', 'Cash Flows'], ['scbaa', 'Comparison of Budget and Actual']];
-  const sel = KEYS.some(([k]) => k === q.get('t')) ? q.get('t') : 'sfperf';
+  const canEdit = !!canEdit0 && mode !== 'baar' && !F.confirmed;
+  const sel = mode === 'budget' ? 'scbaa' : KEYS.some(([k]) => k === q.get('t')) ? q.get('t') : 'sfperf';
+  const tabKey = mode === 'budget' ? 'budget' : 'fs';
   const showAll = q.get('b') === 'all';
   const work = {
     scfY: JSON.parse(JSON.stringify((F.rec && F.rec.scf) || {})),
@@ -408,13 +416,14 @@ function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
   const bRows = doc0.allRows;
   const bShow = (r) => r.h || showAll || inTb(r, F.figY.accts) || r.always || scbaaLine(r, work.scbaa).typed;
   const num = (r, f) => { const v = (work.scbaa.rows[r.k] || {})[f]; return v === undefined || v === null ? '' : esc(v); };
+  const ph = (r, f) => { const a = ((work.scbaa.auto || {})[r.k] || {})[f]; return a === undefined || a === null ? '' : ` placeholder="${esc(shown(a))}"`; };
   const vis = bRows.filter(bShow).filter((r, i, arr) => !r.h || arr.slice(i + 1).findIndex((x) => x.h && (r.sub || !x.sub)) !== 0 && arr.slice(i + 1).some((x) => !x.h));
   const bHTML = vis.map((r) => r.h ? `<tr class="${r.sub ? 'h2' : 'h'}"><td colspan="6">${esc(r.h)}</td></tr>`
     : `<tr><td class="i">${esc(r.t)}${r.extra ? ' <span class="hint">(account in the trial balance)</span>' : ''}</td>
-      <td><input class="amt" data-b="${r.k}" data-f="ob" value="${num(r, 'ob')}" aria-label="${esc(r.t)} original budget" ${dis}></td>
-      <td><input class="amt" data-b="${r.k}" data-f="adj" value="${num(r, 'adj')}" aria-label="${esc(r.t)} adjustments" ${dis}></td>
+      <td><input class="amt" data-b="${r.k}" data-f="ob" value="${num(r, 'ob')}"${ph(r, 'ob')} aria-label="${esc(r.t)} original budget" ${dis}></td>
+      <td><input class="amt" data-b="${r.k}" data-f="adj" value="${num(r, 'adj')}"${ph(r, 'adj')} aria-label="${esc(r.t)} adjustments" ${dis}></td>
       <td class="n" data-bf="${r.k}"></td>
-      <td><input class="amt" data-b="${r.k}" data-f="act" value="${num(r, 'act')}" aria-label="${esc(r.t)} actual" ${dis}></td>
+      <td><input class="amt" data-b="${r.k}" data-f="act" value="${num(r, 'act')}"${ph(r, 'act')} aria-label="${esc(r.t)} actual" ${dis}></td>
       <td class="n" data-bd="${r.k}"></td></tr>`).join('');
   // Cash flow entry
   const scfIn = (yrKey, k, locked) => {
@@ -436,33 +445,38 @@ function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
   };
   const cashCell = (fig) => (fig.any ? money(fig.lines.cash || 0, { dash: '0.00' }) : 'not yet entered');
   const body = `<style>${FS_CSS}</style>
-    <div class="topnote">The statements are built from the trial balances, all funds combined. Enter the budget for the SCBAA and check the cash flow lines; the rest fills in by itself.</div>
+    ${mode === 'baar' ? `<div class="topnote">The audited financial statements, from the trial balances confirmed in the Financial Statements step. Nothing is typed here.</div>${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}`
+      : mode === 'budget' ? '<div class="topnote">Enter the budget from the Annual Budget, the RAO, or both. Import the Excel file or type the amounts; the files stay on your computer.</div>'
+      : '<div class="topnote">The statements are built from the trial balances, all funds combined. Check the cash flow lines; the budget is entered on the Budget tab.</div>'}
+    ${extra && extra.top ? extra.top : ''}
     <div class="xcols" style="grid-template-columns:minmax(0,1fr) 300px">
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Statements</h2><span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="f-print">Print</button><button class="btn sm primary" type="button" id="f-word">Word</button></span></div><div class="panel-body">
-          <div class="tabs2" id="f-tabs">${KEYS.map(([k, t]) => `<a class="t ${k === sel ? 'on' : ''}" href="${base}&s=fs&t=${k}${showAll ? '&b=all' : ''}">${esc(t)} <span data-sp="${k}"></span></a>`).join('')}</div>
-          <div class="lr-row" style="justify-content:flex-start;gap:8px"><span class="hint">Funds combined:</span>${fundsLine}<span class="hint" style="flex-basis:100%">The ${F.yp} column comes from CY ${F.yp} Comparative in FS Input (entered once this year; from next year, taken from last year's BAAR).</span></div>
+          ${mode === 'budget' ? '' : `<div class="tabs2" id="f-tabs">${KEYS.map(([k, t]) => `<a class="t ${k === sel ? 'on' : ''}" href="${base}&s=${tabKey}&t=${k}${showAll ? '&b=all' : ''}">${esc(t)} <span data-sp="${k}"></span></a>`).join('')}</div>`}
+          <div class="lr-row" style="justify-content:flex-start;gap:8px"><span class="hint">Funds combined:</span>${fundsLine}<span class="hint" style="flex-basis:100%">The ${F.yp} column comes from the CY ${F.yp} Comparative trial balance (entered once this year; from next year, taken from last year's BAAR).</span></div>
           <div class="lr-row"><b style="color:var(--navy)">Print View</b><span class="hint" id="f-pg"></span></div>
           <div class="paper-wrap big" id="f-paper"></div></div></section>
-        <section class="panel"><div class="panel-head"><h2>Comparison of Budget and Actual Amounts</h2><span class="btn-row" style="margin-left:auto;align-items:center"><span class="hint">Show:</span>
-          <div class="seg" role="group" aria-label="Rows shown"><a class="${showAll ? '' : 'on'}" href="${base}&s=fs&t=${sel}">Accounts in the trial balance</a><a class="${showAll ? 'on' : ''}" href="${base}&s=fs&t=${sel}&b=all">All rows</a></div>
+        ${mode === 'budget' ? `<section class="panel"><div class="panel-head"><h2>Comparison of Budget and Actual Amounts</h2><span class="btn-row" style="margin-left:auto;align-items:center"><span class="hint">Show:</span>
+          <div class="seg" role="group" aria-label="Rows shown"><a class="${showAll ? '' : 'on'}" href="${base}&s=${tabKey}&t=${sel}">Accounts in the trial balance</a><a class="${showAll ? 'on' : ''}" href="${base}&s=${tabKey}&t=${sel}&b=all">All rows</a></div>
           ${canEdit ? '<button class="btn sm ghost" type="button" id="b-paste">Paste from Excel</button>' : ''}</span></div><div class="panel-body">
           <table class="ent bud"><colgroup><col style="width:30%"><col><col><col><col><col></colgroup><thead><tr><th>Item</th><th>Original Budget</th><th>Adjustments</th><th>Final Budget</th><th>Actual on comparable basis</th><th>Performance Difference</th></tr></thead><tbody>${bHTML}</tbody></table>
           <label class="check" style="min-height:0"><input type="checkbox" id="b-all" ${work.scbaa.printAll ? '' : 'checked'} ${dis}>Print only the rows with amounts</label>
-          <span class="hint">Original Budget and Adjustments from the approved budget and supplemental budgets; Actual from the barangay's records. Final Budget and the Difference are computed.</span></div></section>
-        <section class="panel"><div class="panel-head"><h2>Cash Flows</h2><span class="hint" style="margin-left:8px">all funds combined</span></div><div class="panel-body">
+          <span class="hint">Original Budget: current-year plus continuing appropriations; Adjustments: supplemental budgets; Actual: obligations. Typed amounts take the place of amounts from the RAO. Final Budget and the Difference are computed.</span></div></section>` : ''}
+        ${extra && extra.mid ? extra.mid : ''}
+        ${mode === 'fs' ? `<section class="panel"><div class="panel-head"><h2>Cash Flows</h2><span class="hint" style="margin-left:8px">all funds combined</span></div><div class="panel-body">
           <table class="ent"><thead><tr><th>Line</th><th>${F.y}</th><th>${F.yp}</th></tr></thead><tbody>${cRows}
             <tr class="h"><td colspan="3">Cash balance</td></tr>
             <tr><td class="i">Cash at the Beginning of the Year</td>${begCell('Y')}${begCell('P')}</tr>
             <tr class="sum"><td>Cash Balance at the End of the Year</td><td class="n" data-ct="Y-end"></td><td class="n" data-ct="P-end"></td></tr>
             <tr><td class="i">Cash in Financial Position</td><td class="n">${cashCell(F.figY)}</td><td class="n">${cashCell(F.figP)}</td></tr>
             <tr class="sum"><td>Left to explain</td><td class="n" data-ct="Y-left"></td><td class="n" data-ct="P-left"></td></tr></tbody></table>
-          <p class="hint" style="margin:8px 0 0">Amounts marked "from the trial balance" are a starting point only; change them to the actual cash received or paid. Clear the box to go back to the trial balance amount.${scfPriorLocked(F) ? ` The ${F.yp} column comes from the CY ${F.yp} BAAR.` : ''}</p></div></section>
-        ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span><div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save" type="button">Save</button></div></div>` : ''}
+          <p class="hint" style="margin:8px 0 0">Amounts marked "from the trial balance" are a starting point only; change them to the actual cash received or paid. Clear the box to go back to the trial balance amount.${scfPriorLocked(F) ? ` The ${F.yp} column comes from the CY ${F.yp} BAAR.` : ''}</p></div></section>` : ''}
+        ${canEdit && mode !== 'baar' ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span><div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save" type="button">Save</button></div></div>` : ''}
       </div>
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Statement Status</h2></div><div class="panel-body"><table class="coat"><colgroup><col><col style="width:46px"><col style="width:104px"></colgroup><thead><tr><th>Statement</th><th>Page</th><th>Status</th></tr></thead><tbody id="f-status"></tbody></table>
-          <p class="hint" style="margin:8px 0 0">Pages continue after Part 05 and go to the Table of Contents by themselves.</p></div></section>
+          <p class="hint" style="margin:8px 0 0">${start ? 'Pages continue after Part 05 and go to the Table of Contents by themselves.' : 'Page numbers are given in the BAAR (Part 06).'}</p></div></section>
+        ${extra && extra.side ? extra.side : ''}
         <section class="panel"><div class="panel-head"><h2>Statement Results</h2></div><div class="panel-body ck" id="f-checks"></div></section>
       </div></div>`;
 
@@ -478,11 +492,11 @@ function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
         const idx = { sfperf: 0, sfpos: 1, scne: 2, scf: 3 };
         const html = sel === 'scbaa' ? scbaaHTML({ ...d.scbaa, y: F.y, lgu, mun, start: pages.scbaa }) : [stmtHTML(d.stmts[idx[sel]], { lgu, mun, page: pages[sel] })];
         $('#f-paper', root).innerHTML = html.map((x) => `<div class="sheet fsheet">${x}</div>`).join('');
-        $('#f-pg', root).textContent = sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
+        $('#f-pg', root).textContent = !pages[sel] ? '' : sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
         const c = afsChecks(F, d);
         $('#f-checks', root).innerHTML = checkHTML(c.out);
         KEYS.forEach(([k]) => { const el = $(`[data-sp="${k}"]`, root); if (el) el.innerHTML = stmtPill(k, c.stat[k]); });
-        $('#f-status', root).innerHTML = KEYS.map(([k, t]) => `<tr><td>${esc(t)}</td><td>${k === 'scbaa' && pages.next - pages.scbaa > 1 ? `${pages.scbaa}–${pages.next - 1}` : pages[k]}</td><td>${stmtPill(k, c.stat[k])}</td></tr>`).join('');
+        $('#f-status', root).innerHTML = KEYS.map(([k, t]) => `<tr><td>${esc(t)}</td><td>${!pages[k] ? '–' : k === 'scbaa' && pages.next - pages.scbaa > 1 ? `${pages.scbaa}–${pages.next - 1}` : pages[k]}</td><td>${stmtPill(k, c.stat[k])}</td></tr>`).join('');
         // Budget and Actual computed cells
         bRows.forEach((r) => { if (r.h) return; const x = scbaaLine(r, work.scbaa); const f = $(`[data-bf="${r.k}"]`, root), df = $(`[data-bd="${r.k}"]`, root); if (f) f.textContent = money(x.fin, { dash: '' }); if (df) df.textContent = money(x.diff, { dash: '' }); });
         // Cash flow totals

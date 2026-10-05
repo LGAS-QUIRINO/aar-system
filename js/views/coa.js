@@ -3,7 +3,7 @@
 import { store, emitChange } from '../store.js';
 import { esc, toast, modal, pill, confirmBox, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { COA_ID, LINES, LINE, loadChart, loadAdded, validCode } from '../coa.js';
+import { COA_ID, LINES, LINE, loadChart, loadAdded, validCode, SOURCES, CHART_NAME } from '../coa.js';
 
 export const canEditChart = (me) => has(me, 'sa') || has(me, 'admin');
 const STMT = { perf: 'Statement of Financial Performance', pos: 'Statement of Financial Position' };
@@ -13,7 +13,7 @@ export const lineText = (k) => { const l = LINE[k]; return l ? `${l.label}${l.no
 // Which codes some trial balance already uses: { code: true }.
 export async function usedCodes() {
   const out = {};
-  (await store.list('letters')).filter((l) => l.data.type === 'tb').forEach((l) => (l.data.rows || []).forEach((r) => { if (r.use) out[r.use] = true; if (r.code) out[String(r.code).trim()] = true; }));
+  (await store.list('letters')).filter((l) => l.data.type === 'tb').forEach((l) => (l.data.rows || []).forEach((r) => { if (r.use) out[String(r.use).split(':').pop()] = true; if (r.code) out[String(r.code).trim()] = true; }));
   return out;
 }
 async function saveAdded(list, me, what) {
@@ -27,10 +27,12 @@ async function saveAdded(list, me, what) {
  */
 export async function openAddAccount({ me, preset = {}, edit = null }) {
   const chart = await loadChart();
-  const a = edit || { code: preset.code || '', title: preset.title || '', line: preset.line || '', interfund: false };
+  const a = edit || { code: preset.code || '', title: preset.title || '', line: preset.line || '', interfund: false, source: SOURCES[0], ref: '' };
   let out = null;
   const body = `<div class="field"><label class="label" for="aa-code">Account Code</label><input class="input" id="aa-code" value="${esc(a.code)}" placeholder="e.g. 2-03-01-050" ${edit ? 'disabled' : ''}></div>
     <div class="field"><label class="label" for="aa-title">Account Title</label><input class="input" id="aa-title" value="${esc(a.title)}"></div>
+    <div class="grid-2"><div class="field"><label class="label" for="aa-src">Source</label><select class="input" id="aa-src">${SOURCES.map((x) => `<option ${x === a.source ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select></div>
+      <div class="field"><label class="label" for="aa-ref">Circular No. / Reference</label><input class="input" id="aa-ref" value="${esc(a.ref || '')}" placeholder="e.g. COA Circular No. 2020-001"></div></div>
     <div class="field"><label class="label" for="aa-line">Shows in</label><select class="input" id="aa-line"><option value="">Choose the line…</option>${lineOptions(a.line)}</select></div>
     <label class="check"><input type="checkbox" id="aa-inter" ${a.interfund ? 'checked' : ''}>Between funds of this barangay (left out when the funds are combined)</label>
     <div class="hint" id="aa-hint" style="line-height:1.5"></div>`;
@@ -43,10 +45,13 @@ export async function openAddAccount({ me, preset = {}, edit = null }) {
     buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: edit ? 'Save' : 'Add', cls: 'primary', value: 'ok', check: (bg) => {
       const code = $('#aa-code', bg).value.trim(), title = $('#aa-title', bg).value.trim().replace(/\s+/g, ' '), line = $('#aa-line', bg).value;
       if (!validCode(code)) { toast('Type the code like 2-03-01-050.', 'bad'); return false; }
-      if (!edit && chart.byCode[code]) { toast(`Code ${code} is already ${chart.byCode[code].title}.`, 'bad'); return false; }
+      const taken = !edit && (chart.M[code] || chart.A[code] || chart.D[code]);
+      if (taken) { toast(`Code ${code} is already ${taken.title} (${CHART_NAME[taken.chart]}).`, 'bad'); return false; }
       if (!title) { toast('Type the account title.', 'bad'); return false; }
       if (!line) { toast('Choose where the account shows.', 'bad'); return false; }
-      out = { code, title, line, interfund: $('#aa-inter', bg).checked };
+      const source = $('#aa-src', bg).value, ref = $('#aa-ref', bg).value.trim();
+      if (source === 'Other COA Circular' && !ref) { toast('Type the circular number.', 'bad'); return false; }
+      out = { code, title, line, interfund: $('#aa-inter', bg).checked, source, ref };
       return true;
     } }] });
   if (!ok || !out) return null;
@@ -59,14 +64,14 @@ export async function openAddAccount({ me, preset = {}, edit = null }) {
   return rec;
 }
 
-// A window to pick an account from the chart. Resolves with the account code, or null.
+// A window to pick an account from the charts. Resolves with the account key ('manual:…', 'c2015:…', 'added:…'), or null.
 export async function pickAccount({ title = 'Match Account', hintText = '', start = '' }) {
   const chart = await loadChart();
   let picked = null;
   const rowsFor = (q) => {
     const t = q.trim().toLowerCase();
-    const hits = chart.list.filter((a) => !t || a.code.includes(t) || a.title.toLowerCase().includes(t)).slice(0, 80);
-    return hits.map((a) => `<button type="button" class="pick" data-code="${esc(a.code)}"><span class="mono">${esc(a.code)}</span><span>${esc(a.title)}${a.official ? '' : ' <span class="pill violet">Added by the team</span>'}</span></button>`).join('') || '<div class="empty">No account found.</div>';
+    const hits = chart.list.filter((a) => !t || a.code.includes(t) || a.title.toLowerCase().includes(t)).slice(0, 100);
+    return hits.map((a) => `<button type="button" class="pick" data-code="${esc(a.key)}"><span class="mono">${esc(a.code)}</span><span>${esc(a.title)} <span class="pill ${a.chart === 'added' ? 'violet' : 'grey'}">${esc(a.chart === 'added' ? (a.source || 'Added') : CHART_NAME[a.chart])}</span></span></button>`).join('') || '<div class="empty">No account found.</div>';
   };
   await modal({ title, wide: true,
     body: `${hintText ? `<p class="hint" style="margin:0 0 8px">${esc(hintText)}</p>` : ''}<input class="input" id="pk-q" placeholder="Find code or title" value="${esc(start)}" aria-label="Find code or title"><div class="picklist" id="pk-list">${rowsFor(start)}</div>`,
@@ -84,16 +89,16 @@ export async function coaView(refs, params, q) {
   const can = canEditChart(me);
   const chart = await loadChart();
   const used = await usedCodes();
-  const show = q.get('show') === 'added' ? 'added' : 'all';
-  const rows = chart.list.filter((a) => show === 'all' || !a.official);
-  const body = `<div class="page-head"><div><h1>Chart of Accounts</h1><p>${chart.list.length - chart.added.length} official accounts · ${chart.added.length} added by the team</p></div>
+  const show = ['c2015', 'added'].includes(q.get('show')) ? q.get('show') : 'manual';
+  const rows = chart[show === 'manual' ? 'manual' : show === 'c2015' ? 'c2015' : 'added'];
+  const body = `<div class="page-head"><div><h1>Chart of Accounts</h1><p>Manual ${chart.manual.length} · COA Circular 2015-009, Annex A ${chart.c2015.length} · added by the team ${chart.added.length}</p></div>
       ${can ? '<div class="btn-row"><button class="btn primary" id="c-add" type="button">+ Add Account</button></div>' : ''}</div>
     <div class="topnote">The official accounts cannot be changed. An account added by the team can be edited or removed while no trial balance uses it. ${can ? '' : 'Only the SA or Admin can add accounts.'}</div>
-    <section class="panel"><div class="panel-head"><div class="seg" role="group" aria-label="Show"><a class="${show === 'all' ? 'on' : ''}" href="#/coa">All</a><a class="${show === 'added' ? 'on' : ''}" href="#/coa?show=added">Added by the team</a></div>
+    <section class="panel"><div class="panel-head"><div class="seg" role="group" aria-label="Chart"><a class="${show === 'manual' ? 'on' : ''}" href="#/coa">Manual · ${chart.manual.length}</a><a class="${show === 'c2015' ? 'on' : ''}" href="#/coa?show=c2015">COA Circular 2015-009 · ${chart.c2015.length}</a><a class="${show === 'added' ? 'on' : ''}" href="#/coa?show=added">Added · ${chart.added.length}</a></div>
       <input class="input" id="c-find" placeholder="Find code or title" aria-label="Find code or title" style="margin-left:auto;width:260px"></div>
-      <div class="panel-body" style="padding-top:4px"><table class="coat" style="table-layout:auto"><thead><tr><th style="width:130px">Code</th><th>Account Title</th><th>Shows in</th><th style="width:200px"></th></tr></thead>
+      <div class="panel-body" style="padding-top:4px"><table class="coat" style="table-layout:auto"><thead><tr><th style="width:130px">Code</th><th>Account Title</th><th>Shows in</th><th style="width:260px">${show === 'added' ? 'Source' : ''}</th></tr></thead>
       <tbody>${rows.map((a) => `<tr data-f="${esc((a.code + ' ' + a.title).toLowerCase())}"><td class="mono">${esc(a.code)}</td><td>${esc(a.title)}${a.interfund ? ' <span class="hint">(between funds)</span>' : ''}</td><td>${esc(lineText(a.line))}</td>
-        <td style="text-align:right">${a.official ? pill('Official', 'grey') : `${pill('Added by the team', 'violet')} ${can && !used[a.code] ? `<button class="btn sm ghost" type="button" data-ed="${esc(a.code)}">Edit</button><button class="btn sm ghost" type="button" data-rm="${esc(a.code)}">Remove</button>` : used[a.code] ? '<span class="hint">In use</span>' : ''}`}</td></tr>`).join('')
+        <td style="text-align:right">${a.official ? pill(CHART_NAME[a.chart], 'grey') : `${pill(a.source ? a.source + (a.ref ? ' · ' + a.ref : '') : 'Added by the team', 'violet')} ${can && !used[a.code] ? `<button class="btn sm ghost" type="button" data-ed="${esc(a.code)}">Edit</button><button class="btn sm ghost" type="button" data-rm="${esc(a.code)}">Remove</button>` : used[a.code] ? '<span class="hint">In use</span>' : ''}`}</td></tr>`).join('')
         || '<tr><td colspan="4"><div class="empty">No accounts added by the team yet.</div></td></tr>'}</tbody></table></div></section>`;
   return {
     active: '#/coa', crumbs: '<b>Chart of Accounts</b>', body,

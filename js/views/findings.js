@@ -6,6 +6,8 @@ import { activeTemplates } from './library.js';
 import { fromTemplate, blankAom, clone, numberAoms, numberingCheck, placeholders, SECTIONS, SETUP_VAR_NAMES, ST, formatVar, statusPill } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo } from '../format.js';
 import { readWorkingPaper } from '../wp.js';
+import { loadFS } from './baarfs.js';
+import { fillHTML, wireFill, downloadWp, openNewWp, saveAsTemplate, wpListHTML, wpNeeds, FILLED } from './wpfill.js';
 
 export async function findings(refs, params, q) {
   const ctx = await loadAudit(refs, params.id);
@@ -13,6 +15,8 @@ export async function findings(refs, params, q) {
   const { audit } = ctx;
   const templates = await activeTemplates('barangay');
   const allAoms = await store.list('aoms');
+  let F = null; try { F = await loadFS(ctx); } catch (e) { F = null; }
+  const wpMode = {};   // finding id → 'fill' | 'import'
 
   // Working list (saved on Save only)
   const items = ctx.aoms.map((a) => ({ id: a.id, data: clone(a.data), orig: JSON.stringify(a.data) }));
@@ -24,14 +28,15 @@ export async function findings(refs, params, q) {
   const nums = () => numberAoms(items.map((it, i) => ({ id: it.id, data: { ...it.data, seq: i + 1 } })));
   const wpState = (it) => {
     const d = it.data;
-    const need = (d.blocks || []).some((b) => b.type === 'table') || placeholders(d).some((n) => !SETUP_VAR_NAMES.includes(n));
+    const need = (d.blocks || []).some((b) => b.type === 'table') || placeholders(d).some((n) => !SETUP_VAR_NAMES.includes(n)) || !!d.wpDef;
     if (!need && !d.wp) return { k: 'none', t: 'No WP Needed' };
-    if (!d.wpData) return { k: 'missing', t: d.wp ? `Import ${d.wp}` : 'Import WP' };
+    if (!d.wpData) return { k: 'missing', t: d.wp ? `Fill in ${d.wp}` : 'Fill in WP' };
     const v = ctx.varsFor({ data: d });
-    const miss = placeholders(d).filter((n) => v[n] === undefined);
-    const missT = (d.blocks || []).filter((b) => b.type === 'table' && !d.wpData.tables[b.n]);
+    const nd = wpNeeds(d);
+    const miss = [...new Set([...placeholders(d), ...nd.ph])].filter((n) => v[n] === undefined);
+    const missT = nd.tn.filter((n) => !(d.wpData.tables || {})[n]);
     if (miss.length || missT.length) return { k: 'warn', t: `${miss.length + missT.length} Missing Value${miss.length + missT.length > 1 ? 's' : ''}` };
-    return { k: 'ok', t: `${d.wp || 'WP'} Imported` };
+    return { k: 'ok', t: `${d.wp || 'WP'} ${d.wpData.file === FILLED ? 'Complete' : 'Imported'}` };
   };
 
   function selectedHTML() {
@@ -59,23 +64,28 @@ export async function findings(refs, params, q) {
     const it = items.find((x) => x.id === sel);
     if (!it) return '';
     const d = it.data, wp = d.wpData;
+    const mode = wpMode[it.id] || (wp && wp.file !== FILLED ? 'import' : 'fill');
+    const ed = canEdit && !lockedOrSent(it);
     const v = ctx.varsFor({ data: d });
     const ph = placeholders(d);
     const missing = ph.filter((n) => v[n] === undefined);
     const tablesNeeded = (d.blocks || []).filter((b) => b.type === 'table').map((b) => b.n);
-    return `<div class="panel-head"><div><h2>Working Paper · ${esc(d.title)}</h2><span class="hint">${esc(d.wp || 'No working paper ID in the template')}</span></div>
-        ${canEdit && !lockedOrSent(it) ? `<label class="btn ${wp ? 'ghost' : 'primary'}" for="wp-file">${wp ? 'Re-import Revised WP' : 'Import Working Paper'}</label><input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">` : ''}</div>
-      <div class="panel-body">
-        ${wp ? `<div class="note info">Imported: <b>${esc(wp.file)}</b> · By ${esc(nice(refs.users.find((u) => u.data.email === wp.by)?.data.name || wp.by))} · ${esc(timeAgo(wp.at))}. The file stays on your computer; only the values below are saved.</div>`
+    const importBody = `${wp && wp.file !== FILLED ? `<div class="note info">Imported: <b>${esc(wp.file)}</b> · By ${esc(nice(refs.users.find((u) => u.data.email === wp.by)?.data.name || wp.by))} · ${esc(timeAgo(wp.at))}. The file stays on your computer; only the values below are saved.</div>`
           : '<div class="note info">Choose the Excel working paper. The app reads the VARIABLE / VALUE list and the sheets named "AOM Table 1", "AOM Table 2", and so on. The file itself is not uploaded.</div>'}
+        ${ed ? `<label class="btn ${wp ? 'ghost' : 'primary'}" for="wp-file" style="margin-bottom:10px">${wp && wp.file !== FILLED ? 'Re-import Revised WP' : 'Import Working Paper'}</label><input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">` : ''}
         <div class="grid-2">
           <div><span class="label">Placeholders · ${ph.length - missing.length} of ${ph.length} Filled</span>
             <div class="kv">${ph.map((n) => `<div><span class="mono">${esc(n)}</span><span>${v[n] !== undefined ? esc(v[n]) + (SETUP_VAR_NAMES.includes(n) ? ' <small class="hint">(from Setup)</small>' : '') : '<b style="color:var(--bad-ink)">No value</b>'}</span></div>`).join('') || '<span class="hint">None</span>'}</div></div>
           <div><span class="label">Tables · ${tablesNeeded.length} Needed</span>
-            <div class="kv">${tablesNeeded.map((n) => { const t = wp && wp.tables[n]; return `<div><span>AOM Table ${n}</span><span>${t ? `✓ ${t.rows[0].length} columns · ${t.rows.length - 1} rows` : '<b style="color:var(--bad-ink)">Not found</b>'}</span></div>`; }).join('') || '<span class="hint">None</span>'}</div>
+            <div class="kv">${tablesNeeded.map((n) => { const t = wp && wp.tables && wp.tables[n]; return `<div><span>AOM Table ${n}</span><span>${t ? `✓ ${t.rows[0].length} columns · ${t.rows.length - 1} rows` : '<b style="color:var(--bad-ink)">Not found</b>'}</span></div>`; }).join('') || '<span class="hint">None</span>'}</div>
             ${wp && Object.keys(wp.vars || {}).length ? `<details style="margin-top:8px"><summary class="hint">All ${Object.keys(wp.vars).length} variables in the file</summary><div class="kv">${Object.entries(wp.vars).map(([k, x]) => `<div><span class="mono">${esc(k)}</span><span>${esc(formatVar(k, x.raw))}</span></div>`).join('')}</div></details>` : ''}</div>
         </div>
-        ${missing.length ? `<div class="note warn">${missing.length} placeholder${missing.length > 1 ? 's have' : ' has'} no value: ${missing.map((m) => '[' + esc(m) + ']').join(', ')}. Add ${missing.length > 1 ? 'them' : 'it'} to the working paper and re-import, or remove the sentence in the AOM draft (for example Year 3 sentences when the audit covers only 2 years).</div>` : ph.length ? '<div class="note ok">All placeholders in the AOM template are filled</div>' : ''}
+        ${missing.length ? `<div class="note warn">${missing.length} placeholder${missing.length > 1 ? 's have' : ' has'} no value: ${missing.map((m) => '[' + esc(m) + ']').join(', ')}. Add ${missing.length > 1 ? 'them' : 'it'} to the working paper and re-import, or remove the sentence in the AOM draft (for example Year 3 sentences when the audit covers only 2 years).</div>` : ph.length ? '<div class="note ok">All placeholders in the AOM template are filled</div>' : ''}`;
+    return `<div class="panel-head"><div><h2>Working Paper · ${esc(d.wpDef ? d.wpDef.title : d.title)}</h2><span class="hint">${esc(d.wp || 'No working paper reference yet')}${d.flag ? ' · added from Possible Findings' : ''}</span></div>
+        <span class="btn-row" style="margin-left:auto">${!d.wp && ed ? '<button class="btn sm primary" type="button" id="wp-new">New Working Paper</button>' : ''}<button class="btn sm ghost" type="button" id="wp-dl">Download Excel</button></span></div>
+      <div class="panel-body">
+        <div class="seg" role="group" aria-label="Working paper" style="margin-bottom:10px"><button type="button" class="${mode === 'fill' ? 'on' : ''}" data-wpmode="fill">Fill in Here</button><button type="button" class="${mode === 'import' ? 'on' : ''}" data-wpmode="import">Import Excel</button></div>
+        ${mode === 'fill' ? `<p class="hint" style="margin:0 0 8px">Fill in the working paper here, or import the Excel working paper as before. Amounts from the trial balance fill in by themselves.</p>${ed ? '<input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">' : ''}${fillHTML(d, F, ctx, ed)}` : importBody}
       </div>`;
   }
 
@@ -105,6 +115,7 @@ export async function findings(refs, params, q) {
       <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
         <section class="panel" id="f-sel">${selectedHTML()}</section>
         <section class="panel" id="f-wp">${wpPanelHTML()}</section>
+        <div id="f-wplist">${wpListHTML(items, F, ctx)}</div>
         ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
           <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save">Save</button><button class="btn ghost" id="f-open">Save and Open AOM Drafts →</button></div></div>` : ''}
       </div></div>`;
@@ -112,7 +123,7 @@ export async function findings(refs, params, q) {
   return {
     active: '#/audits', crumbs: `<a href="#/audits">My Audit</a> / <a href="#/audits/${ctx.rec.id}/setup">${esc(ctx.title)}</a> / <b>Findings</b>`, body,
     mount(root) {
-      const redraw = () => { $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); $('#f-pool', root).innerHTML = poolHTML($('#f-find', root).value); wireWp(); };
+      const redraw = () => { $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); $('#f-wplist', root).innerHTML = wpListHTML(items, F, ctx); $('#f-pool', root).innerHTML = poolHTML($('#f-find', root).value); wireWp(); };
       const dirty = () => { setDirty(true, save); redraw(); };
       $('#f-find', root).oninput = (e) => { $('#f-pool', root).innerHTML = poolHTML(e.target.value); };
       const addItem = (data) => {
@@ -139,9 +150,11 @@ export async function findings(refs, params, q) {
           if (sel === it.id) sel = items[0]?.id || null; dirty(); return;
         }
         const imp = e.target.closest('[data-imp]');
-        if (imp) { e.stopPropagation(); sel = imp.dataset.imp; redraw(); const f = $('#wp-file', root); if (f) f.click(); return; }
+        if (imp) { e.stopPropagation(); sel = imp.dataset.imp; wpMode[sel] = 'import'; redraw(); const f = $('#wp-file', root); if (f) f.click(); return; }
         const row = e.target.closest('[data-sel]');
-        if (row && !e.target.closest('select,button')) { sel = row.dataset.sel; $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
+        if (row && !e.target.closest('select,button,input')) { sel = row.dataset.sel; $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
+        const md = e.target.closest('[data-wpmode]');
+        if (md && sel) { wpMode[sel] = md.dataset.wpmode; $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
       });
       root.addEventListener('change', (e) => {
         const s = e.target.closest('[data-sec]');
@@ -166,6 +179,22 @@ export async function findings(refs, params, q) {
         addItem({ poolCode: src.poolCode, poolVersion: src.poolVersion, mode: 'Modified', copiedFrom: findings.ex, title: src.title, section: src.section, area: src.area, wp: src.wp, blocks: clone(src.blocks) });
       };
       function wireWp() {
+        const cur = items.find((x) => x.id === sel);
+        if (cur) wireFill($('#f-wp', root), cur.data, refs.me, () => dirty(), F);
+        const dl = $('#wp-dl', root);
+        if (dl && cur) dl.onclick = async () => { try { await downloadWp(cur.data, ctx); } catch (err) { toast('Excel failed: ' + err.message, 'bad'); } };
+        const nw = $('#wp-new', root);
+        if (nw && cur) nw.onclick = async () => {
+          if (!F) { toast('Enter the trial balances in the Financial Statements step first.', 'bad'); return; }
+          const w = await openNewWp({ F, ctx, me: refs.me, accounts: [], title: cur.data.title });
+          if (!w) return;
+          cur.data.wp = w.ref; cur.data.wpDef = { title: w.title, accounts: w.accounts, ph: w.ph, tables: w.tables };
+          const tbv = {};
+          w.ph.filter((p) => p.from === 'tb' && p.kind === 'Amount').forEach((p) => { const amt = w.accounts.reduce((t, k) => t + (F.figY.accts[k] || 0), 0); tbv[p.name] = { raw: amt / 100 }; });
+          if (Object.keys(tbv).length) cur.data.wpData = { file: FILLED, at: new Date().toISOString(), by: refs.me.email, vars: { ...((cur.data.wpData || {}).vars || {}), ...tbv }, tables: (cur.data.wpData || {}).tables || {} };
+          if (w.template) { try { const code = await saveAsTemplate(cur.data, refs.me); toast(`Saved as ${code} (Draft) in the AOM Library.`, 'ok'); } catch (err) { toast('Template not saved: ' + err.message, 'bad'); } }
+          dirty();
+        };
         const f = $('#wp-file', root);
         if (!f) return;
         f.onchange = async () => {
@@ -175,6 +204,7 @@ export async function findings(refs, params, q) {
             toast('Reading ' + file.name + '…');
             const wp = await readWorkingPaper(file);
             it.data.wpData = { file: wp.file, at: new Date().toISOString(), by: refs.me.email, vars: wp.vars, tables: wp.tables };
+            wpMode[it.id] = 'import';
             const nv = Object.keys(wp.vars).length, nt = Object.keys(wp.tables).length;
             toast(`Found ${nv} variable${nv === 1 ? '' : 's'} and ${nt} table${nt === 1 ? '' : 's'}. Click Save to keep them.`, nv || nt ? 'ok' : 'warn');
             dirty();

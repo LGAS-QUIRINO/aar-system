@@ -68,7 +68,8 @@ const NAV = [
 const ADMIN_NAV = [
   { href: '#/users', label: 'Users & Roles', icon: '◉', admin: true },
   { href: '#/lgus', label: 'LGU Master List', icon: '⌂', admin: true },
-  { href: '#/coa', label: 'Chart of Accounts', icon: '≡' }
+  { href: '#/coa', label: 'Chart of Accounts', icon: '≡' },
+  { href: '#/flags', label: 'Flag Rules', icon: '⚑' }
 ];
 
 export function roleLine(me) {

@@ -23,6 +23,8 @@ import { saorview } from './views/saorview.js';
 import { comments } from './views/comments.js';
 import { baar, baarList } from './views/baar.js';
 import { coaView } from './views/coa.js';
+import { fsStep } from './views/fsstep.js';
+import { flagRulesView } from './views/fsflags.js';
 import { ST } from './aom.js';
 
 const app = document.getElementById('app');
@@ -35,6 +37,7 @@ function route(hash) {
   const p = path.split('/').filter(Boolean);
   if (p[0] === 'audits' && p[1] === 'new') return [setup, {}, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'setup') return [setup, { id: p[1] }, q];
+  if (p[0] === 'audits' && p[1] && p[2] === 'fs') return [fsStep, { id: p[1] }, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'findings') return [findings, { id: p[1] }, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'aoms') return [aoms, { id: p[1] }, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'print') return [print, { id: p[1] }, q];
@@ -51,6 +54,7 @@ function route(hash) {
   if (p[0] === 'users') return [users, {}, q];
   if (p[0] === 'lgus') return [lgus, {}, q];
   if (p[0] === 'coa') return [coaView, {}, q];
+  if (p[0] === 'flags') return [flagRulesView, {}, q];
   return [dashboard, {}, q];
 }
 

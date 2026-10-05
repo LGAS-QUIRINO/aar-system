@@ -4,7 +4,7 @@ import { esc, pill } from '../ui.js';
 import { has, myTeamIds } from '../refs.js';
 import { periodPhrase, timeAgo, nice } from '../format.js';
 
-export const STAGES = ['Setup', 'Findings and AOMs', 'AOM Review', 'SAOR and Exit Conference', 'BAAR', 'Final'];
+export const STAGES = ['Setup', 'Financial Statements', 'Findings and AOMs', 'AOM Review', 'SAOR and Exit Conference', 'BAAR', 'Final'];
 
 export async function auditRows(refs) {
   const teams = myTeamIds(refs.me, refs.teams);
@@ -21,11 +21,11 @@ export function auditTable(rows, refs, limit) {
     ${rows.slice(0, limit || rows.length).map(({ rec, lgu, mun }) => {
       const d = rec.data;
       const stageIdx = Math.max(0, STAGES.indexOf(d.stage || 'Setup'));
-      const go = d.stage === 'Setup' || !d.stage ? 'setup' : d.stage === 'Findings and AOMs' ? 'findings' : 'aoms';
+      const go = d.stage === 'Setup' || !d.stage ? 'setup' : d.stage === 'Financial Statements' ? 'fs' : d.stage === 'Findings and AOMs' ? 'findings' : 'aoms';
       return `<div class="t-row click" style="${cols}" data-go="#/audits/${esc(rec.id)}/${go}" tabindex="0" role="link">
         <span><b>${esc(lgu ? lgu.data.name : '?')}</b><br><small style="color:var(--muted)">${esc(mun ? mun.data.name : '')} · ${esc(d.auditYear)}</small></span>
         <span>${esc(periodPhrase(d.periodFrom, d.periodTo))}</span>
-        <span><div class="steps" aria-label="Stage ${stageIdx + 1} of 6">${STAGES.map((_, i) => `<i class="${i < stageIdx ? 'done' : i === stageIdx ? 'now' : ''}"></i>`).join('')}</div><small>${esc(d.stage || 'Setup')}</small></span>
+        <span><div class="steps" aria-label="Stage ${stageIdx + 1} of 7">${STAGES.map((_, i) => `<i class="${i < stageIdx ? 'done' : i === stageIdx ? 'now' : ''}"></i>`).join('')}</div><small>${esc(d.stage || 'Setup')}</small></span>
         <span>${rec.pending ? pill('On Device', 'warn') : pill(d.status || 'In Progress', d.status === 'Final' ? 'ok' : 'grey')}</span>
         <span><button class="btn sm ghost" data-go="#/audits/${esc(rec.id)}/${go}">${go === 'setup' ? 'Finish Setup' : go === 'findings' ? 'Select Findings' : 'Open AOMs'} →</button></span>
       </div>`;

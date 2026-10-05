@@ -26,10 +26,12 @@ export const LINES = [
   { k: 'invprop', st: 'pos', cls: 'Assets', label: 'Investment Property', note: 0, side: 'dr', opt: true },
   { k: 'ppe', st: 'pos', cls: 'Assets', label: 'Property, Plant and Equipment', note: 16, side: 'dr' },
   { k: 'bio', st: 'pos', cls: 'Assets', label: 'Biological Assets', note: 17, side: 'dr' },
+  { k: 'intang', st: 'pos', cls: 'Assets', label: 'Intangible Assets', note: 0, side: 'dr', opt: true },
   { k: 'finl', st: 'pos', cls: 'Liabilities', label: 'Financial Liabilities', note: 18, side: 'cr', cur: true },
   { k: 'inter', st: 'pos', cls: 'Liabilities', label: 'Inter-Agency Payables', note: 19, side: 'cr', cur: true },
   { k: 'intra', st: 'pos', cls: 'Liabilities', label: 'Intra-Agency Payables', note: 20, side: 'cr', cur: true },
   { k: 'trust', st: 'pos', cls: 'Liabilities', label: 'Trust Liabilities', note: 21, side: 'cr', cur: true },
+  { k: 'defcr', st: 'pos', cls: 'Liabilities', label: 'Deferred Credits/Unearned Income', note: 0, side: 'cr', cur: true, opt: true },
   { k: 'othpay', st: 'pos', cls: 'Liabilities', label: 'Other Payables', note: 0, side: 'cr', cur: true, opt: true },
   { k: 'eq', st: 'pos', cls: 'Equity', label: 'Government Equity', note: 0, side: 'cr' },
   { k: 'eq_ppa', st: 'pos', cls: 'Equity', label: "Prior Years' Adjustments", note: 0, side: 'cr' }
@@ -50,27 +52,52 @@ export function officialLine(code) {
   return '';
 }
 
-let official = null;
-async function loadOfficial() {
-  if (official) return official;
-  const res = await fetch('data-coa.json');
+// The line an account of COA Circular 2015-009 (Annex A) goes to.
+export function line2015(code) {
+  const c = String(code);
+  const p = (x) => c.startsWith(x);
+  if (p('1-01')) return 'cash'; if (p('1-02')) return 'invest'; if (p('1-03')) return 'recv'; if (p('1-04')) return 'inv';
+  if (p('1-05')) return 'prepay'; if (p('1-06')) return 'invprop'; if (p('1-07')) return 'ppe'; if (p('1-08')) return 'bio'; if (p('1-09')) return 'intang';
+  if (p('2-01') || p('2-06')) return 'finl'; if (p('2-02')) return 'inter'; if (p('2-03')) return 'intra'; if (p('2-04')) return 'trust'; if (p('2-05')) return 'defcr'; if (p('2-')) return 'othpay';
+  if (c === '3-01-01-020') return 'eq_ppa'; if (p('3-')) return 'eq';
+  if (c === '4-01-06-010') return 'rev_ira'; if (p('4-01-06')) return 'rev_misc'; if (p('4-01')) return 'rev_tax'; if (p('4-02')) return 'rev_svc'; if (p('4-03')) return 'tr_from';
+  if (p('4-04-02')) return 'rev_grant'; if (p('4-')) return 'rev_misc';
+  if (p('5-01')) return 'exp_ps'; if (p('5-02-14') || p('5-02-15')) return 'tr_to'; if (p('5-02') || p('5-04')) return 'exp_mooe'; if (p('5-03')) return 'exp_fin'; if (p('5-05')) return 'exp_nc';
+  return '';
+}
+export const CHART_NAME = { manual: 'Manual', c2015: 'COA Circular 2015-009', added: 'Added' };
+const loaded = {};
+async function loadJson(file, chart, lineOf) {
+  if (loaded[chart]) return loaded[chart];
+  const res = await fetch(file);
   if (!res.ok) throw new Error('The Chart of Accounts could not be loaded. Open the app online once so it is saved for offline use.');
-  official = (await res.json()).map((a) => ({ ...a, line: officialLine(a.code), official: true }));
-  return official;
+  loaded[chart] = (await res.json()).map((a) => ({ ...a, line: lineOf(a.code), official: true, chart, n: normTitle(a.title) }));
+  return loaded[chart];
 }
 export async function loadAdded() {
   const r = await store.get('letters', COA_ID);
   return r && !r.deleted && Array.isArray(r.data.list) ? r.data.list : [];
 }
-// The whole chart: official accounts, then the added ones. Also { byCode } for lookups.
+// The charts: the Manual (data-coa.json), Annex A of COA Circular 2015-009 (data-coa-2015.json), and the accounts added by the team.
+// chart.byKey['manual:1-01-02-010'] finds an account; an account's key is stored as the row's choice (rows used plain codes before: Manual or Added).
+const keyOf = (a) => `${a.chart}:${a.code}`;
 export async function loadChart() {
-  const off = await loadOfficial();
-  const added = (await loadAdded()).map((a) => ({ ...a, cls: (LINE[a.line] || {}).cls || a.cls || '', group: (LINE[a.line] || {}).label || '', official: false }));
-  const list = [...off, ...added].sort((a, b) => a.code.localeCompare(b.code));
-  const byCode = Object.fromEntries(list.map((a) => [a.code, a]));
-  list.forEach((a) => { a.n = normTitle(a.title); });
-  return { list, byCode, added };
+  const manual = await loadJson('data-coa.json', 'manual', officialLine);
+  const c2015 = await loadJson('data-coa-2015.json', 'c2015', line2015);
+  const added = (await loadAdded()).map((a) => ({ ...a, cls: (LINE[a.line] || {}).cls || a.cls || '', group: (LINE[a.line] || {}).label || '', official: false, chart: 'added', n: normTitle(a.title) }));
+  const idx = (arr) => Object.fromEntries(arr.map((a) => [a.code, a]));
+  const M = idx(manual), A = idx(c2015), D = idx(added);
+  const list = [...manual, ...c2015, ...added];
+  list.forEach((a) => { a.key = keyOf(a); });
+  const byKey = Object.fromEntries(list.map((a) => [a.key, a]));
+  // byCode: the account a plain code means (Manual, then Added, then 2015-009) — for choices saved before the second chart
+  const byCode = { ...A, ...D, ...M };
+  return { list, byKey, byCode, M, A, D, manual, c2015, added };
 }
+// The account a saved choice points to: 'c2015:5-02-14-060', or a plain code from before.
+export const acctOf = (chart, use) => (use ? chart.byKey[use] || chart.byCode[use] || null : null);
+export const isUsedKey = (a, use) => use === a.key || use === a.code;
+export const SOURCES = ['GAM for LGUs', 'GAM for NGAs', 'Other COA Circular'];
 export const validCode = (c) => /^\d-\d{2}-\d{2}-\d{3}(-\d{1,3})?$/.test(String(c || '').trim());
 
 /* ── Matching a trial balance row to an account ── */
@@ -105,26 +132,39 @@ export function similar(x, y) {
 }
 const bestBy = (n, list, skip) => {
   let best = null;
-  list.forEach((a) => { if (a.code === skip) return; const s = similar(n, a.n); if (!best || s > best.s) best = { a, s }; });
+  list.forEach((a) => { if (a === skip) return; const s = similar(n, a.n); if (!best || s > best.s) best = { a, s }; });
   return best;
 };
 
 /**
- * Matches one row: { code, title } → { st: 'ok'|'check'|'none', acct (the code's account), sugg (the title's account), score }.
- * ok: the code is in the chart and the title agrees (or no other account fits the title better).
- * check: the code belongs to an account other than the title says, or the code is not in the chart but the title is.
- * none: neither the code nor the title is in the chart.
+ * Matches one row: { code, title } → { st, acct, sugg, sugg2, chart }.
+ * The Manual first: the code is in the Manual and the title agrees (or no other account fits the title better) → ok.
+ * Then COA Circular 2015-009, Annex A: the code is there and its title agrees → ok.
+ * Then the accounts added by the team. Otherwise:
+ * check: the code belongs to an account other than the title says, or only the title is found → sugg (Manual) / sugg2 (2015-009).
+ * ver (For Verification): neither the code nor the title is in a chart.
  */
 export function matchRow(row, chart) {
-  const n = normTitle(row.title);
-  const acct = chart.byCode[String(row.code || '').trim()] || null;
-  const best = bestBy(n, chart.list, acct ? acct.code : null);
-  if (acct) {
-    const s = similar(n, acct.n);
-    if (best && best.s >= 0.8 && best.s > s + 0.15) return { st: 'check', acct, sugg: best.a, score: s };
-    return { st: 'ok', acct, score: s };
+  const n = normTitle(row.title), code = String(row.code || '').trim();
+  const m = chart.M[code] || null;
+  const bestM = bestBy(n, chart.manual, m), bestA = bestBy(n, chart.c2015, null), bestD = bestBy(n, chart.added, null);
+  if (m) {
+    const s = similar(n, m.n);
+    if (!(bestM && bestM.s >= 0.8 && bestM.s > s + 0.15)) return { st: 'ok', acct: m, chart: 'manual', score: s };
   }
-  if (best && best.s >= 0.8) return { st: 'check', acct: null, sugg: best.a, score: best.s };
-  return { st: 'none', acct: null, sugg: best && best.s >= 0.5 ? best.a : null, score: best ? best.s : 0 };
+  const a = chart.A[code] || null;
+  if (a) {
+    const s = similar(n, a.n);
+    const better = [bestM, bestA].some((b) => b && b.a !== a && b.s >= 0.8 && b.s > s + 0.15);
+    if (s >= 0.5 && !better) return { st: 'ok', acct: a, chart: 'c2015', score: s };
+  }
+  const d = chart.D[code] || null;
+  if (d && similar(n, d.n) >= 0.5) return { st: 'ok', acct: d, chart: 'added', score: similar(n, d.n) };
+  const sugg = bestM && bestM.s >= 0.8 ? bestM.a : bestD && bestD.s >= 0.8 ? bestD.a : null;
+  const sugg2 = bestA && bestA.s >= 0.8 ? bestA.a : null;
+  const codeAcct = m || a || d || null;
+  if (sugg || sugg2) return { st: 'check', acct: codeAcct, sugg: sugg || sugg2, sugg2: sugg ? sugg2 : null, score: 0 };
+  const close = [bestM, bestA, bestD].filter((b) => b && b.s >= 0.5).sort((x, y) => y.s - x.s)[0];
+  return { st: 'ver', acct: null, codeAcct, sugg: close ? close.a : null, score: close ? close.s : 0 };
 }
 export const rowKey = (row) => `${String(row.code || '').trim()}|${normTitle(row.title).join(' ')}`;

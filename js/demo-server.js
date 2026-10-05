@@ -68,7 +68,7 @@ export const demoServer = {
           if (ADMIN_ONLY.includes(c.table) && !roles(user).includes('admin')) throw new Error('Only the Admin can change ' + c.table + '.');
           if (c.table === 'aom_library' && !roles(user).some((r) => r === 'admin' || r === 'sa')) throw new Error('Only the Supervising Auditor or Admin can change the AOM Library.');
           let scope = REFERENCE.includes(c.table) ? '*' : String((c.data && c.data.teamId) || '');
-          if (c.table === 'letters' && c.data && ['coa', 'gaa', 'wording'].includes(c.data.type)) {
+          if (c.table === 'letters' && c.data && ['coa', 'gaa', 'wording', 'flagrules'].includes(c.data.type)) {
             if (!seesAll(user)) throw new Error('Only the Supervising Auditor or Admin can change this.');
             scope = '*';
           }

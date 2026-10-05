@@ -564,3 +564,25 @@ button.reset{background:none;border:0;padding:0;color:var(--primary);text-decora
 .ck .ck-ok{color:var(--ok-ink)}.ck .ck-warn{color:var(--warn-ink)}.ck .ck-wait,.ck .ck-info{color:var(--muted)}
 .paper-wrap .sheet.fsheet{width:8.5in;height:11in;padding:0;overflow:hidden}
 .paper-wrap .sheet.fsheet + .sheet.fsheet{margin-top:14px}
+
+/* Financial Statements step */
+.steptabs{display:flex;gap:2px;border-bottom:2px solid #D5DEE7;margin:2px 0 12px;flex-wrap:wrap}
+.steptabs a{padding:9px 16px;font-size:14px;font-weight:600;color:var(--muted);text-decoration:none;border-radius:8px 8px 0 0;margin-bottom:-2px;border-bottom:2px solid transparent}
+.steptabs a.on{color:var(--primary);border-bottom-color:var(--primary);background:#fff}
+.steptabs .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn-ink);margin-left:6px;vertical-align:middle}
+.pf{width:100%;border-collapse:collapse;font-size:13px}
+.pf th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);padding:6px 8px;border-bottom:1px solid #D5DEE7}
+.pf td{padding:8px;border-bottom:1px solid #EEF2F6;vertical-align:top}
+.pf td.n,.pf th.n{text-align:right;white-space:nowrap}
+.pf .btn-row{justify-content:flex-end;flex-wrap:wrap}
+.srcbox{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.srcbox>div{border:1px solid #D5DEE7;border-radius:10px;padding:12px;background:#fff}
+.srcbox h3{margin:0 0 4px;font-size:14px;color:var(--navy)}
+@media (max-width:900px){.srcbox{grid-template-columns:1fr}}
+.raot td,.raot th{padding:6px 8px}
+.wpt input.input{height:32px}
+.pdfside{position:fixed;top:0;right:0;bottom:0;width:44vw;min-width:340px;background:#fff;border-left:1px solid #C9D3DD;box-shadow:-6px 0 20px rgba(0,0,0,.12);z-index:60;display:flex;flex-direction:column}
+.pdfside .bar{display:flex;gap:8px;align-items:center;padding:8px 10px;border-bottom:1px solid #D5DEE7}
+.pdfside .bar button{margin-left:auto}
+.pdfside iframe{flex:1;border:0;width:100%}
+body.has-pdfside .main{margin-right:44vw}

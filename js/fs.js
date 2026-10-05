@@ -1,7 +1,7 @@
 // Part 06 · Audited Financial Statements: the trial balances (FS Input) and the five statements built from them.
 // Amounts are kept in centavos (whole numbers) so totals never drift.
 import { store } from './store.js';
-import { LINE, matchRow } from './coa.js';
+import { LINE, matchRow, acctOf } from './coa.js';
 import { FUND_NAMES } from './format.js';
 
 export const tbId = (lguId, fund, year) => `tb-${lguId}-${fund}-${year}`;
@@ -73,14 +73,27 @@ export const needsFix = (r) => (hasDec(r.dr) || hasDec(r.cr)) && (r.fix === unde
 // Resolves the account of a row: { m (the match), acct (the account used, or null), open (true while a choice is still needed) }.
 export function resolveRow(r, chart) {
   const m = matchRow(r, chart);
-  if (r.use) { const a = chart.byCode[r.use]; return { m, acct: a || null, open: !a }; }
+  if (r.use) { const a = acctOf(chart, r.use); return { m, acct: a || null, open: !a }; }
   if (m.st === 'ok') return { m, acct: m.acct, open: false };
   return { m, acct: null, open: true };
 }
+// Subsidy and Due to/from rows between the funds of the barangay. A row's own choice (r.inter: 'combined' | 'transfer') wins;
+// otherwise the title decides (5% BDRRMF → combined, 10% SK → transfer), then the account (Due to/from Other Funds, or marked between funds).
+export const interChoice = (r, a) => !!a && (['tr_to', 'tr_from'].includes(a.line) || /due (to|from) other funds/i.test(a.title)) && /other funds|bdrrm|drrm|\bsk\b|10%|5%/i.test(`${r.title} ${a.title}`);
+export function isCombined(r, a) {
+  if (!a) return false;
+  if (r.inter) return r.inter === 'combined';
+  if (/due (to|from) other funds/i.test(a.title)) return true;
+  const t = `${r.title}`;
+  if (/\bsk\b|10%/i.test(t)) return false;
+  if (/bdrrm|drrm|5%/i.test(t)) return true;
+  return !!a.interfund;
+}
+const lineVal = (a, c) => (LINE[a.line].side === 'dr' ? c.dr - c.cr : c.cr - c.dr);
 
-// The state of one trial balance: totals, what is left to fix, and the amounts by line and by account.
+// The state of one trial balance: totals, what is left to fix, and the amounts by line and by account (accts keyed by account key).
 export function tbState(tb, chart) {
-  const out = { rows: [], dr: 0, cr: 0, open: 0, dec: 0, decOpen: 0, check: 0, none: 0, ok: 0, lines: {}, accts: {}, revexp: false, fix: 0, balanced: true };
+  const out = { rows: [], dr: 0, cr: 0, open: 0, dec: 0, decOpen: 0, check: 0, ver: 0, ok: 0, byChart: { manual: 0, c2015: 0, added: 0 }, lines: {}, accts: {}, revexp: false, fix: 0, balanced: true };
   if (!tb || !tb.rows) return out;
   tb.rows.forEach((r, i) => {
     if (r.del) { out.deleted = (out.deleted || 0) + 1; return; }
@@ -90,14 +103,15 @@ export function tbState(tb, chart) {
     out[res.m.st]++;
     if (res.open) out.open++;
     if (hasDec(r.dr) || hasDec(r.cr)) { out.dec++; if (needsFix(r)) out.decOpen++; }
-    const acct = res.acct || (res.m.acct && res.m.st !== 'none' ? res.m.acct : null);
+    const acct = res.acct || (res.m.st === 'check' ? res.m.acct : null);
+    if (res.acct) out.byChart[res.acct.chart] = (out.byChart[res.acct.chart] || 0) + 1;
     if (acct && acct.line && LINE[acct.line]) {
-      const v = LINE[acct.line].side === 'dr' ? c.dr - c.cr : c.cr - c.dr;
+      const v = lineVal(acct, c);
       out.lines[acct.line] = (out.lines[acct.line] || 0) + v;
-      out.accts[acct.code] = (out.accts[acct.code] || 0) + v;
+      out.accts[acct.key] = (out.accts[acct.key] || 0) + v;
       if (/^[45]/.test(acct.code) || ['Revenue', 'Expenses'].includes(acct.cls)) out.revexp = true;
     }
-    out.rows.push({ i, r, res, c });
+    out.rows.push({ i, r, res, c, acct });
   });
   out.balanced = out.dr === out.cr;
   out.fix = out.open + out.decOpen;
@@ -116,38 +130,49 @@ export function headingCheck(tb, lguName, year) {
 }
 
 /* ── One year, all funds combined ── */
-// tbs: { fund: tbData|null }. Accounts marked "between funds" are left out once every fund is entered.
+const ASSET = ['cash', 'invest', 'recv', 'inv', 'prepay', 'invprop', 'ppe', 'bio', 'intang'], LIAB = ['finl', 'inter', 'intra', 'trust', 'defcr', 'othpay'];
+// tbs: { fund: tbData|null }. Rows "Combined (GF ↔ 5% BDRRMF)" cancel out once more than one fund has its own trial balance.
 export function yearFigures(tbs, funds, chart) {
   const st = {}, lines = {}, accts = {}, inter = {};
   const entered = funds.filter((f) => tbs[f.k] && (tbs[f.k].none || (tbs[f.k].rows || []).length));
   const all = entered.length === funds.length;
-  // Transfers between funds cancel out only when more than one fund has its own trial balance.
   const kept = funds.filter((f) => tbs[f.k] && !tbs[f.k].none && (tbs[f.k].rows || []).length).length;
   const cancel = all && kept > 1;
   funds.forEach((f) => {
     const tb = tbs[f.k];
     if (!tb || tb.none) return;
     const s = st[f.k] = tbState(tb, chart);
-    inter[f.k] = { from: 0, to: 0 };
-    s.rows.forEach(({ res, c }) => {
-      const a = res.acct || (res.m.st !== 'none' ? res.m.acct : null);
-      if (!a || !a.interfund) return;
-      if (LINE[a.line] && LINE[a.line].side === 'cr') inter[f.k].from += c.cr - c.dr; else inter[f.k].to += c.dr - c.cr;
+    const x = inter[f.k] = { to: 0, from: 0, dueTo: 0, dueFrom: 0 };
+    s.rows.forEach(({ r, acct: a, c }) => {
+      if (!a || !LINE[a.line] || !isCombined(r, a)) return;
+      const v = lineVal(a, c);
+      if (/due to/i.test(a.title)) x.dueTo += v; else if (/due from/i.test(a.title)) x.dueFrom += v;
+      else if (LINE[a.line].side === 'cr') x.from += v; else x.to += v;
     });
   });
-  Object.entries(st).forEach(([fk, s]) => {
-    s.rows.forEach(({ res, c }) => {
-      const a = res.acct || (res.m.st !== 'none' ? res.m.acct : null);
+  Object.values(st).forEach((s) => {
+    s.rows.forEach(({ r, acct: a, c }) => {
       if (!a || !LINE[a.line]) return;
-      if (a.interfund && cancel) return;
-      const v = LINE[a.line].side === 'dr' ? c.dr - c.cr : c.cr - c.dr;
+      if (cancel && isCombined(r, a)) return;
+      const v = lineVal(a, c);
       lines[a.line] = (lines[a.line] || 0) + v;
-      accts[a.code] = (accts[a.code] || 0) + v;
+      accts[a.key] = (accts[a.key] || 0) + v;
     });
   });
-  const interTo = Object.values(inter).reduce((x, v) => x + v.to, 0), interFrom = Object.values(inter).reduce((x, v) => x + v.from, 0);
-  return { st, lines, accts, entered: entered.map((f) => f.k), all, cancel, any: kept > 0, inter, interTo, interFrom, eliminated: cancel ? interTo + interFrom : 0 };
+  const sum = (k) => Object.values(inter).reduce((t, v) => t + v[k], 0);
+  // The unutilized 5% BDRRMF: what the BDRRMF has left (its assets less its liabilities), and Trust Liabilities – DRRMF in the books.
+  let bdrrmf = null;
+  if (st.BDRRMF) {
+    const L = st.BDRRMF.lines, g = (k) => L[k] || 0;
+    const unutilized = ASSET.reduce((t, k) => t + g(k), 0) - LIAB.reduce((t, k) => t + g(k), 0);
+    let recorded = 0;
+    Object.values(st).forEach((s) => s.rows.forEach(({ acct: a, c }) => { if (a && /trust liabilit.*(drrm|disaster)/i.test(a.title)) recorded += lineVal(a, c); }));
+    bdrrmf = { unutilized, recorded };
+  }
+  return { st, lines, accts, entered: entered.map((f) => f.k), all, cancel, any: kept > 0, inter,
+    interTo: sum('to'), interFrom: sum('from'), dueTo: sum('dueTo'), dueFrom: sum('dueFrom'), bdrrmf };
 }
+export const keyCode = (k) => String(k).split(':').pop();
 
 /* ── The statements ── */
 const L = (fig, k) => (fig && fig.lines[k]) || 0;
@@ -161,8 +186,8 @@ export function perfTotals(fig) {
 }
 export function posTotals(fig) {
   const ca = sum(fig, ['cash', 'invest', 'recv', 'inv', 'prepay']);
-  const nca = sum(fig, ['invprop', 'ppe', 'bio']);
-  const cl = sum(fig, ['finl', 'inter', 'intra', 'trust', 'othpay']);
+  const nca = sum(fig, ['invprop', 'ppe', 'bio', 'intang']);
+  const cl = sum(fig, ['finl', 'inter', 'intra', 'trust', 'defcr', 'othpay']);
   const ncl = 0;
   const p = perfTotals(fig);
   const eq = L(fig, 'eq') + L(fig, 'eq_ppa') + p.surplus;
@@ -193,10 +218,10 @@ export function buildPos(fy, fp, y) {
   const opt = (k) => (shows(F, k) ? [line(k)] : []);
   const rows = [{ k: 'h', t: 'ASSETS' }, { k: 'sub', t: 'Current Assets' }, line('cash', true), ...opt('invest'), line('recv'), line('inv'), ...opt('prepay'),
     { k: 'tot', t: 'Total Current Assets', v: t.map((x) => x && x.ca), cur: true, ind: 2 }, { k: 'blank' },
-    { k: 'sub', t: 'Non-Current Assets' }, ...opt('invprop'), line('ppe'), line('bio'),
+    { k: 'sub', t: 'Non-Current Assets' }, ...opt('invprop'), line('ppe'), line('bio'), ...opt('intang'),
     { k: 'tot', t: 'Total Non-Current Assets', v: t.map((x) => x && x.nca), ind: 2 }, { k: 'blank' },
     { k: 'grand', t: 'Total Assets', v: t.map((x) => x && x.ta), cur: true }, { k: 'blank' },
-    { k: 'h', t: 'LIABILITIES' }, { k: 'sub', t: 'Current Liabilities' }, line('finl', true), line('inter'), line('intra'), line('trust'), ...opt('othpay'),
+    { k: 'h', t: 'LIABILITIES' }, { k: 'sub', t: 'Current Liabilities' }, line('finl', true), line('inter'), line('intra'), line('trust'), ...opt('defcr'), ...opt('othpay'),
     { k: 'tot', t: 'Total Current Liabilities', v: t.map((x) => x && x.cl), cur: true, ind: 2 }, { k: 'blank' },
     { k: 'tot', t: 'Total Non-Current Liabilities', v: t.map((x) => x && x.ncl), ind: 2 }, { k: 'blank' },
     { k: 'tot', t: 'Total Liabilities', v: t.map((x) => x && x.tl) }, { k: 'blank' },
@@ -320,11 +345,12 @@ SCBAA.forEach((r, i) => { if (!r.h) r.k = 's' + i; });
 export function scbaaRows(accts, chart) {
   const covered = (code) => SCBAA.some((r) => (r.codes || []).some((c) => c && code.startsWith(c)));
   const extra = { rev: [], ps: [], mooe: [], fin: [] };
-  Object.entries(accts || {}).forEach(([code, v]) => {
-    if (!v || covered(code)) return;
-    const a = chart.byCode[code]; if (!a) return;
+  Object.entries(accts || {}).forEach(([key, v]) => {
+    const a = chart.byKey[key]; if (!a) return;
+    const code = a.code;
+    if (!v || (a.chart !== 'c2015' && covered(code))) return;
     const sec = /^4/.test(code) || a.cls === 'Revenue' ? 'rev' : /^5-01/.test(code) ? 'ps' : /^5-03/.test(code) ? 'fin' : /^5-02/.test(code) || a.line === 'exp_mooe' || a.line === 'tr_to' ? 'mooe' : '';
-    if (sec) extra[sec].push({ k: 'a' + code, t: a.title, codes: [code], sec, extra: true });
+    if (sec) extra[sec].push({ k: 'a' + key, t: a.title, keys: [key], sec, extra: true });
   });
   const out = [];
   SCBAA.forEach((r, i) => {
@@ -334,11 +360,13 @@ export function scbaaRows(accts, chart) {
   });
   return out;
 }
-export const inTb = (r, accts) => (r.codes || []).some((c) => c && Object.entries(accts || {}).some(([code, v]) => v && code.startsWith(c)));
+export const inTb = (r, accts) => (r.keys || []).some((k) => (accts || {})[k]) || (r.codes || []).some((c) => c && Object.entries(accts || {}).some(([k, v]) => v && !k.startsWith('c2015:') && keyCode(k).startsWith(c)));
 export function scbaaLine(row, data) {
-  const d = (data && data.rows && data.rows[row.k]) || {};
-  const ob = cents(d.ob), adj = cents(d.adj), act = cents(d.act);
-  return { ob, adj, fin: ob + adj, act, diff: ob + adj - act, any: !!(ob || adj || act), typed: [d.ob, d.adj, d.act].some((x) => x !== undefined && x !== null && x !== '') };
+  const d = (data && data.rows && data.rows[row.k]) || {}, a = (data && data.auto && data.auto[row.k]) || {};
+  const has = (x) => x !== undefined && x !== null && x !== '';
+  const v = (f) => (has(d[f]) ? cents(d[f]) : cents(a[f]));
+  const ob = v('ob'), adj = v('adj'), act = v('act');
+  return { ob, adj, fin: ob + adj, act, diff: ob + adj - act, any: !!(ob || adj || act), typed: [d.ob, d.adj, d.act, a.ob, a.adj, a.act].some(has) };
 }
 // The rows that print: with amounts only (unless all rows are asked for), and each heading only when a row under it prints.
 export function scbaaPrintRows(rows, data) {
