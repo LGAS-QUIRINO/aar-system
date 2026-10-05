@@ -82,6 +82,22 @@ export const demoServer = {
       await db.put('demo', state, 'state');
       return { ok: true, serverTime: now(), results };
     }
+    // Files: kept in this browser for Demo Mode (the real backend keeps them in Google Drive).
+    const canTeam = (t) => seesAll(user) || (user.data.teamIds || []).includes(String(t || ''));
+    if (action === 'uploadFile') {
+      if (!canTeam(payload.teamId)) throw new Error('This audit belongs to another team.');
+      if (!String(payload.data || '').startsWith('JVBER')) throw new Error('Only PDF files can be uploaded.');
+      const id = 'file-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await db.put('demo', { name: payload.name, data: payload.data, teamId: payload.teamId, by: email, at: now() }, 'file:' + id);
+      return { ok: true, fileId: id, name: payload.name, size: Math.round(String(payload.data).length * 0.75) };
+    }
+    if (action === 'getFile' || action === 'deleteFile') {
+      const f = await db.get('demo', 'file:' + payload.fileId);
+      if (!f) throw new Error('The file was not found.');
+      if (!canTeam(f.teamId)) throw new Error('This file belongs to another team.');
+      if (action === 'getFile') return { ok: true, name: f.name, data: f.data };
+      await db.del('demo', 'file:' + payload.fileId); return { ok: true };
+    }
     throw new Error('Unknown action');
   },
   async reset() { await db.del('demo', 'state'); }

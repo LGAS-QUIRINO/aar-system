@@ -12,6 +12,8 @@ import { buildToc, tocHTML, printToc, tocWord, tocPrint, tocSections } from '../
 import { printPages, saveDocx } from '../baar-doc.js';
 import { IAR_STANDARD, IAR_KEYS, mergeMgmt, IAR_OPINION_STANDARD, BASES_HEAD, buildIar, iarPagesHTML, paginateIar, iarPrint, iarSections } from '../baar-iar.js';
 import { fillText, blockPlain, SECTIONS } from '../aom.js';
+import { SMR_STANDARD, SMR_KEYS, smrSigners, buildSmr, smrPageHTML, scanPagesHTML, smrPrint, smrSections } from '../baar-smr.js';
+import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
 import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
@@ -23,12 +25,13 @@ export const PARTS = [
 const recId = (auditId) => `baar-${auditId}`;
 const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
+const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04'];
-// The parts strip: built parts are links; status01 is the Part 01 pill (live on the Part 01 screen).
-function partsStrip(auditId, active, status01, status03 = pill('In Progress', 'warn'), status04 = '') {
+const BUILT = ['01', '02', '03', '04', '05'];
+// The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
+function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
-    const pillHTML = n === '01' ? `<span id="b-p01">${status01}</span>` : n === '02' ? pill('Ready to Print', 'ok') : n === '03' ? status03 : n === '04' ? `<span id="b-p04">${status04 || pill('In Progress', 'warn')}</span>` : '';
+    const pillHTML = BUILT.includes(n) ? `<span id="b-p${n}">${n === '02' ? pill('Ready to Print', 'ok') : st[n] || ''}</span>` : '';
     if (n === active) return `<span class="bpart on"><b>${n}</b> ${esc(t)} ${pillHTML}</span>`;
     if (BUILT.includes(n)) return `<a class="bpart link" href="#/baar/${auditId}?p=${n}"><b>${n}</b> ${esc(t)} ${pillHTML}</a>`;
     return `<span class="bpart later" title="Built after Part ${String(Number(n) - 1).padStart(2, '0')}"><b>${n}</b> ${esc(t)}</span>`;
@@ -56,6 +59,7 @@ function iarMissing(op, I, list) {
   return m;
 }
 const p04Pill = (m) => (m.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok'));
+const p05Pill = (S) => (S && S.file ? pill('Uploaded', 'ok') : pill('Awaiting Signed Copy', 'warn'));
 
 // What Part 01 still needs before it is ready to print.
 export function trMissing(b, gaa, year) {
@@ -143,11 +147,27 @@ async function loadTransmittal(ctx) {
   I.opSent = { ...iStdOp, ...(I.opSent || {}) };
   I.bases = I.bases || {};
   if (I.date === undefined) I.date = '';
-  return { rec, standard, stdOp, exitL, B, T, I, iStandard, iStdOp, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
+  // Part 05 · Statement of Management Responsibility.
+  const sStdRec = await store.get('letters', smrStdId(ctx.teamId));
+  const sStandard = { ...SMR_STANDARD, ...(sStdRec && !sStdRec.deleted ? sStdRec.data.wording || {} : {}) };
+  const S = B.smr = B.smr || {};
+  SMR_KEYS.forEach((k) => { if (S[k] === undefined) S[k] = sStandard[k]; });
+  return { rec, standard, stdOp, exitL, B, T, I, iStandard, iStdOp, S, sStandard, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
 }
 
 // Page numbers of the numbered parts (Independent Auditor's Report = page 1). Parts 04 to 10 are not built yet: no numbers.
-function baarPages() { return { iar: 1 }; }      // the Independent Auditor's Report is page 1; later parts follow as they are built
+// Page numbers of the numbered parts: the Independent Auditor's Report is page 1; each later part follows the one before.
+function baarPages(ctx, L) {
+  const iarN = paginateIar(iarOf(ctx, L).items, measureBox()).length;
+  const smr = 1 + iarN;
+  const smrN = L.S && L.S.file ? L.S.file.pages || 1 : 1;
+  return { iar: 1, smr, next: smr + smrN };
+}
+// The signed copy's pages as pictures (or null when none is uploaded yet).
+async function smrImages(S) {
+  if (!S || !S.file) return null;
+  return renderPdf(await getPdf(S.file.fileId), S.file.fileId);
+}
 // Annexes added in Part 10 (not built yet).
 function baarAnnexes() { return []; }
 
@@ -157,12 +177,14 @@ async function completeBAAR(ctx) {
   const L = await loadTransmittal(ctx);
   const tr = buildTransmittal({ t: { ...L.B.tr, opinion: L.B.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(L.gaa, audit.periodTo), pw: L.pw });
   const cv = buildCover({ audit, lgu, mun, pw: L.pw });
-  const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages: baarPages(), annexes: baarAnnexes() });
+  const pages = baarPages(ctx, L);
+  const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages, annexes: baarAnnexes() });
   const ia = iarOf(ctx, L);
+  const sm = { r: buildSmr({ s: L.S, audit, lgu, mun }), imgs: await smrImages(L.S).catch(() => null), start: pages.smr };
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox()))]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm))], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -205,13 +227,18 @@ export async function baar(refs, params, q) {
   const { rec, standard, stdOp, exitL, B, T, isNew } = L;
   let { gaa, pw } = L;
   const gaaYear = Number(audit.periodTo);
-  const status01 = isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear));
-  const status04 = p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I)));
-  if (q.get('p') === '03') return tocPart({ ctx, me, pw, status01, status04 });
-  if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, status01 });
-  if (q.get('p') === '02') return coverPart({ ctx, me, pw, status01, status04 });
+  const st = {
+    '01': isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear)),
+    '03': pill('In Progress', 'warn'),
+    '04': p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I))),
+    '05': p05Pill(L.S)
+  };
+  if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
+  if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
+  if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, st });
+  if (q.get('p') === '05') return smrPart({ ctx, me, refs, L, st });
 
-  const parts = partsStrip(ctx.rec.id, '01', '', undefined, status04);
+  const parts = partsStrip(ctx.rec.id, '01', { ...st, '01': '' });
   const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="b-${id}">${label}</label><textarea class="input be-text" id="b-${id}" rows="${rows}">${esc(T[id])}</textarea></div>`;
   const dis = canEdit ? '' : 'disabled';
 
@@ -344,8 +371,9 @@ export async function baar(refs, params, q) {
         const d = collect();
         // Part 04's saved data stays as it is (only what was saved there, not the standard wording shown).
         const cur = await store.get('letters', recId(ctx.rec.id));
-        const out = { ...d, iar: cur && !cur.deleted ? cur.data.iar : undefined };
+        const out = { ...d, iar: cur && !cur.deleted ? cur.data.iar : undefined, smr: cur && !cur.deleted ? cur.data.smr : undefined };
         if (out.iar === undefined) delete out.iar;
+        if (out.smr === undefined) delete out.smr;
         await store.save('letters', recId(ctx.rec.id), out, { silent: true });
         Object.assign(B, clone(d)); Object.assign(T, d.tr);
         await store.log('saved the BAAR transmittal letters', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
@@ -402,12 +430,12 @@ export async function baar(refs, params, q) {
 }
 
 /* ── Part 02 · Cover ── */
-function coverPart({ ctx, me, pw, status01, status04 }) {
+function coverPart({ ctx, me, pw, st }) {
   const { audit, lgu, mun } = ctx;
   const c = buildCover({ audit, lgu, mun, pw });
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>02 · Cover</b>`;
   const body = `${baarHead(ctx)}
-    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', status01, undefined, status04)}</section>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '02', st)}</section>
     <div class="topnote">The cover fills in by itself from Audit Setup. Nothing needs to be typed here.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>On the Cover</h2></div><div class="panel-body">
@@ -429,16 +457,16 @@ function coverPart({ ctx, me, pw, status01, status04 }) {
 }
 
 /* ── Part 03 · Table of Contents ── */
-function tocPart({ ctx, me, pw, status01, status04 }) {
+function tocPart({ ctx, me, pw, st, L }) {
   const { audit, lgu, mun } = ctx;
-  const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(), annexes: baarAnnexes() });
+  const t = buildToc({ audit, lgu, mun, pw, pages: baarPages(ctx, L), annexes: baarAnnexes() });
   const status03 = t.missing ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok');
   const rows = t.rows.map((r) => r.k === 'part'
     ? `<tr class="h"><td>${esc(r.text)}${/PART IV/.test(r.text) ? ' <span class="hint" style="font-weight:400">(only the annexes added in Part 10)</span>' : ''}</td><td class="p">${r.pageHead ? '' : esc(r.page || '')}</td></tr>`
     : `<tr><td>${esc(r.text.replace(/ for Financial Statements$/, ''))}</td><td class="p">${esc(r.page)}</td></tr>`).join('');
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>03 · Table of Contents</b>`;
   const body = `${baarHead(ctx)}
-    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '03', status01, status03, status04)}</section>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '03', { ...st, '03': status03 })}</section>
     <div class="topnote">Page numbers fill in by themselves from the parts of this BAAR.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>Page Numbers</h2></div><div class="panel-body" style="padding-top:6px">
@@ -461,7 +489,7 @@ function tocPart({ ctx, me, pw, status01, status04 }) {
 }
 
 /* ── Part 04 · Independent Auditor's Report ── */
-function iarPart({ ctx, me, refs, L, status01 }) {
+function iarPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const { B, I, iStandard, iStdOp } = L;
   const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
@@ -477,7 +505,7 @@ function iarPart({ ctx, me, refs, L, status01 }) {
   const atlLine = ctx.atl ? [nice(ctx.atl.name), ctx.atl.designation || ctx.atl.position].filter(Boolean).map((x) => esc(x)).join(' · ') : 'No Audit Team Leader in Users';
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>04 · Independent Auditor's Report</b>`;
   const body = `${baarHead(ctx)}
-    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '04', status01, undefined, '')}</section>
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '04', { ...st, '04': '' })}</section>
     <div class="topnote">Words in [brackets] fill in by themselves. The opinion is the same one chosen in Part 01. Changes apply to this BAAR only, unless you click Save as Standard.</div>
     <div class="xcols bcols"><div class="xform">
       <section class="panel"><div class="panel-head"><h2>Opinion</h2></div><div class="panel-body">
@@ -544,7 +572,7 @@ function iarPart({ ctx, me, refs, L, status01 }) {
         const clean = { ...d.iar, bases: Object.fromEntries(Object.entries(d.iar.bases).map(([k, v]) => [k, v.text === undefined ? { on: v.on } : v])) };
         const rec = await store.get('letters', recId(ctx.rec.id));
         const base = rec && !rec.deleted ? rec.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
-        await store.save('letters', recId(ctx.rec.id), { ...base, opinion: d.opinion, iar: clean }, { silent: true });
+        await store.save('letters', recId(ctx.rec.id), { ...base, opinion: d.opinion, iar: clean }, { silent: true });   // other parts' saved data stays
         B.opinion = d.opinion; Object.assign(I, clone(clean));
         await store.log('saved the Independent Auditor’s Report', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
         setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
@@ -580,6 +608,115 @@ function iarPart({ ctx, me, refs, L, status01 }) {
         await store.log('downloaded the Independent Auditor’s Report (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
       };
       showOp(); draw(); setDirty(false, save);
+    }
+  };
+}
+
+/* ── Part 05 · Statement of Management Responsibility ── */
+function smrPart({ ctx, me, refs, L, st }) {
+  const { audit, lgu, mun } = ctx;
+  const { S, sStandard } = L;
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canStd = has(me, 'sa') || has(me, 'admin');
+  const dis = canEdit ? '' : 'disabled';
+  const sg = smrSigners(audit);
+  const pages = baarPages(ctx, L);
+  const f = S.file;
+  const fileBox = f
+    ? `<div class="lr-row"><span><b style="color:var(--navy)">📄 ${esc(f.name)}</b><br><span class="hint">${f.pages} page${f.pages === 1 ? '' : 's'} · uploaded by ${esc(nice(f.byName || f.by || ''))} · ${esc(longDate((f.at || '').slice(0, 10)))}</span></span>
+        <span class="btn-row"><button class="btn sm ghost" type="button" id="s-view">View</button>${canEdit ? '<button class="btn sm ghost" type="button" id="s-replace">Replace</button><button class="btn sm ghost" type="button" id="s-remove">Remove</button>' : ''}</span></div>`
+    : `<div class="lr-row"><span class="hint">PDF only. If the barangay sends a Word file, open it in Word and choose Save as PDF first.</span>${canEdit ? '<button class="btn sm primary" type="button" id="s-upload">Upload Signed Copy</button>' : ''}</div>`;
+  const ta = (id, label, rows) => `<div class="field"><label class="label" for="s-${id}">${label}</label><textarea class="input be-text" id="s-${id}" rows="${rows}" ${dis}>${esc(S[id])}</textarea></div>`;
+  const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>05 · Management's Responsibility</b>`;
+  const body = `${baarHead(ctx)}
+    <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '05', st)}</section>
+    <div class="topnote">Upload the signed copy from the barangay as a PDF. Before it comes back, print the blank statement for signing. Changes apply to this BAAR only, unless you click Save as Standard.</div>
+    <div class="xcols bcols"><div class="xform">
+      <section class="panel"><div class="panel-head"><h2>Signed Copy</h2><span style="margin-left:auto">${st['05']}</span></div><div class="panel-body">
+        ${fileBox}
+        <input type="file" id="s-file" accept="application/pdf,.pdf" hidden>
+        <div class="lr-row" style="border-top:1px solid var(--line-2);padding-top:10px"><span class="hint">Before the signed copy comes back:</span><button class="btn sm ghost" type="button" id="s-blank">Print Blank for Signing</button></div></div></section>
+      <section class="panel"><div class="panel-head"><h2>Signatories</h2><a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/setup">Edit in Setup</a></div><div class="panel-body" style="padding-top:6px">
+        <table class="pgt"><tbody>
+          <tr><td style="width:45%"><b>${esc(nice(sg.acct)) || '<span class="hint">No Municipal Accountant in Setup</span>'}</b></td><td><input class="input" id="s-acct" value="${esc(S.acct)}" aria-label="Title" ${dis}></td></tr>
+          <tr><td><b>${esc(nice(sg.pb)) || '<span class="hint">No Punong Barangay in Setup</span>'}</b></td><td><input class="input" id="s-pb" value="${esc(S.pb)}" aria-label="Title" ${dis}></td></tr>
+          <tr><td><b>${esc(nice(sg.treas)) || '<span class="hint">No Barangay Treasurer in Setup</span>'}</b></td><td><input class="input" id="s-treas" value="${esc(S.treas)}" aria-label="Title" ${dis}></td></tr></tbody></table>
+        <span class="hint">Used for the blank statement. The title under each name can be changed.</span></div></section>
+      <section class="panel"><div class="panel-head"><h2>Wording</h2><span class="btn-row" style="margin-left:auto">${canStd && canEdit ? '<button class="btn sm ghost" id="s-std" type="button">Save as Standard</button>' : ''}${canEdit ? '<button class="btn sm ghost" id="s-reset" type="button">Reset to Standard</button>' : ''}</span></div><div class="panel-body">
+        ${ta('text', 'Statement', 10)}</div></section>
+      ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
+        <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="s-save" type="button">Save</button></div></div>` : ''}</div>
+      <div class="xprev"><div class="panel" style="padding:8px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="color:var(--navy)">Print View</b>
+        <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="s-print" type="button">Print</button><button class="btn sm primary" id="s-word" type="button">Word</button></span></div>
+        <div class="paper-wrap big" id="s-paper"></div></div></div>`;
+  return {
+    active: '#/baar', crumbs, body,
+    mount(root) {
+      wireComplete(root, ctx, me);
+      let imgs = null;
+      const collect = () => { const s = { ...S }; SMR_KEYS.forEach((k) => { const el = $('#s-' + k, root); if (el) s[k] = el.value; }); return s; };
+      const doc = () => buildSmr({ s: collect(), audit, lgu, mun });
+      const draw = () => {
+        if (!document.body.contains(root)) return;
+        $('#s-paper', root).innerHTML = imgs
+          ? `<div class="doc-label">Signed copy as uploaded (page${imgs.length > 1 ? 's ' + pages.smr + '–' + (pages.smr + imgs.length - 1) : ' ' + pages.smr})</div>` + scanPagesHTML(imgs, pages.smr).map((x) => `<div class="sheet isheet">${x}</div>`).join('')
+          : `<div class="doc-label">Blank statement for signing${f ? '' : ' · no signed copy uploaded yet'}</div><div class="sheet isheet">${smrPageHTML(doc(), 0)}</div>`;
+      };
+      const saveRec = async (patch, what) => {
+        const cur = await store.get('letters', recId(ctx.rec.id));
+        const base = cur && !cur.deleted ? cur.data : { type: 'baar', auditId: ctx.rec.id, teamId: ctx.teamId, tr: {} };
+        await store.save('letters', recId(ctx.rec.id), { ...base, smr: { ...(base.smr || {}), ...patch } }, { silent: true });
+        await store.log(what, `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      async function save() {
+        const s = collect(); const patch = Object.fromEntries(SMR_KEYS.map((k) => [k, s[k]]));
+        await saveRec(patch, 'saved the Statement of Management Responsibility wording');
+        Object.assign(S, patch); setDirty(false); toast('Saved.', 'ok'); emitChange('local'); return true;
+      }
+      const changed = () => { if (!canEdit) return; setDirty(true, save); draw(); };
+      root.querySelector('.xform').addEventListener('input', (e) => { if (e.target.id !== 's-file') changed(); });
+      const fileInput = $('#s-file', root);
+      const pick = () => fileInput.click();
+      const up = $('#s-upload', root); if (up) up.onclick = pick;
+      const rp = $('#s-replace', root); if (rp) rp.onclick = pick;
+      fileInput.onchange = async () => {
+        const file = fileInput.files[0]; fileInput.value = ''; if (!file) return;
+        try {
+          toast('Uploading the signed copy…');
+          const out = await uploadPdf(file, { teamId: ctx.teamId, auditId: ctx.rec.id, kind: 'smr' });
+          const old = f && f.fileId;
+          await saveRec({ file: { ...out, by: me.email, byName: me.name, at: new Date().toISOString() } }, old ? 'replaced the signed Statement of Management Responsibility' : 'uploaded the signed Statement of Management Responsibility');
+          if (old) await removeFile(old);
+          setDirty(false); toast('Signed copy uploaded.', 'ok'); emitChange('local');
+        } catch (e) { toast(e.message, 'bad'); }
+      };
+      const rm = $('#s-remove', root);
+      if (rm) rm.onclick = async () => {
+        if (!(await confirmBox('Remove Signed Copy', 'Remove the uploaded signed copy from this BAAR? It goes to the Drive trash of the office account and can be restored there for 30 days.', 'Remove'))) return;
+        await removeFile(f.fileId);
+        await saveRec({ file: null }, 'removed the signed Statement of Management Responsibility');
+        setDirty(false); toast('Signed copy removed.', 'ok'); emitChange('local');
+      };
+      const vw = $('#s-view', root); if (vw) vw.onclick = () => openPdf(f.fileId).catch((e) => toast(e.message, 'bad'));
+      $('#s-blank', root).onclick = () => { const p = smrPrint({ r: doc(), imgs: null, start: 0 }); printPages(p.css, p.html, `${lgu.name} · Statement of Management Responsibility (for signing)`); };
+      const sv = $('#s-save', root); if (sv) sv.onclick = save;
+      const rs = $('#s-reset', root); if (rs) rs.onclick = () => { SMR_KEYS.forEach((k) => { $('#s-' + k, root).value = sStandard[k]; }); changed(); toast('Standard wording put back. Click Save to keep it.', 'ok'); };
+      const sd = $('#s-std', root);
+      if (sd) sd.onclick = async () => {
+        if (!(await confirmBox('Save as Standard', 'Use this statement and these titles for every new BAAR from now on? BAARs already started keep their own wording.', 'Save as Standard', 'success'))) return;
+        const s = collect(); const wording = Object.fromEntries(SMR_KEYS.map((k) => [k, s[k]]));
+        await store.save('letters', smrStdId(ctx.teamId), { type: 'standard', kind: 'baar-smr', teamId: ctx.teamId, wording, savedBy: me.email, savedAt: new Date().toISOString() }, { silent: true });
+        await store.log('saved the standard Statement of Management Responsibility wording', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+        Object.assign(sStandard, wording); toast('Saved as the standard wording for new BAARs.', 'ok');
+      };
+      const args = () => ({ r: doc(), imgs, start: pages.smr });
+      $('#s-print', root).onclick = async () => { const p = smrPrint(args()); printPages(p.css, p.html, `BAAR ${audit.auditYear} · ${lgu.name} · 05 Management Responsibility`); await store.log('printed the Statement of Management Responsibility', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email); };
+      $('#s-word', root).onclick = async () => {
+        try { toast('Preparing the Word file…'); await saveDocx(await smrSections(args()), doc().fileName, 'Statement of Management Responsibility'); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
+        await store.log('downloaded the Statement of Management Responsibility (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
+      };
+      draw(); setDirty(false, save);
+      if (f) { $('#s-paper', root).innerHTML = '<div class="empty">Opening the signed copy…</div>'; smrImages(S).then((x) => { imgs = x; draw(); }).catch((e) => { draw(); toast(e.message, 'bad'); }); }
     }
   };
 }
