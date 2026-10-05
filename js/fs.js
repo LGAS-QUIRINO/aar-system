@@ -67,6 +67,8 @@ export function rowCents(r) {
   const side = decSide(r), f = r.fix !== undefined && r.fix !== null && side;
   return { dr: f && side === 'dr' ? cents(r.fix) : cents(r.dr), cr: f && side === 'cr' ? cents(r.fix) : cents(r.cr) };
 }
+// A row with no amount (debit and credit zero or blank) can be deleted from the trial balance in the app.
+export const zeroRow = (r) => !cents(r.dr) && !cents(r.cr);
 export const needsFix = (r) => (hasDec(r.dr) || hasDec(r.cr)) && (r.fix === undefined || r.fix === null);
 // Resolves the account of a row: { m (the match), acct (the account used, or null), open (true while a choice is still needed) }.
 export function resolveRow(r, chart) {
@@ -81,6 +83,7 @@ export function tbState(tb, chart) {
   const out = { rows: [], dr: 0, cr: 0, open: 0, dec: 0, decOpen: 0, check: 0, none: 0, ok: 0, lines: {}, accts: {}, revexp: false, fix: 0, balanced: true };
   if (!tb || !tb.rows) return out;
   tb.rows.forEach((r, i) => {
+    if (r.del) { out.deleted = (out.deleted || 0) + 1; return; }
     const res = resolveRow(r, chart);
     const c = rowCents(r);
     out.dr += c.dr; out.cr += c.cr;

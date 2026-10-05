@@ -7,7 +7,7 @@ import { has } from '../refs.js';
 import { nice, longDate, aomNo } from '../format.js';
 import { normTitle, rowKey } from '../coa.js';
 import { loadChart } from '../coa.js';
-import { fundsOf, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
+import { zeroRow, fundsOf, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
   posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb,
   money, shown, rawText, parseAmt, cents } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
@@ -248,7 +248,8 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
           ${editable ? `<select class="sel" data-pick="${i}" aria-label="Account for ${esc(r.title)}"><option value="">Choose…</option><option value="${esc(m.sugg.code)}">Use the title's account (suggested)</option>${m.acct ? `<option value="${esc(m.acct.code)}">Keep the code's account</option>` : ''}<option value="other">Choose another account…</option></select>` : ''}`;
       } else {
         chart = `${pill('Not in Chart', 'bad')}${m.sugg ? `<div class="hint" style="margin:4px 0">Closest: ${esc(m.sugg.code)} ${esc(m.sugg.title)}</div>` : ''}
-          ${editable ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-match="${i}">Match Account</button>${canChart ? `<button class="btn sm ghost" type="button" data-add="${i}">+ Add to Chart</button>` : ''}</div>${canChart ? '' : '<div class="hint">Only the SA or Admin can add an account to the Chart.</div>'}` : ''}`;
+          ${editable && zeroRow(r) ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-del="${i}">Delete</button></div><div class="hint">Zero balance: delete it from this trial balance.</div>` : ''}
+          ${editable && !zeroRow(r) ? `<div class="btn-row" style="margin-top:4px"><button class="btn sm" type="button" data-match="${i}">Match Account</button>${canChart ? `<button class="btn sm ghost" type="button" data-add="${i}">+ Add to Chart</button>` : ''}</div>${canChart ? '' : '<div class="hint">Only the SA or Admin can add an account to the Chart.</div>'}` : ''}`;
       }
       const cls = res.open ? (m.st === 'none' ? 'r-bad' : 'r-chk') : '';
       return `<tr class="${cls}" ${hid ? 'hidden' : ''} data-f="${esc((r.code + ' ' + r.title).toLowerCase())}"><td class="mono">${esc(r.code)}</td><td>${esc(r.title)}</td><td class="n">${esc(shown(r.dr))}</td><td class="n">${esc(shown(r.cr))}</td><td>${chart}</td></tr>`;
@@ -257,7 +258,8 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
     content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('none', 'Not in Chart')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
       <div class="tbwrap"><table class="tbt fixed"><colgroup><col style="width:96px"><col><col style="width:106px"><col style="width:106px"><col style="width:250px"></colgroup><thead><tr><th>Code (as in file)</th><th>Account Title (as in file)</th><th class="n">Debit</th><th class="n">Credit</th><th>Chart of Accounts</th></tr></thead>
         <tbody>${s.rows.map(rowHTML).join('')}</tbody>
-        <tfoot><tr><td></td><td>Totals${s.decOpen ? ' (amounts as shown in Excel)' : ''}</td><td class="n">${money(s.dr)}</td><td class="n">${money(s.cr)}</td><td>${s.balanced ? pill('✓ Balanced', 'ok') : pill(`Off by ₱${money(Math.abs(s.dr - s.cr))}${s.decOpen ? ' after rounding' : ''}`, 'warn')}</td></tr></tfoot></table></div>`;
+        <tfoot><tr><td></td><td>Totals${s.decOpen ? ' (amounts as shown in Excel)' : ''}</td><td class="n">${money(s.dr)}</td><td class="n">${money(s.cr)}</td><td>${s.balanced ? pill('✓ Balanced', 'ok') : pill(`Off by ₱${money(Math.abs(s.dr - s.cr))}${s.decOpen ? ' after rounding' : ''}`, 'warn')}</td></tr></tfoot></table></div>
+      ${s.deleted ? `<div class="lr-row" style="justify-content:flex-start;gap:10px"><span class="hint">${s.deleted} zero-balance row${s.deleted > 1 ? 's' : ''} deleted (${esc(t.rows.filter((r) => r.del).map((r) => r.title).join(', '))})</span>${editable ? '<button class="reset" type="button" id="tb-putback">Put back</button>' : ''}</div>` : ''}`;
   }
   const status = all.map((x) => ({ x, ...tabStatus(F, x) }));
   const statusHTML = `<table class="coat"><colgroup><col style="width:30%"><col><col></colgroup><thead><tr><th>Trial Balance</th><th>CY ${F.y}</th><th>CY ${F.yp} Comparative</th></tr></thead><tbody>
@@ -340,6 +342,12 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
         if (el.value) await choose(i, el.value);
       }; });
       $$('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
+      $$('[data-del]', root).forEach((b) => { b.onclick = async () => {
+        const rs = rows(), r = rs[+b.dataset.del];
+        r.del = true; await save({ ...t, rows: rs }, `deleted the zero-balance row ${r.code} ${r.title} from`);
+      }; });
+      const pb = $('#tb-putback', root);
+      if (pb) pb.onclick = async () => { const rs = rows(); rs.forEach((r) => { delete r.del; }); await save({ ...t, rows: rs }, 'put back the deleted zero-balance rows of'); };
       $$('[data-match]', root).forEach((b) => { b.onclick = async () => {
         const r = t.rows[+b.dataset.match];
         const c = await pickAccount({ title: 'Match Account', hintText: `${r.code} · ${r.title}`, start: normTitle(r.title)[0] || '' });
