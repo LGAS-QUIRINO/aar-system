@@ -2,12 +2,14 @@
 export const slug = (s) => String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 // Official barangay lists (PSA PSGC names). Only Maddela is loaded for now.
+// Names used before the PSA list, renamed to the PSA spelling by "Add Barangays from Official List" (the record and its history stay).
+export const OLD_NAMES = { 'lgu-maddela': { 'Sta. Maria': 'Santa Maria', 'Sto. Niño': 'Santo Niño', 'Sto. Tomas': 'Santo Tomas', 'Villa Norte': 'Villa Hermosa Norte', 'Villa Sur': 'Villa Hermosa Sur', 'Villa Ylanan': 'Villa Jose V Ylanan' } };
 export const OFFICIAL_BARANGAYS = {
+  // Every municipality of Quirino, as in the PSA Philippine Standard Geographic Code (PSGC).
   'lgu-maddela': ['Abbag', 'Balligui', 'Buenavista', 'Cabaruan', 'Cabua-an', 'Cofcaville', 'Diduyon', 'Dipintin', 'Divisoria Norte', 'Divisoria Sur',
     'Dumabato Norte', 'Dumabato Sur', 'Jose Ancheta', 'Lusod', 'Manglad', 'Pedlisan', 'Poblacion Norte', 'Poblacion Sur', 'San Bernabe',
-    'San Dionisio I', 'San Martin', 'San Pedro', 'San Salvador', 'Sta. Maria', 'Sto. Niño', 'Sto. Tomas', 'Villa Agullana', 'Villa Gracia',
-    'Villa Norte', 'Villa Sur', 'Villa Ylanan', 'Ysmael'],
-  // The other municipalities of Quirino, as in the PSA Philippine Standard Geographic Code (PSGC).
+    'San Dionisio I', 'San Martin', 'San Pedro', 'San Salvador', 'Santa Maria', 'Santo Niño', 'Santo Tomas', 'Villa Agullana', 'Villa Gracia',
+    'Villa Hermosa Norte', 'Villa Hermosa Sur', 'Villa Jose V Ylanan', 'Ysmael'],
   'lgu-aglipay': ['Alicia', 'Cabugao', 'Dagupan', 'Diodol', 'Dumabel', 'Dungo', 'Guinalbin', 'Ligaya', 'Nagabgaban', 'Palacian', 'Pinaripad Norte', 'Pinaripad Sur',
     'Progreso', 'Ramos', 'Rang-ayan', 'San Antonio', 'San Benigno', 'San Francisco', 'San Leonardo', 'San Manuel', 'San Ramon', 'Victoria', 'Villa Pagaduan',
     'Villa Santiago', 'Villa Ventura'],
