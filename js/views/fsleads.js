@@ -7,7 +7,6 @@ import { fsId, loadFsRec, money } from '../fs.js';
 import { printPages } from '../baar-doc.js';
 import { loadScript } from '../wp.js';
 import { openNewWp } from './wpfill.js';
-import { openWp, newBody, wpTemplate } from './fswp.js';
 
 const FOCI = [
   { id:'a', title:'Cash in Bank – Local Currency, Current Account', cls:'Assets', re:[/^cash in bank\s*-?\s*local currency,? current account$/i] },
@@ -113,8 +112,7 @@ function workingPapersFor(item, F, ctx) {
   ((F.rec && F.rec.wps) || []).forEach(w => {
     if ((w.accounts || []).some(k => (item.rows || []).some(r => r.k === k)) && !seen.has(w.ref)) {
       seen.add(w.ref);
-      const b = w.wpb || {};
-      out.push({ ref:w.ref, title:w.title || 'Supporting Working Paper', status:b.revBy ? 'Reviewed' : b.result ? 'Completed' : 'Draft', kind:'supporting' });
+      out.push({ ref:w.ref, title:w.title || 'Supporting Working Paper', status:'Supporting', kind:'supporting' });
     }
   });
   return out;
@@ -128,14 +126,13 @@ function auditResultOf(item, cat, F, ctx) {
   if (saved) return saved;
   return workingPapersFor(item,F,ctx).length ? 'In Progress' : 'Not Started';
 }
-const RESULT_CLS = { 'Not Started':'rs-ns', 'In Progress':'rs-ip', 'No Findings':'rs-nf', 'With Finding':'rs-wf' };
 function auditResultHTML(item, cat, F, ctx, canEdit) {
   const v = auditResultOf(item,cat,F,ctx);
   if (!v) return '<span class="hint">—</span>';
-  if (v === 'With Finding') return pill('With Finding','bad');
-  if (!canEdit) return pill(v, v === 'No Findings' ? 'ok' : v === 'In Progress' ? '' : 'grey');
+  if (v === 'With Finding') return pill('With Finding','warn');
+  if (!canEdit) return pill(v, v === 'No Findings' ? 'ok' : v === 'In Progress' ? 'warn' : 'grey');
   const k = resultKey(cat,item);
-  return '<select class="sel fa-result ' + RESULT_CLS[v] + '" data-fa-result="' + esc(k) + '" aria-label="Audit result">' +
+  return '<select class="sel fa-result" data-fa-result="' + esc(k) + '">' +
     ['Not Started','In Progress','No Findings'].map(x => '<option' + (x === v ? ' selected' : '') + '>' + x + '</option>').join('') +
     '</select>';
 }
@@ -150,32 +147,12 @@ function detailTable(item,F,refs){
   </tbody></table>`;
 }
 
-const pct = (cy, py) => py ? ((cy - py) / Math.abs(py) * 100) : null;
-function leadPanel(cur, F, refs) {
-  if (!cur.rows || !cur.rows.length) return '<div class="empty" style="padding:18px 6px">No balance for this item in the trial balance.</div>';
-  const ch = (cur.cy||0) - (cur.py||0), p = pct(cur.cy||0, cur.py||0);
-  const multi = cur.rows.length > 1;
-  return `<div class="ls-figs">
-      <div><span>CY ${esc(F.y)}</span><b>${money(cur.cy||0,{dash:'0.00'})}</b></div>
-      <div><span>CY ${esc(F.yp)}</span><b>${money(cur.py||0,{dash:'0.00'})}</b></div>
-      <div><span>Change</span><b>${money(ch,{dash:'0.00'})}</b>${p===null?'':`<small>${p>0?'+':''}${p.toFixed(1)}%</small>`}</div>
-    </div>
-    ${multi ? `<table class="pf ls-lines"><thead><tr><th>Account</th><th class="n">CY ${esc(F.y)}</th><th class="n">CY ${esc(F.yp)}</th></tr></thead><tbody>
-      ${cur.rows.map(r=>`<tr><td><span class="mono">${esc(r.a.code)}</span><br>${esc(r.a.title)}${(refs[r.k]||{}).ref?` <span class="chip">${esc(refs[r.k].ref)}</span>`:''}</td><td class="n">${money(r.cy)}</td><td class="n">${money(r.py)}</td></tr>`).join('')}
-    </tbody></table>` : ''}`;
-}
-
 export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
   const cat = ['focus','c6','oma'].includes(q.get('cat')) ? q.get('cat') : 'focus';
   const focus = focusData(F), oma = omaData(F);
-  const all = cat==='focus' ? focus : cat==='c6' ? C6.map(x=>({...x,cls:'Financial Issue',rows:[],status:'For Review'})) : oma;
-  // Applicability filter. The audit foci open on Applicable so the 16 or so not-applicable rows stay out of the way.
-  const FILTERS = { all:'All', app:'Applicable', na:'Not Applicable', ver:'For Verification' };
-  const f = cat==='focus' ? (FILTERS[q.get('f')] ? q.get('f') : 'app') : 'all';
-  const match = (x) => f==='all' || (f==='app' && x.status==='Applicable') || (f==='na' && x.status==='Not Applicable') || (f==='ver' && x.status==='For Verification');
-  const list = all.filter(match);
+  const list = cat==='focus' ? focus : cat==='c6' ? C6.map(x=>({...x,cls:'Financial Issue',rows:[],status:'For Review'})) : oma;
   const selectedId = q.get('item') || (list[0] && list[0].id);
-  const cur = all.find(x=>x.id===selectedId) || list[0] || null;
+  const cur = list.find(x=>x.id===selectedId) || list[0] || null;
   const refs = wpRefs(F,ctx);
   const wps = cur ? workingPapersFor(cur,F,ctx) : [];
   const counts = cat==='focus' ? {
@@ -186,36 +163,31 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
   } : null;
 
   const catLink=(k)=>`${base}&s=leads&cat=${k}`;
-  const fLink=(k)=>`${base}&s=leads&cat=${cat}&f=${k}`;
-  const rowLink=(x)=>`${base}&s=leads&cat=${cat}${cat==='focus'?`&f=${f}`:''}&item=${encodeURIComponent(x.id)}`;
-  const canAddWp = canEdit && cur && cur.status!=='Not Applicable' && cur.rows && cur.rows.length;
+  const rowLink=(x)=>`${base}&s=leads&cat=${cat}&item=${encodeURIComponent(x.id)}`;
 
   const body = `<div class="fa-head"><div><h1>C. Financial Audit</h1><p>Review and assess material accounts and other financial matters.</p></div>
     <div class="btn-row"><button class="btn sm ghost" id="ls-print" type="button">Print</button><button class="btn sm primary" id="ls-xl" type="button">Export to Excel</button></div></div>
-    <nav class="fa-tabs" aria-label="Category">
-      <a class="${cat==='focus'?'on':''}" href="${catLink('focus')}">Audit Foci <span>${focus.length}</span></a>
-      <a class="${cat==='c6'?'on':''}" href="${catLink('c6')}">Other Financial Related Issues <span>${C6.length}</span></a>
-      <a class="${cat==='oma'?'on':''}" href="${catLink('oma')}">Other Material Accounts <span>${oma.length}</span></a>
-    </nav>
+    <div class="fa-cats">
+      <a class="${cat==='focus'?'on':''}" href="${catLink('focus')}"><b>Audit Foci (26)</b><span>Key accounts and areas of focus</span></a>
+      <a class="${cat==='c6'?'on':''}" href="${catLink('c6')}"><b>Other Financial Related Issues</b><span>Other audit areas and compliance matters</span></a>
+      <a class="${cat==='oma'?'on':''}" href="${catLink('oma')}"><b>OMA – Other Material Accounts</b><span>Accounts not under the 26 audit foci</span></a>
+    </div>
     <div class="fa-grid">
       <section class="panel fa-list"><div class="panel-body">
-        <div class="fa-tools">
-          ${counts?`<div class="fa-filters">${Object.entries(FILTERS).map(([k,l])=>`<a class="${f===k?'on':''} f-${k}" href="${fLink(k)}">${l} <span>${counts[k]}</span></a>`).join('')}</div>`:'<div></div>'}
-          <div class="fa-search"><select class="sel" id="fa-result-filter" aria-label="Filter by audit result"><option value="">Any result</option><option>Not Started</option><option>In Progress</option><option>No Findings</option><option>With Finding</option></select><input class="input" id="fa-search" placeholder="Search…" aria-label="Search"></div>
-        </div>
-        <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Applicability</th><th>Audit Result</th></tr></thead><tbody>
+        ${counts?`<div class="fa-filters"><span class="on">All (${counts.all})</span><span>● Applicable (${counts.app})</span><span>● Not Applicable (${counts.na})</span><span>● For Verification (${counts.ver})</span></div>`:''}
+        <div class="fa-search"><select class="sel" id="fa-result-filter" aria-label="Filter by audit result"><option value="">All audit results</option><option>Not Started</option><option>In Progress</option><option>No Findings</option><option>With Finding</option></select><input class="input" id="fa-search" placeholder="Search ${cat==='focus'?'audit foci':'items'}…"></div>
+        <table class="pf fa-table"><thead><tr><th>#</th><th>${cat==='focus'?'Audit Focus / Lead Schedule':cat==='oma'?'Other Material Account':'Other Financial Related Issue'}</th><th>Applicability</th><th>Audit Result</th></tr></thead><tbody>
           ${list.map((x,i)=>`<tr data-fa-row data-fa-href="${rowLink(x)}" data-fa-result-value="${esc(auditResultOf(x,cat,F,ctx))}" data-fa-text="${esc((x.title+' '+(x.cls||'')).toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
-            <td>${cat==='focus'?esc(x.id):i+1}</td><td><a class="fa-link" href="${rowLink(x)}">${esc(x.title)}</a>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:x.rows&&x.rows.length>1?`<small>${x.rows.length} accounts</small>`:''}</td><td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td>${auditResultHTML(x,cat,F,ctx,canEdit)}</td></tr>`).join('')}
-          ${!list.length?`<tr><td colspan="4"><div class="empty">${cat==='focus'&&f!=='all'?`No ${esc(FILTERS[f].toLowerCase())} items. <a href="${fLink('all')}">Show all</a>`:'No accounts are currently listed here.'}</div></td></tr>`:''}
+            <td>${cat==='focus'?esc(x.id):i+1}</td><td><b>${esc(x.title)}</b>${x.rows&&x.rows.length===1?`<small>${esc(x.rows[0].a.code)}</small>`:''}</td><td>${statusPill(x.status==='For Review'?'For Verification':x.status)}</td><td>${auditResultHTML(x,cat,F,ctx,canEdit)}</td></tr>`).join('')}
+          ${!list.length?'<tr><td colspan="4"><div class="empty">No accounts are currently listed here.</div></td></tr>':''}
         </tbody></table>
       </div></section>
       <aside class="panel fa-wp"><div class="panel-body">
-        ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2><div class="fa-wp-meta">${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}${statusPill(cur.status==='For Review'?'For Verification':cur.status)}</div></div></div>
-          ${cat!=='c6'?`<h3>Lead Schedule</h3>${leadPanel(cur,F,refs)}`:''}
-          <div class="fa-wp-sub"><h3>Working Papers <span>${wps.length}</span></h3>${canAddWp?`<button class="btn sm primary" type="button" id="fa-newwp">+ Add Working Paper</button>`:''}</div>
-          ${wps.length?`<div class="wp-list">${wps.map((w,i)=>`<button type="button" class="wp-item" data-wp-open="${i}"><span><b>${esc(w.ref)}</b><span>${esc(w.title)}</span></span>${pill(w.status, w.status==='Reviewed'||w.status==='Completed'?'ok':w.kind==='aom'?'violet':'grey')}</button>`).join('')}</div>`
-            :`<div class="empty" style="padding:18px 6px">No working paper yet.${canAddWp?`<br><span class="hint">Suggested: <b>${esc(wpTemplate(cur.id).title)}</b></span>`:''}</div>`}`
-          :'<div class="empty">Select an item to view its lead schedule and working papers.</div>'}
+        ${cur?`<div class="fa-wp-head"><div><h2>${esc(cur.title)}</h2>${cur.rows&&cur.rows.length===1?`<span class="hint mono">${esc(cur.rows[0].a.code)}</span>`:''}<div style="margin-top:8px">${statusPill(cur.status==='For Review'?'For Verification':cur.status)}</div></div></div>
+          <h3>Working Papers (${wps.length})</h3>
+          <div class="btn-row fa-wp-actions">${cur.rows&&cur.rows.length?'<button class="btn sm ghost" type="button" id="fa-detail">View Lead Schedule</button>':''}${canEdit&&cur.status!=='Not Applicable'&&cur.rows&&cur.rows.length?`<button class="btn sm primary" type="button" id="fa-newwp">+ Add Working Paper</button>`:''}</div>
+          ${wps.length?`<table class="pf"><thead><tr><th>WP Ref.</th><th>Working Paper Title</th><th>Status</th><th>Action</th></tr></thead><tbody>${wps.map((w,i)=>`<tr><td><b>${esc(w.ref)}</b></td><td>${esc(w.title)}</td><td><span class="fa-class">${esc(w.status)}</span></td><td><button class="btn sm ghost" type="button" data-wp-open="${i}">Open</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty" style="padding:26px 8px">No working paper linked yet.</div>'}`
+          :'<div class="empty">Select an item to view its working papers.</div>'}
       </div></aside>
     </div>`;
 
@@ -227,34 +199,19 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         await store.save('letters',fsId(F.lguId,F.y),{...rec,...patch(rec)},{silent:true}); emitChange('local');
       };
       const s=$('#fa-search',root), rf=$('#fa-result-filter',root); if (rf) rf.value='';
-      const applyFilters=()=>$$('[data-fa-row]',root).forEach(tr=>{ const okText=!s||tr.dataset.faText.includes(s.value.trim().toLowerCase()); const okResult=!rf||!rf.value||tr.dataset.faResultValue===rf.value; tr.style.display=okText&&okResult?'':'none'; });
-      if(s) s.oninput=applyFilters; if(rf) rf.onchange=applyFilters;
-      // The whole row opens the account, like a link.
-      $$('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
-      $$('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
-
-      const editWp = async (ref) => {
-        const w = ((F.rec && F.rec.wps) || []).find(x=>x.ref===ref); if(!w) return;
-        const b = await openWp({ w, item:cur, F, ctx, me, canEdit });
-        if (!b) { emitChange('local'); return; }   // redraw so a just-created paper still shows
-        const k = resultKey(cat,cur);
-        await saveRec(r=>({ wps:(r.wps||[]).map(x=>x.ref===ref?{...x,wpb:b}:x),
-          auditResults: b.result==='No Findings' && !relatedAoms(cur,ctx).length ? {...(r.auditResults||{}),[k]:'No Findings'} : (r.auditResults||{}) }));
-        await store.log('updated a supporting working paper',`${ctx.lgu.name} · ${ref}`,ctx.teamId,me.email);
-        toast(b.result==='With Finding' ? `${ref} saved. Add the finding in Findings to draft the AOM.` : `${ref} saved.`,'ok');
-      };
-
+            const applyFilters=()=>$$('[data-fa-row]',root).forEach(tr=>{ const okText=!s||tr.dataset.faText.includes(s.value.trim().toLowerCase()); const okResult=!rf||!rf.value||tr.dataset.faResultValue===rf.value; tr.style.display=okText&&okResult?'':'none'; });
+            if(s) s.oninput=applyFilters; if(rf) rf.onchange=applyFilters;
+            $$('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
+            $$('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
+      const d=$('#fa-detail',root); if(d&&cur) d.onclick=()=>modal({title:cur.title,wide:true,body:detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
       const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
-        const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:wpTemplate(cur.id).title}); if(!w)return;
-        w.wpb = newBody(cur.id, me);
+        const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:cur.title}); if(!w)return;
         await saveRec(r=>({wps:[...(r.wps||[]),w],auditResults:{...(r.auditResults||{}),[resultKey(cat,cur)]:'In Progress'}})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
-        F.rec = { ...(F.rec||{}), wps:[...((F.rec&&F.rec.wps)||[]), w] };
-        editWp(w.ref);
       };
       $$('[data-wp-open]',root).forEach(b=>{ b.onclick=()=>{
         const w=wps[+b.dataset.wpOpen]; if(!w)return;
         if(w.kind==='aom'){ location.hash='#/audits/'+ctx.rec.id+'/findings?sel='+encodeURIComponent(w.id); return; }
-        editWp(w.ref);
+        modal({title:w.ref+' · '+w.title,wide:true,body:'<p class="hint" style="margin:0 0 10px">Supporting working paper for this audit focus.</p>'+detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
       }; });
       $('#ls-xl',root).onclick=async()=>{
         const XLSX=await loadScript('lib/xlsx.full.min.js','XLSX'); const wb=XLSX.utils.book_new();
@@ -265,7 +222,7 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
       $('#ls-print',root).onclick=()=>{
         if(!cur||!cur.rows||!cur.rows.length){ toast('Select an applicable account with balances to print its lead schedule.','bad'); return; }
         const css='.pg{padding:.6in;font:11pt "Times New Roman",serif}.pg table{width:100%;border-collapse:collapse}.pg th,.pg td{border-bottom:1px solid #999;padding:4px}.pg .n{text-align:right}';
-        printPages(css,`<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Lead Schedule · ${esc(cur.title)}</p>${detailTable(cur,F,refs)}</div>`,`Financial Audit · ${ctx.lgu.name}`);
+        printPages(css,`<div class="pg"><h2>Barangay ${esc(ctx.lgu.name)}, ${esc(ctx.mun.name)}, Quirino</h2><p>Financial Audit · ${esc(cur.title)}</p>${detailTable(cur,F,refs)}</div>`,`Financial Audit · ${ctx.lgu.name}`);
       };
     }
   };
