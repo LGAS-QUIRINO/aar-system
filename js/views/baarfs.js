@@ -279,7 +279,7 @@ function inputScreen({ F, ctx, me, q, base, canEdit }) {
         ${noneBox}${content}</div></section>
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Entry Status</h2></div><div class="panel-body">${statusHTML}</div></section>
-        <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body ck">${checkHTML(inputChecks(F)) || '<span class="hint">Runs once a trial balance is entered.</span>'}</div></section>
+        <section class="panel"><div class="panel-head"><h2>Trial Balance Results</h2></div><div class="panel-body ck">${checkHTML(inputChecks(F)) || '<span class="hint">Runs once a trial balance is entered.</span>'}</div></section>
         <section class="panel"><div class="panel-head"><h2>Confirm</h2></div><div class="panel-body">${confirmHTML}</div></section>
       </div></div>`;
 
@@ -455,7 +455,7 @@ function afsScreen({ F, ctx, me, q, base, canEdit, start }) {
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Statement Status</h2></div><div class="panel-body"><table class="coat"><colgroup><col><col style="width:46px"><col style="width:104px"></colgroup><thead><tr><th>Statement</th><th>Page</th><th>Status</th></tr></thead><tbody id="f-status"></tbody></table>
           <p class="hint" style="margin:8px 0 0">Pages continue after Part 05 and go to the Table of Contents by themselves.</p></div></section>
-        <section class="panel"><div class="panel-head"><h2>Checks</h2></div><div class="panel-body ck" id="f-checks"></div></section>
+        <section class="panel"><div class="panel-head"><h2>Statement Results</h2></div><div class="panel-body ck" id="f-checks"></div></section>
       </div></div>`;
 
   return {
