@@ -15,6 +15,8 @@ import { fillText, blockPlain, SECTIONS } from '../aom.js';
 import { SMR_STANDARD, SMR_KEYS, smrSigners, buildSmr, smrPageHTML, scanPagesHTML, smrPrint, smrSections } from '../baar-smr.js';
 import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
+import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
+import { fsPrint, fsSections } from '../baar-fs.js';
 import { aomAmount, peso } from '../saor.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -27,7 +29,7 @@ const stdId = (teamId) => `std-baartr-${teamId}`;
 const iarStdId = (teamId) => `std-baariar-${teamId}`;
 const smrStdId = (teamId) => `std-baarsmr-${teamId}`;
 
-const BUILT = ['01', '02', '03', '04', '05'];
+const BUILT = ['01', '02', '03', '04', '05', '06'];
 // The parts strip. st: the status pill of each built part, e.g. { '01': html, '03': html }; each sits in #b-pNN so a screen can update it.
 function partsStrip(auditId, active, st = {}) {
   return `<div class="bparts">${PARTS.map(([n, t]) => {
@@ -152,16 +154,16 @@ async function loadTransmittal(ctx) {
   const sStandard = { ...SMR_STANDARD, ...(sStdRec && !sStdRec.deleted ? sStdRec.data.wording || {} : {}) };
   const S = B.smr = B.smr || {};
   SMR_KEYS.forEach((k) => { if (S[k] === undefined) S[k] = sStandard[k]; });
-  return { rec, standard, stdOp, exitL, B, T, I, iStandard, iStdOp, S, sStandard, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording() };
+  return { rec, standard, stdOp, exitL, B, T, I, iStandard, iStdOp, S, sStandard, isNew: !rec || rec.deleted, gaa: await loadGaa(), pw: await loadPeriodWording(), FS: await loadFS(ctx) };
 }
 
-// Page numbers of the numbered parts (Independent Auditor's Report = page 1). Parts 04 to 10 are not built yet: no numbers.
 // Page numbers of the numbered parts: the Independent Auditor's Report is page 1; each later part follows the one before.
 function baarPages(ctx, L) {
   const iarN = paginateIar(iarOf(ctx, L).items, measureBox()).length;
   const smr = 1 + iarN;
   const smrN = L.S && L.S.file ? L.S.file.pages || 1 : 1;
-  return { iar: 1, smr, next: smr + smrN };
+  const s = smr + smrN;
+  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, next: s + fsPageCount(L.FS) };
 }
 // The signed copy's pages as pictures (or null when none is uploaded yet).
 async function smrImages(S) {
@@ -181,10 +183,11 @@ async function completeBAAR(ctx) {
   const toc = buildToc({ audit, lgu, mun, pw: L.pw, pages, annexes: baarAnnexes() });
   const ia = iarOf(ctx, L);
   const sm = { r: buildSmr({ s: L.S, audit, lgu, mun }), imgs: await smrImages(L.S).catch(() => null), start: pages.smr };
+  const fd = fsDoc(L.FS, pages.sfperf);
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm))], fileName, 'BAAR'); }
+    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd)]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd))], fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -231,12 +234,16 @@ export async function baar(refs, params, q) {
     '01': isNew ? pill('Not Started', 'grey') : p01Pill(trMissing(B, gaa, gaaYear)),
     '03': pill('In Progress', 'warn'),
     '04': p04Pill(iarMissing(B.opinion, L.I, basesList(ctx, L.I))),
-    '05': p05Pill(L.S)
+    '05': p05Pill(L.S),
+    '06': fsPill(L.FS)
   };
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
   if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, st });
   if (q.get('p') === '05') return smrPart({ ctx, me, refs, L, st });
+  if (q.get('p') === '06') {
+    return fsPart({ ctx, me, L, q, canEdit, start: baarPages(ctx, L).sfperf, head: baarHead(ctx), strip: partsStrip(ctx.rec.id, '06', st), wireComplete: (root) => wireComplete(root, ctx, me) });
+  }
 
   const parts = partsStrip(ctx.rec.id, '01', { ...st, '01': '' });
   const ta = (id, label, rows = 3) => `<div class="field"><label class="label" for="b-${id}">${label}</label><textarea class="input be-text" id="b-${id}" rows="${rows}">${esc(T[id])}</textarea></div>`;

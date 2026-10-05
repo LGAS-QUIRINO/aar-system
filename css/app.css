@@ -521,3 +521,46 @@ button.reset{background:none;border:0;padding:0;color:var(--primary);text-decora
 .scan{position:relative;width:8.5in;height:11in;background:#fff;overflow:hidden}
 .scan img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
 .scan .pno{position:absolute;left:0;right:0;bottom:.45in;text-align:center;font:11pt 'Times New Roman',Tinos,serif;color:#000}
+/* BAAR · Part 06 Audited Financial Statements */
+.tabs2{display:flex;gap:6px;flex-wrap:wrap}
+.tabs2 .t{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:12.5px;background:#fff;color:var(--ink-2);text-decoration:none;display:inline-flex;gap:6px;align-items:center}
+.tabs2 .t:hover{border-color:var(--primary)}
+.tabs2 .t.on{border-color:var(--primary);box-shadow:0 0 0 2px #C9D8EA;font-weight:600;color:var(--navy)}
+.sumc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sumc div{background:var(--soft);border-radius:8px;padding:8px;text-align:center;font-size:13px}.sumc b{display:block;font-size:18px;color:var(--navy)}
+.tbwrap{max-height:640px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.tbt{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbt th{font-size:11.5px;color:var(--muted);text-align:left;padding:6px;border-bottom:1px solid var(--line);background:var(--soft);position:sticky;top:0;z-index:1}
+.tbt td{padding:6px;border-bottom:1px solid var(--line-2);vertical-align:top}
+.tbt .n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tbt tr.r-chk td{background:#FFF8EC}.tbt tr.r-bad td{background:#FFF1F1}
+.tbt .mono{font-size:11px}
+.tbt.fixed{table-layout:fixed}.tbt.fixed td{overflow-wrap:anywhere}
+.tbt tfoot td{font-weight:700;border-top:2px solid var(--line);background:var(--soft);position:sticky;bottom:0}
+.tbt .sel{height:30px;font-size:12px;padding:0 6px;border:1px solid #C9D3DD;border-radius:6px;max-width:100%;background:#fff}
+.fixcell{display:inline-flex;gap:6px;align-items:center;justify-content:flex-end}
+.fixcell .fixin{height:30px;width:124px;text-align:right;font-size:13px}
+.fl a{color:var(--primary);text-decoration:none}.fl a.on{font-weight:700;color:var(--navy)}
+.coat{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}.coat .pill{white-space:normal;text-align:center;line-height:1.25}.coat td{overflow-wrap:break-word}.coat td,.coat th{padding:7px 8px;border-bottom:1px solid var(--line-2);text-align:left;vertical-align:middle}.coat th{font-size:12px;color:var(--muted);background:var(--soft)}
+.picklist{display:flex;flex-direction:column;max-height:380px;overflow:auto;margin-top:8px;border:1px solid var(--line);border-radius:8px}
+.pick{display:grid;grid-template-columns:120px 1fr;gap:10px;text-align:left;border:0;border-bottom:1px solid var(--line-2);background:#fff;padding:8px 10px;font-size:13px;cursor:pointer}
+.pick:hover,.pick:focus-visible{background:var(--tint)}
+.ent{width:100%;border-collapse:collapse;font-size:12.5px}
+.ent th{font-size:11.5px;color:var(--muted);text-align:right;padding:6px;border-bottom:1px solid var(--line);background:var(--soft)}
+.ent th:first-child{text-align:left}
+.ent td{padding:3px 6px;border-bottom:1px solid var(--line-2)}
+.ent td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;color:var(--ink-2)}
+.ent td.i{padding-left:22px}
+.ent input.amt{height:28px;width:100%;min-width:96px;border:1px solid #C9D3DD;border-radius:6px;text-align:right;padding:0 6px;font-size:12.5px;background:#fff}
+.ent input.amt:disabled{background:var(--soft)}
+.ent input.bad-in{border-color:#D14343}
+.ent tr.h td{font-weight:700;color:var(--navy);background:var(--soft)}
+.ent tr.h2 td{font-weight:600;color:var(--ink-2);padding-left:12px}
+.ent tr.sum td{font-weight:600;color:var(--navy)}
+.ent .bad-t{color:var(--bad-ink)}
+.ent.bud{table-layout:fixed}.ent.bud input.amt{min-width:0}
+.chip{font-size:10.5px;background:var(--tint);color:var(--navy);border-radius:999px;padding:1px 7px;margin-left:4px;white-space:nowrap;font-weight:500}
+.ck{display:flex;flex-direction:column;gap:7px;font-size:13px;line-height:1.4}
+.ck .ck-ok{color:var(--ok-ink)}.ck .ck-warn{color:var(--warn-ink)}.ck .ck-wait,.ck .ck-info{color:var(--muted)}
+.paper-wrap .sheet.fsheet{width:8.5in;height:11in;padding:0;overflow:hidden}
+.paper-wrap .sheet.fsheet + .sheet.fsheet{margin-top:14px}

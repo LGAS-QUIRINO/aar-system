@@ -133,7 +133,7 @@ export function checks(aom, vars, audit) {
   const tables = (aom.blocks || []).filter((b) => b.type === 'table');
   const noData = tables.filter((b) => !((aom.wpData && aom.wpData.tables) || {})[b.n]);
   if (tables.length) out.push(noData.length ? { st: 'bad', t: `Table ${noData.map((b) => b.n).join(', ')} has no data. Import the working paper.` } : { st: 'ok', t: 'Tables imported from the working paper' });
-  out.push({ st: 'wait', t: 'Amount vs. trial balance: waiting for FS figures (Phase 4)' });
+  out.push({ st: 'wait', t: 'Amount vs. trial balance: shown for reference in BAAR Part 06 · FS Input' });
   return out;
 }
 

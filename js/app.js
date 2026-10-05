@@ -22,6 +22,7 @@ import { exitconf } from './views/exitconf.js';
 import { saorview } from './views/saorview.js';
 import { comments } from './views/comments.js';
 import { baar, baarList } from './views/baar.js';
+import { coaView } from './views/coa.js';
 import { ST } from './aom.js';
 
 const app = document.getElementById('app');
@@ -49,6 +50,7 @@ function route(hash) {
   if (p[0] === 'audits') return [audits, {}, q];
   if (p[0] === 'users') return [users, {}, q];
   if (p[0] === 'lgus') return [lgus, {}, q];
+  if (p[0] === 'coa') return [coaView, {}, q];
   return [dashboard, {}, q];
 }
 

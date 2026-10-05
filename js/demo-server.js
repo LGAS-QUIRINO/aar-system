@@ -55,6 +55,7 @@ export const demoServer = {
         records[t] = Object.values(state[t]).filter((r) => {
           if (payload.since && r.updatedAt <= payload.since) return false;
           if (REFERENCE.includes(t) || r.scope === '*') return true;
+          if (t === 'letters' && r.scope === '') return true;
           return seesAll(user) || (user.data.teamIds || []).includes(r.scope);
         });
       });
@@ -66,7 +67,11 @@ export const demoServer = {
           if (!TABLES.includes(c.table)) throw new Error('Unknown table');
           if (ADMIN_ONLY.includes(c.table) && !roles(user).includes('admin')) throw new Error('Only the Admin can change ' + c.table + '.');
           if (c.table === 'aom_library' && !roles(user).some((r) => r === 'admin' || r === 'sa')) throw new Error('Only the Supervising Auditor or Admin can change the AOM Library.');
-          const scope = REFERENCE.includes(c.table) ? '*' : String((c.data && c.data.teamId) || '');
+          let scope = REFERENCE.includes(c.table) ? '*' : String((c.data && c.data.teamId) || '');
+          if (c.table === 'letters' && c.data && ['coa', 'gaa', 'wording'].includes(c.data.type)) {
+            if (!seesAll(user)) throw new Error('Only the Supervising Auditor or Admin can change this.');
+            scope = '*';
+          }
           if (scope !== '*' && !seesAll(user) && !(user.data.teamIds || []).includes(scope)) throw new Error('This record belongs to another team.');
           const cur = state[c.table][c.id];
           const base = Number(c.baseVersion || 0);

@@ -66,8 +66,9 @@ const NAV = [
   { href: '#/library', label: 'AOM Library', icon: '❏' }
 ];
 const ADMIN_NAV = [
-  { href: '#/users', label: 'Users & Roles', icon: '◉' },
-  { href: '#/lgus', label: 'LGU Master List', icon: '⌂' }
+  { href: '#/users', label: 'Users & Roles', icon: '◉', admin: true },
+  { href: '#/lgus', label: 'LGU Master List', icon: '⌂', admin: true },
+  { href: '#/coa', label: 'Chart of Accounts', icon: '≡' }
 ];
 
 export function roleLine(me) {
@@ -79,6 +80,7 @@ export function roleLine(me) {
 
 export function shell({ me, team, active, crumbs, body, counts = {} }) {
   const isAdmin = (me.roles || []).includes('admin');
+  const isSA = (me.roles || []).includes('sa');
   const reviewer = (me.roles || []).some((r) => r === 'atl' || r === 'sa');
   const link = (n) => n.reviewer && !reviewer ? '' : n.href
     ? `<a href="${n.href}" class="${active === n.href ? 'active' : ''}"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}${n.count && counts[n.count] ? `<span class="count">${counts[n.count]}</span>` : ''}</a>`
@@ -87,7 +89,7 @@ export function shell({ me, team, active, crumbs, body, counts = {} }) {
     <aside class="side">
       <div class="brand"><img class="brand-logo" src="img/coa-logo.png" alt="COA logo"><div><b>Annual Audit Report System</b><span>Commission on Audit${team && team.officeCode ? ' · Team ' + esc(team.officeCode) : ''}</span></div></div>
       <nav class="nav" aria-label="Main">${NAV.map(link).join('')}
-        ${isAdmin ? `<div class="nav-label">Admin</div>${ADMIN_NAV.map(link).join('')}` : ''}</nav>
+        ${isAdmin || isSA ? `<div class="nav-label">Admin</div>${ADMIN_NAV.filter((n) => isAdmin || !n.admin).map(link).join('')}` : ''}</nav>
       <div class="sync-box" id="sync-box">${syncBox()}</div>
     </aside>
     <div class="main">
