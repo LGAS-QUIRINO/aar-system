@@ -411,6 +411,8 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   const pLock = !canEdit || scfPriorLocked(F);
   const dis = canEdit ? '' : 'disabled';
   const doc0 = fsDoc(F, start, work);
+  const missingFunds = [F.y, F.yp].flatMap((yr) => F.funds.filter((f) => !entered(F.tb[yr] && F.tb[yr][f.k])).map((f) => `${f.label} CY ${yr}${yr === F.yp ? ' Comparative' : ''}`));
+  const fsMode = mode === 'fs', noTb = fsMode && !F.figY.any, showCash = !fsMode || sel === 'scf';
   const fundsLine = F.funds.map((f) => { const t = F.tb[F.y][f.k]; return !entered(t) ? pill(`${f.label} · not yet entered`, 'grey') : t.none ? pill(`${f.label} · no separate trial balance`, 'grey') : pill(`✓ ${f.label}`, 'ok'); }).join(' ');
   // Budget and Actual entry
   const bRows = doc0.allRows;
@@ -447,14 +449,14 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   const body = `<style>${FS_CSS}</style>
     ${mode === 'baar' ? `<div class="topnote">The audited financial statements, from the trial balances confirmed in the Financial Statements step. Nothing is typed here.</div>${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}`
       : mode === 'budget' ? '<div class="topnote">Enter the budget from the Annual Budget, the RAO, or both. Import the Excel file or type the amounts; the files stay on your computer.</div>'
-      : '<div class="topnote">The statements are built from the trial balances, all funds combined. Check the cash flow lines; the budget is entered on the Budget tab.</div>'}
+      : `<div class="topnote">The statements are built from the trial balances, all funds combined. Only the cash flow lines are typed here.</div>${missingFunds.length ? `<div class="note warn" style="display:block">Not yet entered: ${esc(missingFunds.join(', '))}. <a href="${base}&s=input">Go to the Trial Balance</a></div>` : ''}`}
     ${extra && extra.top ? extra.top : ''}
-    <div class="xcols" style="grid-template-columns:minmax(0,1fr) 300px">
+    <div class="xcols" style="grid-template-columns:${fsMode ? 'minmax(0,1fr)' : 'minmax(0,1fr) 300px'}">
       <div class="xform">
         <section class="panel"><div class="panel-head"><h2>Statements</h2><span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="f-print">Print</button><button class="btn sm primary" type="button" id="f-word">Word</button></span></div><div class="panel-body">
-          ${mode === 'budget' ? '' : `<div class="tabs2" id="f-tabs">${KEYS.map(([k, t]) => `<a class="t ${k === sel ? 'on' : ''}" href="${base}&s=${tabKey}&t=${k}${showAll ? '&b=all' : ''}">${esc(t)} <span data-sp="${k}"></span></a>`).join('')}</div>`}
-          <div class="lr-row" style="justify-content:flex-start;gap:8px"><span class="hint">Funds combined:</span>${fundsLine}<span class="hint" style="flex-basis:100%">The ${F.yp} column comes from the CY ${F.yp} Comparative trial balance (entered once this year; from next year, taken from last year's BAAR).</span></div>
-          <div class="lr-row"><b style="color:var(--navy)">Print View</b><span class="hint" id="f-pg"></span></div>
+          ${mode === 'budget' ? '' : `<div class="tabs2" id="f-tabs">${KEYS.map(([k, t]) => `<a class="t ${k === sel ? 'on' : ''}" href="${base}&s=${tabKey}&t=${k}${showAll ? '&b=all' : ''}">${esc(t)} ${noTb ? '' : `<span data-sp="${k}"></span>`}</a>`).join('')}</div>`}
+          ${fsMode ? '' : `<div class="lr-row" style="justify-content:flex-start;gap:8px"><span class="hint">Funds combined:</span>${fundsLine}<span class="hint" style="flex-basis:100%">The ${F.yp} column comes from the CY ${F.yp} Comparative trial balance (entered once this year; from next year, taken from last year's BAAR).</span></div>
+          <div class="lr-row"><b style="color:var(--navy)">Print View</b><span class="hint" id="f-pg"></span></div>`}
           <div class="paper-wrap big" id="f-paper"></div></div></section>
         ${mode === 'budget' ? `<section class="panel"><div class="panel-head"><h2>Comparison of Budget and Actual Amounts</h2><span class="btn-row" style="margin-left:auto;align-items:center"><span class="hint">Show:</span>
           <div class="seg" role="group" aria-label="Rows shown"><a class="${showAll ? '' : 'on'}" href="${base}&s=${tabKey}&t=${sel}">Accounts in the trial balance</a><a class="${showAll ? 'on' : ''}" href="${base}&s=${tabKey}&t=${sel}&b=all">All rows</a></div>
@@ -463,7 +465,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
           <label class="check" style="min-height:0"><input type="checkbox" id="b-all" ${work.scbaa.printAll ? '' : 'checked'} ${dis}>Print only the rows with amounts</label>
           <span class="hint">Original Budget: current-year plus continuing appropriations; Adjustments: supplemental budgets; Actual: obligations. Typed amounts take the place of amounts from the RAO. Final Budget and the Difference are computed.</span></div></section>` : ''}
         ${extra && extra.mid ? extra.mid : ''}
-        ${mode === 'fs' ? `<section class="panel"><div class="panel-head"><h2>Cash Flows</h2><span class="hint" style="margin-left:8px">all funds combined</span></div><div class="panel-body">
+        ${fsMode && showCash ? `<section class="panel"><div class="panel-head"><h2>Cash Flows</h2><span class="hint" style="margin-left:8px">all funds combined</span></div><div class="panel-body">
           <table class="ent"><thead><tr><th>Line</th><th>${F.y}</th><th>${F.yp}</th></tr></thead><tbody>${cRows}
             <tr class="h"><td colspan="3">Cash balance</td></tr>
             <tr><td class="i">Cash at the Beginning of the Year</td>${begCell('Y')}${begCell('P')}</tr>
@@ -471,14 +473,14 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
             <tr><td class="i">Cash in Financial Position</td><td class="n">${cashCell(F.figY)}</td><td class="n">${cashCell(F.figP)}</td></tr>
             <tr class="sum"><td>Left to explain</td><td class="n" data-ct="Y-left"></td><td class="n" data-ct="P-left"></td></tr></tbody></table>
           <p class="hint" style="margin:8px 0 0">Amounts marked "from the trial balance" are a starting point only; change them to the actual cash received or paid. Clear the box to go back to the trial balance amount.${scfPriorLocked(F) ? ` The ${F.yp} column comes from the CY ${F.yp} BAAR.` : ''}</p></div></section>` : ''}
-        ${canEdit && mode !== 'baar' ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span><div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save" type="button">Save</button></div></div>` : ''}
+        ${canEdit && mode !== 'baar' && showCash ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span><div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save" type="button">Save</button></div></div>` : ''}
       </div>
-      <div class="xform">
+      ${fsMode ? '' : `<div class="xform">
         <section class="panel"><div class="panel-head"><h2>Statement Status</h2></div><div class="panel-body"><table class="coat"><colgroup><col><col style="width:46px"><col style="width:104px"></colgroup><thead><tr><th>Statement</th><th>Page</th><th>Status</th></tr></thead><tbody id="f-status"></tbody></table>
           <p class="hint" style="margin:8px 0 0">${start ? 'Pages continue after Part 05 and go to the Table of Contents by themselves.' : 'Page numbers are given in the BAAR (Part 06).'}</p></div></section>
         ${extra && extra.side ? extra.side : ''}
         <section class="panel"><div class="panel-head"><h2>Statement Results</h2></div><div class="panel-body ck" id="f-checks"></div></section>
-      </div></div>`;
+      </div>`}</div>`;
 
   return {
     body,
@@ -492,11 +494,11 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
         const idx = { sfperf: 0, sfpos: 1, scne: 2, scf: 3 };
         const html = sel === 'scbaa' ? scbaaHTML({ ...d.scbaa, y: F.y, lgu, mun, start: pages.scbaa }) : [stmtHTML(d.stmts[idx[sel]], { lgu, mun, page: pages[sel] })];
         $('#f-paper', root).innerHTML = html.map((x) => `<div class="sheet fsheet">${x}</div>`).join('');
-        $('#f-pg', root).textContent = !pages[sel] ? '' : sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
+        const pgEl = $('#f-pg', root); if (pgEl) pgEl.textContent = !pages[sel] ? '' : sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
         const c = afsChecks(F, d);
-        $('#f-checks', root).innerHTML = checkHTML(c.out);
+        const ckEl = $('#f-checks', root); if (ckEl) ckEl.innerHTML = checkHTML(c.out);
         KEYS.forEach(([k]) => { const el = $(`[data-sp="${k}"]`, root); if (el) el.innerHTML = stmtPill(k, c.stat[k]); });
-        $('#f-status', root).innerHTML = KEYS.map(([k, t]) => `<tr><td>${esc(t)}</td><td>${!pages[k] ? '–' : k === 'scbaa' && pages.next - pages.scbaa > 1 ? `${pages.scbaa}–${pages.next - 1}` : pages[k]}</td><td>${stmtPill(k, c.stat[k])}</td></tr>`).join('');
+        const stEl = $('#f-status', root); if (stEl) stEl.innerHTML = KEYS.map(([k, t]) => `<tr><td>${esc(t)}</td><td>${!pages[k] ? '–' : k === 'scbaa' && pages.next - pages.scbaa > 1 ? `${pages.scbaa}–${pages.next - 1}` : pages[k]}</td><td>${stmtPill(k, c.stat[k])}</td></tr>`).join('');
         // Budget and Actual computed cells
         bRows.forEach((r) => { if (r.h) return; const x = scbaaLine(r, work.scbaa); const f = $(`[data-bf="${r.k}"]`, root), df = $(`[data-bd="${r.k}"]`, root); if (f) f.textContent = money(x.fin, { dash: '' }); if (df) df.textContent = money(x.diff, { dash: '' }); });
         // Cash flow totals
