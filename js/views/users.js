@@ -1,5 +1,5 @@
 // Admin · Users & Roles and Team Assignments
-import { store, newId } from '../store.js';
+import { store, newId, emitChange } from '../store.js';
 import { esc, modal, toast, pill, $, $$ } from '../ui.js';
 import { ROLE_NAMES, nice, upper, longDate } from '../format.js';
 
@@ -46,6 +46,10 @@ export async function users(refs) {
       <span>• Users only see the LGUs assigned to their team. Only the Supervising Auditor and Admin see all teams.</span>
       <span>• <b>Same person as Audit Team Leader and Supervising Auditor</b> (Team 1 for now): their review becomes one step. When the roles are given to two people, the normal two-step review applies again automatically.</span>
       <span>• Removing a user keeps everything they did in the history.</span></div></section>
+    <section class="panel"><div class="panel-head"><h2>Test Data</h2></div><div class="panel-body" style="font-size:13px;line-height:1.5;gap:8px">
+      <span>Clears all audit work so testing can start from the beginning: audits, AOMs, trial balances and financial statements, SAOR, exit conference letters, BAARs and their reviews.</span>
+      <span>Kept: users and teams, the LGU Master List, the AOM Library, the Chart of Accounts, Flag Rules, the standard wording and the activity log.</span>
+      <button class="btn ghost" type="button" id="clear-test">Clear Test Data…</button></div></section>
     </div></div>`;
 
   async function editUser(id) {
@@ -120,6 +124,30 @@ export async function users(refs) {
       $('#add-user', root).onclick = () => editUser(null);
       $$('[data-edit]', root).forEach((b) => { b.onclick = () => editUser(b.dataset.edit); });
       $$('[data-team]', root).forEach((b) => { b.onclick = () => editTeam(b.dataset.team); });
+      $('#clear-test', root).onclick = () => clearTestData(refs);
     }
   };
+}
+
+/* ── Clear Test Data (Admin) ── */
+// Audit work only; reference lists, the AOM Library and saved standards stay. Marked deleted, so every device drops them on sync.
+const AUDIT_LETTERS = ['baar', 'baar-review-part', 'fs', 'tb', 'saor', 'exit', 'raomap'];
+async function clearTestData(refs) {
+  const audits = await store.list('audits'), aoms = await store.list('aoms');
+  const letters = (await store.list('letters')).filter((l) => AUDIT_LETTERS.includes(l.data.type));
+  const total = audits.length + aoms.length + letters.length;
+  if (!total) { toast('There is no audit data to clear.', 'ok'); return; }
+  const r = await modal({ title: 'Clear Test Data',
+    body: `<p style="margin:0 0 10px;line-height:1.5">This clears <b>${audits.length} audit${audits.length === 1 ? '' : 's'}</b>, <b>${aoms.length} AOM${aoms.length === 1 ? '' : 's'}</b> and <b>${letters.length}</b> trial balance, SAOR, exit conference and BAAR record${letters.length === 1 ? '' : 's'}, on every device.</p>
+      <p style="margin:0 0 10px;line-height:1.5">Users, teams, the LGU Master List, the AOM Library, the Chart of Accounts, Flag Rules, the standard wording and the activity log are kept.</p>
+      <div class="field"><label class="label" for="ct-type">Type CLEAR to confirm</label><input class="input" id="ct-type" autocomplete="off"></div>`,
+    buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Clear Test Data', cls: 'primary', value: 'ok', check: (bg) => { const ok = $('#ct-type', bg).value.trim().toUpperCase() === 'CLEAR'; if (!ok) toast('Type CLEAR to confirm.', 'warn'); return ok; } }] });
+  if (r !== 'ok') return;
+  toast('Clearing…');
+  for (const x of letters) await store.save('letters', x.id, x.data, { deleted: true, silent: true });
+  for (const x of aoms) await store.save('aoms', x.id, x.data, { deleted: true, silent: true });
+  for (const x of audits) await store.save('audits', x.id, x.data, { deleted: true, silent: true });
+  await store.log('cleared the test data', `${audits.length} audits · ${aoms.length} AOMs · ${letters.length} records`, '', refs.me.email);
+  toast('Test data cleared. It syncs to the server and the other devices now.', 'ok');
+  emitChange('local');
 }
