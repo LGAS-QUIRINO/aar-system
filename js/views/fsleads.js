@@ -198,17 +198,17 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         const rec = (await loadFsRec(F.lguId,F.y)) || { type:'fs',teamId:ctx.teamId,lguId:F.lguId,year:F.y,auditId:ctx.rec.id };
         await store.save('letters',fsId(F.lguId,F.y),{...rec,...patch(rec)},{silent:true}); emitChange('local');
       };
-      const s=$('#fa-search',root), rf=$('#fa-result-filter',root);
-            const applyFilters=()=>$('[data-fa-row]',root).forEach(tr=>{ const okText=!s||tr.dataset.faText.includes(s.value.trim().toLowerCase()); const okResult=!rf||!rf.value||tr.dataset.faResultValue===rf.value; tr.style.display=okText&&okResult?'':'none'; });
+      const s=$('#fa-search',root), rf=$('#fa-result-filter',root); if (rf) rf.value='';
+            const applyFilters=()=>$$('[data-fa-row]',root).forEach(tr=>{ const okText=!s||tr.dataset.faText.includes(s.value.trim().toLowerCase()); const okResult=!rf||!rf.value||tr.dataset.faResultValue===rf.value; tr.style.display=okText&&okResult?'':'none'; });
             if(s) s.oninput=applyFilters; if(rf) rf.onchange=applyFilters;
-            $('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
-            $('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
+            $$('[data-fa-row]',root).forEach(tr=>{ tr.onclick=(e)=>{ if(e.target.closest('select,button,a,input')) return; location.hash=tr.dataset.faHref; }; });
+            $$('[data-fa-result]',root).forEach(sel=>{ sel.onchange=async()=>{ await saveRec(r=>({auditResults:{...(r.auditResults||{}),[sel.dataset.faResult]:sel.value}})); toast('Audit result saved.','ok'); }; });
       const d=$('#fa-detail',root); if(d&&cur) d.onclick=()=>modal({title:cur.title,wide:true,body:detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
       const n=$('#fa-newwp',root); if(n&&cur) n.onclick=async()=>{
         const w=await openNewWp({F,ctx,me,accounts:(cur.rows||[]).map(r=>r.k),supporting:true,title:cur.title}); if(!w)return;
         await saveRec(r=>({wps:[...(r.wps||[]),w],auditResults:{...(r.auditResults||{}),[resultKey(cat,cur)]:'In Progress'}})); await store.log('added a supporting working paper',`${ctx.lgu.name} · ${w.ref} ${w.title}`,ctx.teamId,me.email); toast(`${w.ref} added.`,'ok');
       };
-      $('[data-wp-open]',root).forEach(b=>{ b.onclick=()=>{
+      $$('[data-wp-open]',root).forEach(b=>{ b.onclick=()=>{
         const w=wps[+b.dataset.wpOpen]; if(!w)return;
         if(w.kind==='aom'){ location.hash='#/audits/'+ctx.rec.id+'/findings?sel='+encodeURIComponent(w.id); return; }
         modal({title:w.ref+' · '+w.title,wide:true,body:'<p class="hint" style="margin:0 0 10px">Supporting working paper for this audit focus.</p>'+detailTable(cur,F,refs),buttons:[{label:'Close',cls:'ghost',value:'ok'}]});
