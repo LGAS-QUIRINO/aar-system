@@ -38,7 +38,7 @@ export function buildP2(ctx) {
   P2_SECTIONS.forEach(([s, name]) => {
     const list = L[s];
     if (!list.length) return;
-    paras.push(P([{ t: `${s}.` }, { t: '\t' }, { t: name }], { bold: true, sec: true, keep: true, ind: { left: 720, hanging: 360 } }), BL());
+    paras.push(P([{ t: `${s}.` }, { t: '\t' }, { t: name }], { bold: true, sec: true, keep: true, ind: TOPIC }), BL());
     list.forEach((a) => {
       k++;
       const vars = ctx.varsFor(a);
