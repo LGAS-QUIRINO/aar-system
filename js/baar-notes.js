@@ -7,12 +7,15 @@ import { loadScript } from './wp.js';
 import { money, cents, parseAmt } from './fs.js';
 import { LINE } from './coa.js';
 import { FS_CSS } from './baar-fs.js';
+import { punongBarangay } from './baar-transmittal.js';
+import { longDate } from './format.js';
 
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const amtOf = (v) => { const n = parseAmt(v); return n === null || isNaN(n) ? null : cents(n); };
 
 /* ── Standard wording (Annex 40) ── */
-export const N1_SERVICES = 'agricultural support services; health and social welfare services; services and facilities related to general hygiene and sanitation, beautification, and solid waste collection; maintenance of katarungan pambarangay; maintenance of barangay roads and bridges and water supply systems; infrastructure facilities; information and reading center; and satellite or public market';
+export const N1_SERVICES = 'Agricultural support services; Health and Social welfare service; Services and facilities related to general Hygiene and Sanitation, Beautification, and Solid Waste Collection; Maintenance of Katarungang Pambarangay; maintenance of Barangay roads and Bridges and Water Supply Systems; Infrastructure facilities; Information and Reading Center; and Satellite or Public Market within the premises of the Barangay hall';
+export const N1_WORKFORCE = "a Barangay Secretary, a Barangay Treasurer, BPAT's, Driver, BHW/BNS, Utility Workers";
 const N21 = [
   'The financial statements have been prepared in accordance with and comply with the Philippine Public Sector Accounting Standards. The financial statements are presented in Peso and the figures are rounded to the nearest pesos.',
   'The financial statements are prepared on the basis of historical cost. The cash flow statement is prepared using the direct method. The Statement of Comparison of Budget and Actual Amounts is presented according to the classification adopted for budgeting purposes.'
@@ -100,6 +103,13 @@ export function ppeClass(title) {
   return 'oth';
 }
 
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve'];
+const inWords = (n) => `${WORDS[n] || n} (${n})`;
+// The Sanggunian from Setup: the Kagawads and the SK Chairperson with names, as encoded.
+export function sanggunian(audit) {
+  return (audit.kagawads || []).filter((k) => String(k.name || '').trim()).map((k) => ({ name: String(k.name).trim(), pos: k.pos || 'Barangay Kagawad' }));
+}
+
 /* ── Building ── */
 function accountsOf(F) {
   const keys = new Set([...Object.keys(F.figY.accts || {}), ...Object.keys(F.figP.accts || {})]);
@@ -180,14 +190,22 @@ export function ppeSchedule(F, P = {}) {
  * The whole Part 07. N: the typed details { loc, hall, issued, km: { pb: { cy, py }, … }, inv: { rec, wd }, ppe: { land: { pa, … } } }.
  * Returns { blocks (portrait), ppe (landscape schedule or null), checks, ctx }.
  */
-export function buildNotes(F, N = {}, { lgu, mun }) {
+export function buildNotes(F, N = {}, { lgu, mun, audit }) {
   const y = F.y, yp = F.yp, name = `Barangay ${lgu.name}`;
   const { list, by, num } = presentNotes(F);
   const blocks = [];
-  blocks.push({ k: 'title', t: 'Notes to the Financial Statements' });
+  blocks.push({ k: 'head', lines: [`${name}, ${mun.name}, Quirino`, 'Notes to Financial Statements'], sub: `For the Year Ended December 31, ${y}` });
   blocks.push({ k: 'h', t: '1. General Information' });
-  const issued = String(N.issued || '').trim(), loc = String(N.loc || '').trim(), hall = String(N.hall || '').trim() || `${name}, ${mun.name}, Quirino`;
-  blocks.push({ k: 'p', t: `The financial statements of ${name} ${issued ? `were issued on ${issued}` : 'were issued'}. ${name} is located ${loc ? `in ${loc}` : `in ${mun.name}, Quirino`}, and the barangay hall is located in ${hall}. The barangay exercises the functions and responsibilities necessary for the efficient and effective provision of the following basic services: ${N1_SERVICES}.` });
+  // Balligui form: where the barangay is, its services, its workforce, the Punong Barangay and the Sanggunian (from Setup).
+  // From Audit Setup (step 4), with what was typed in Part 07 before as the fallback.
+  const NI = { ...N, ...Object.fromEntries(Object.entries((audit && audit.notesInfo) || {}).filter(([, v]) => v !== undefined && v !== null && String(v).trim() !== '')) };
+  const iss = String(NI.issued || '').trim(), issued = /^\d{4}-\d{2}-\d{2}$/.test(iss) ? longDate(iss) : iss, loc = String(NI.loc || '').trim();
+  const wf = String(NI.workforce ?? '').trim() || N1_WORKFORCE;
+  const pb = punongBarangay(audit || {}), pbName = [pb.title, pb.name].filter(Boolean).join(' ').trim();
+  const sg = sanggunian(audit || {});
+  const elective = 1 + sg.filter((k) => /kagawad/i.test(k.pos)).length;
+  blocks.push({ k: 'p', t: `The financial statements of ${name} were issued${issued ? ` on ${issued}` : ''}. ${lgu.name} is located ${loc ? `in ${loc}` : `in ${mun.name}, Quirino`}. The Barangay exercises the following functions and responsibilities for the efficient and effective delivery of basic services such as: ${N1_SERVICES}. The total workforce of the Barangay consists of ${inWords(elective)} elective officials, ${wf}. It is headed by ${pbName || 'the Punong Barangay'}${sg.length ? ' and the Barangay Sanggunian are as follows:' : '.'}`, keep: !!sg.length });
+  if (sg.length) blocks.push({ k: 'list', rows: sg.map((k, i) => ({ n: i + 1, t: k.name, pos: k.pos })) });
   blocks.push({ k: 'h', t: '2.1 Statement of compliance and basis of preparation' });
   N21.forEach((x) => blocks.push({ k: 'p', t: x }));
   blocks.push({ k: 'h', t: '2.2 Summary of Significant Accounting Policies' });
@@ -201,19 +219,19 @@ export function buildNotes(F, N = {}, { lgu, mun }) {
   list.forEach((n) => {
     const no = num[n.id], xs = by[n.id];
     if (n.ppe) {
-      blocks.push({ k: 'h2', t: `${no})  ${n.title}`, keep: true });
-      blocks.push({ k: 'p', t: `The details of Property, Plant and Equipment are shown in the schedule of movements at the end of these notes.`, ppeRef: true });
+      blocks.push({ k: 'h3', t: `${no})  ${n.title}`, keep: true });
+      blocks.push({ k: 'p', t: `The details of Property, Plant and Equipment are shown in the schedule of movements at the end of these notes.`, });
       ppe = { no, title: n.title, cols: ppeSchedule(F, N.ppe || {}), y, yp, total: [sum(acctRows(xs), 0), sum(acctRows(xs), 1)] };
       return;
     }
-    blocks.push({ k: 'h2', t: `${no})  ${n.title}`, keep: true });
+    blocks.push({ k: 'h3', t: `${no})  ${n.title}`, keep: true });
     if (n.text) blocks.push({ k: 'p', t: n.text(), keep: true });
     if (n.km) {
       blocks.push({ k: 'pc', t: 'a. Employees', keep: true });
       blocks.push({ k: 'pc', t: 'This includes the cost of personal services for employees of the barangay', keep: true });
       blocks.push(tbl(acctRows(xs), true));
       blocks.push({ k: 'pi2', t: 'b. Remuneration of key management personnel', keep: true });
-      blocks.push({ k: 'p', t: "This represents the honoraria, year-end bonus, cash gift, Other Bonuses and Allowances and Terminal Leave Benefits of the agency's key management personnel." });
+      blocks.push({ k: 'p', t: "This represents the honoraria, year-end bonus, cash gift, Other Bonuses and Allowances and Terminal Leave Benefits of the agency's key management personnel.", keep: true });
       const km = N.km || {};
       blocks.push(tbl(KM.map(([k, label]) => ({ t: label, v: [amtOf((km[k] || {}).cy), amtOf((km[k] || {}).py)] })), true));
       return;
@@ -229,8 +247,10 @@ export function buildNotes(F, N = {}, { lgu, mun }) {
   const checks = [];
   if (!F.figY.any) checks.push({ st: 'wait', t: 'Runs once the trial balances are entered and confirmed' });
   else {
-    checks.push(issued ? { st: 'ok', t: `Note 1: date issued (${issued})` } : { st: 'warn', t: 'Note 1: type the date the financial statements were issued' });
-    checks.push(loc ? { st: 'ok', t: 'Note 1: location of the barangay' } : { st: 'warn', t: 'Note 1: type where the barangay is located' });
+    checks.push(issued ? { st: 'ok', t: `Note 1: date issued (${issued})` } : { st: 'warn', t: 'Note 1: date the financial statements were issued, not yet in Setup' });
+    checks.push(loc ? { st: 'ok', t: 'Note 1: location of the barangay' } : { st: 'warn', t: 'Note 1: location of the barangay, not yet in Setup' });
+    checks.push(pbName && pb.name ? { st: 'ok', t: `Note 1: headed by ${pbName} (from Setup)` } : { st: 'warn', t: 'Note 1: no Punong Barangay in Setup' });
+    checks.push(sg.length ? { st: 'ok', t: `Note 1: ${sg.length} members of the Sanggunian (from Setup)` } : { st: 'warn', t: 'Note 1: no Kagawads in Setup' });
     if (by.ps.length) {
       const km = N.km || {}, filled = KM.filter(([k]) => amtOf((km[k] || {}).cy) !== null).length;
       checks.push(filled === KM.length ? { st: 'ok', t: `Note ${num.ps} b: remuneration of key management personnel` } : { st: 'warn', t: `Note ${num.ps} b: remuneration of key management personnel, ${KM.length - filled} of ${KM.length} not yet typed for CY ${y}` });
@@ -251,36 +271,42 @@ export function buildNotes(F, N = {}, { lgu, mun }) {
 
 /* ── Pages ── */
 export const NOTES_CSS = `${FS_CSS}
-.nts{font-family:Arial,Helvetica,sans-serif;font-size:10pt;line-height:1.3;color:#000}
-.nts .title{font-weight:700;margin:0 0 10pt}
+.nts{font-family:'Times New Roman',Tinos,Times,serif;font-size:11pt;line-height:1.3;color:#000}
+.nts .head{text-align:center;margin:0 0 .25in}.nts .head b{display:block}
 .nts .h{font-weight:700;margin:10pt 0 6pt}
-.nts .h2{margin:8pt 0 4pt}
+.nts .h2{margin:8pt 0 3pt}
+.nts .h3{font-weight:700;margin:10pt 0 4pt}
 .nts p{margin:0 0 6pt;text-align:justify}
 .nts p.tight{margin-top:0}
 .nts .pi{font-style:italic;margin:4pt 0 0}
-.nts .pc{text-align:center;margin:2pt 0 4pt}
-.nts .pi2{margin:6pt 0 4pt;padding-left:.3in}
-.nts table{width:100%;border-collapse:collapse;margin:2pt 0 8pt;table-layout:fixed}
-.nts td,.nts th{border:1px solid #000;padding:1pt 4pt;font-weight:400}
-.nts th{text-align:center}
-.nts td.a{text-align:right;white-space:nowrap}
-.nts tr.tot td{font-weight:700}
+.nts .pc{margin:2pt 0 4pt}
+.nts .pi2{margin:8pt 0 4pt}
+.nts table.amt{width:100%;border-collapse:collapse;margin:2pt 0 10pt;table-layout:fixed}
+.nts table.amt td{padding:1pt 0;vertical-align:bottom}
+.nts table.amt td.t{padding-left:.25in}
+.nts table.amt td.py{width:.18in}.nts table.amt td.a{width:1.2in;text-align:right;white-space:nowrap}.nts table.amt td.gp{width:.2in}
+.nts table.amt tr.yr td{font-weight:700;padding-bottom:4pt}.nts table.amt tr.yr td.t{padding-left:0}
+.nts table.amt tr.tot td{font-weight:700}.nts table.amt tr.tot td.t{padding-left:0}
+.nts table.amt tr.tot td.a{border-top:1px solid #000;border-bottom:3px double #000}
+.nts table.lst{width:auto;margin:0 0 8pt .3in;border-collapse:collapse}.nts table.lst td{padding:0 12pt 0 0}
 .fsp.land{width:11in;height:8.5in;padding:.75in .7in .8in}
-.ppe{font-family:Arial,Helvetica,sans-serif;font-size:8pt;line-height:1.2;color:#000}
-.ppe .h2{font-size:10pt;margin:0 0 8pt}
+.ppe{font-family:'Times New Roman',Tinos,Times,serif;font-size:8.5pt;line-height:1.2;color:#000}
+.ppe .h3{font-size:11pt;font-weight:700;margin:0 0 8pt}
 .ppe table{width:100%;border-collapse:collapse;table-layout:fixed}
-.ppe td,.ppe th{border:1px solid #000;padding:1pt 3pt;font-weight:400;vertical-align:bottom}
-.ppe th{text-align:left}
+.ppe td,.ppe th{border:1px solid #000;padding:1.5pt 3pt;font-weight:400;vertical-align:bottom}
+.ppe th{text-align:center;font-weight:700}
 .ppe td.a{text-align:right;white-space:nowrap}
 .ppe tr.b td{font-weight:700}
 .paper-wrap .sheet.fsheet.land{width:11in;height:8.5in}
 `;
 // Lines a block takes, to lay out pages (about 48 lines a page).
-const CAP = 48, W = 92;
+const CAP = 43, W = 92;
 const lines = (b) => {
-  if (b.k === 'table') return 1.4 + b.rows.reduce((s, r) => s + Math.max(1, Math.ceil(r.t.length / 52)) * 1.25, 0);
+  if (b.k === 'list') return b.rows.length + 0.5;
+  if (b.k === 'head') return 4.5;
+  if (b.k === 'table') return 1.6 + b.rows.reduce((s, r) => s + Math.max(1, Math.ceil(r.t.length / 52)) * 1.1, 0);
   const n = Math.max(1, Math.ceil(String(b.t).length / W));
-  return n + (b.k === 'h' ? 1.6 : b.k === 'title' ? 1.6 : b.k === 'h2' ? 1 : 0.5);
+  return n + (b.k === 'h' || b.k === 'h3' ? 1.2 : b.k === 'h2' ? 0.8 : 0.5);
 };
 // Splits the blocks into pages; a heading stays with what follows; a long table is split by rows.
 export function notesPages(blocks) {
@@ -291,8 +317,8 @@ export function notesPages(blocks) {
     if (b.k === 'table') {
       let rows = b.rows;
       while (rows.length) {
-        const room = Math.floor((CAP - used - 1.4) / 1.25);
-        if (room < 3 && cur.length) { flush(); continue; }
+        const room = Math.floor((CAP - used - 1.6) / 1.1);
+        if ((room < Math.min(3, rows.length) || (b.rows.length <= 8 && rows === b.rows && room < rows.length)) && cur.length) { flush(); continue; }
         let n = Math.max(room, 3);
         if (rows.length > n && rows.length - n < 2) n = rows.length - 2;   // never leave only one or two rows (or just the Total) for the next page
         const take = rows.slice(0, n);
@@ -307,7 +333,7 @@ export function notesPages(blocks) {
     let need = 0, j = i;
     while (blocks[j]) {
       const x = blocks[j];
-      need += x.k === 'table' ? 1.4 + Math.min(x.rows.length, 3) * 1.25 : lines(x);
+      need += x.k === 'table' ? 1.6 + (x.rows.length <= 8 ? x.rows.length : 3) * 1.1 : lines(x);
       if (!x.keep || x.k === 'table') break;
       j++;
     }
@@ -317,15 +343,25 @@ export function notesPages(blocks) {
   flush();
   return pages.length ? pages : [[]];
 }
-const blockHTML = (b, ppePage) => {
-  const tx = escH(b.ppeRef ? b.t.replace('[PPE_PAGE]', ppePage || '') : b.t);
-  if (b.k === 'title') return `<div class="title">${tx}</div>`;
+// Amounts like the statements (Balligui form): ₱ on the first amount and on the total; the total ruled above and double-ruled below.
+const amtRow = (r, i) => {
+  const peso = (i === 0 || r.tot) ? '₱' : '';
+  const cell = (v) => `<td class="py">${v === null || v === undefined ? '' : peso}</td><td class="a">${v === null || v === undefined ? '' : money(v, { dash: '-' })}</td>`;
+  return `<tr class="${r.tot ? 'tot' : ''}"><td class="t">${escH(r.t)}</td>${cell(r.v[0])}<td class="gp"></td>${cell(r.v[1])}</tr>`;
+};
+const blockHTML = (b) => {
+  const tx = escH(b.t);
+  if (b.k === 'head') return `<div class="head">${b.lines.map((x) => `<b>${escH(x)}</b>`).join('')}${escH(b.sub)}</div>`;
   if (b.k === 'h') return `<div class="h">${tx}</div>`;
   if (b.k === 'h2') return `<div class="h2">${tx}</div>`;
+  if (b.k === 'h3') return `<div class="h3">${tx}</div>`;
   if (b.k === 'pi') return `<div class="pi">${tx}</div>`;
   if (b.k === 'pc') return `<div class="pc">${tx}</div>`;
   if (b.k === 'pi2') return `<div class="pi2">${tx}</div>`;
-  if (b.k === 'table') return `<table><colgroup><col><col style="width:1.45in"><col style="width:1.45in"></colgroup><thead><tr><th></th><th>${b.cols[0]}</th><th>${b.cols[1]}</th></tr></thead><tbody>${b.rows.map((r) => `<tr class="${r.tot ? 'tot' : ''}"><td>${escH(r.t)}</td><td class="a">${r.v[0] === null ? '' : money(r.v[0], { dash: '-' })}</td><td class="a">${r.v[1] === null ? '' : money(r.v[1], { dash: '-' })}</td></tr>`).join('')}</tbody></table>`;
+  if (b.k === 'list') return `<table class="lst"><tbody>${b.rows.map((r) => `<tr><td>${r.n}.</td><td>${escH(r.t)}</td><td>${escH(r.pos)}</td></tr>`).join('')}</tbody></table>`;
+  if (b.k === 'table') return `<table class="amt"><colgroup><col><col style="width:.18in"><col style="width:1.2in"><col style="width:.2in"><col style="width:.18in"><col style="width:1.2in"></colgroup><tbody>
+    <tr class="yr"><td class="t">${b.cont ? '' : 'Account'}</td><td class="py"></td><td class="a">${b.cols[0]}</td><td class="gp"></td><td class="py"></td><td class="a">${b.cols[1]}</td></tr>
+    ${b.rows.map((r, i) => amtRow(r, b.cont ? -1 : i)).join('')}</tbody></table>`;
   return `<p class="${b.tight ? 'tight' : ''}">${tx}</p>`;
 };
 const date = (m, d, yr) => `${m}/${d}/${String(yr).slice(-2)}`;
@@ -353,13 +389,13 @@ function ppeHTML(p, page) {
   const head = `<tr><th>Cost</th>${p.cols.map((c) => `<th>${escH(c.label)}</th>`).join('')}<th>Total</th></tr>`;
   const body = ppeRows(p).slice(1).map((r) => r.head ? `<tr class="b"><td colspan="${p.cols.length + 2}">${escH(r.t)}</td></tr>`
     : `<tr class="${r.b ? 'b' : ''}"><td>${escH(r.t)}</td>${r.v.map((v) => `<td class="a">${v ? money(v, { dash: '' }) : ''}</td>`).join('')}</tr>`).join('');
-  return `<div class="fsp land"><div class="ppe"><div class="h2">${p.no})  ${escH(p.title)}</div><table><colgroup><col style="width:1.25in"></colgroup><thead>${head}</thead><tbody>${body}</tbody></table></div>${page ? `<div class="pno" style="left:.7in;right:.7in">${page}</div>` : ''}</div>`;
+  return `<div class="fsp land"><div class="ppe"><div class="h3">${p.no})  ${escH(p.title)}</div><table><colgroup><col style="width:1.25in"></colgroup><thead>${head}</thead><tbody>${body}</tbody></table></div>${page ? `<div class="pno" style="left:.7in;right:.7in">${page}</div>` : ''}</div>`;
 }
 // All of Part 07 as pages: { html: [page…], count, ppePage }.
 export function notesPagesHTML(doc, start) {
   const pages = notesPages(doc.blocks);
   const ppePage = doc.ppe && start ? start + pages.length : '';
-  const out = pages.map((p, i) => `<div class="fsp"><div class="nts">${p.map((b) => blockHTML(b, ppePage)).join('')}</div>${start ? `<div class="pno">${start + i}</div>` : ''}</div>`);
+  const out = pages.map((p, i) => `<div class="fsp"><div class="nts">${p.map((b) => blockHTML(b)).join('')}</div>${start ? `<div class="pno">${start + i}</div>` : ''}</div>`);
   if (doc.ppe) out.push(ppeHTML(doc.ppe, ppePage));
   return { html: out, count: out.length, land: doc.ppe ? out.length - 1 : -1 };
 }
@@ -374,7 +410,10 @@ export function notesPrint(doc, start) {
 export async function notesSections(doc, start) {
   const D = await loadScript('lib/docx.min.js', 'docx');
   const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, Footer, PageNumber, PageOrientation } = D;
-  const A = (tx, o = {}) => new TextRun({ text: tx, font: 'Arial', size: o.size || 20, bold: !!o.b, italics: !!o.i });
+  const A = (tx, o = {}) => new TextRun({ text: tx, font: 'Times New Roman', size: o.size || 22, bold: !!o.b, italics: !!o.i });
+  const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+  const nob = { top: NONE, bottom: NONE, left: NONE, right: NONE };
+  const dbl = { style: BorderStyle.DOUBLE, size: 6, color: '000000' };
   const line = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
   const all = { top: line, bottom: line, left: line, right: line };
   const footer = () => new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: 'Times New Roman', size: 22 })] })] });
@@ -383,18 +422,43 @@ export async function notesSections(doc, start) {
   const cell = (tx, w, o = {}) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: all, margins: { left: 60, right: 60 }, columnSpan: o.span,
     children: [new Paragraph({ alignment: o.al || AlignmentType.LEFT, children: [A(tx, { b: o.b, size: o.size })] })] });
   const kids = [];
+  const pc = (kids, w, o = {}) => new TableCell({ width: { size: w, type: WidthType.DXA }, borders: { ...nob, ...(o.bd || {}) }, margins: { top: 10, bottom: 10, left: 0, right: 0 },
+    children: [new Paragraph({ keepNext: !!o.keep, alignment: o.al || AlignmentType.LEFT, indent: o.ind ? { left: o.ind } : undefined, children: kids })] });
   doc.blocks.forEach((b) => {
-    const tx = b.ppeRef ? b.t.replace('[PPE_PAGE]', ppePage || '') : b.t;
-    if (b.k === 'table') {
-      const Wd = [5400, 1800, 1800];
-      const rows = [new TableRow({ tableHeader: true, children: [cell('', Wd[0]), cell(String(b.cols[0]), Wd[1], { al: AlignmentType.CENTER }), cell(String(b.cols[1]), Wd[2], { al: AlignmentType.CENTER })] }),
-        ...b.rows.map((r) => new TableRow({ cantSplit: true, children: [cell(r.t, Wd[0], { b: r.tot }), ...r.v.map((v, i) => cell(v === null ? '' : money(v, { dash: '-' }), Wd[i + 1], { al: AlignmentType.RIGHT, b: r.tot }))] }))];
-      kids.push(new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: Wd, rows }), new Paragraph({ spacing: { after: 120 }, children: [] }));
+    const tx = b.t;
+    if (b.k === 'head') {
+      b.lines.forEach((x) => kids.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [A(x, { b: true })] })));
+      kids.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 300 }, children: [A(b.sub)] }));
       return;
     }
-    const sp = { title: { after: 200 }, h: { before: 200, after: 120 }, h2: { before: 160, after: 80 } }[b.k] || { after: 120 };
-    kids.push(new Paragraph({ keepNext: !!b.keep, spacing: sp, alignment: b.k === 'pc' ? AlignmentType.CENTER : b.k === 'p' ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
-      indent: b.k === 'pi2' ? { left: 432 } : undefined, children: [A(tx, { b: b.k === 'title' || b.k === 'h', i: b.k === 'pi' })] }));
+    if (b.k === 'list') {
+      const Wd = [500, 4200, 3600];
+      const c = (t2, w) => pc([A(t2)], w);
+      kids.push(new Table({ width: { size: 8300, type: WidthType.DXA }, columnWidths: Wd, indent: { size: 432, type: WidthType.DXA }, borders: { ...nob, insideHorizontal: NONE, insideVertical: NONE },
+        rows: b.rows.map((r) => new TableRow({ cantSplit: true, children: [c(`${r.n}.`, Wd[0]), c(r.t, Wd[1]), c(r.pos, Wd[2])] })) }), new Paragraph({ spacing: { after: 120 }, children: [] }));
+      return;
+    }
+    if (b.k === 'table') {
+      const Wd = [4800, 260, 1730, 280, 260, 1670];   // 9,000 = 6.25"
+      const K = { keep: true };   // a table stays on one page in Word (each row kept with the next)
+      const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: [pc([A('Account', { b: true })], Wd[0], K), pc([], Wd[1], K), pc([A(String(b.cols[0]), { b: true })], Wd[2], { al: AlignmentType.RIGHT, ...K }), pc([], Wd[3], K), pc([], Wd[4], K), pc([A(String(b.cols[1]), { b: true })], Wd[5], { al: AlignmentType.RIGHT, ...K })] })];
+      b.rows.forEach((r, i) => {
+        const peso = i === 0 || r.tot, bd = r.tot ? { top: line, bottom: dbl } : {}, kp = i < b.rows.length - 1 && b.rows.length <= 20;
+        const cells = [pc([A(r.t, { b: r.tot })], Wd[0], { ind: r.tot ? 0 : 360, keep: kp })];
+        r.v.forEach((v, j) => {
+          const has = v !== null && v !== undefined;
+          cells.push(pc([A(has && peso ? '₱' : '', { b: r.tot })], Wd[1 + j * 3], { keep: kp }));
+          cells.push(pc([A(has ? money(v, { dash: '-' }) : '', { b: r.tot })], Wd[2 + j * 3], { al: AlignmentType.RIGHT, bd: has ? bd : {}, keep: kp }));
+          if (j === 0) cells.push(pc([], Wd[3], { keep: kp }));
+        });
+        rows.push(new TableRow({ cantSplit: true, children: cells }));
+      });
+      kids.push(new Table({ width: { size: 9000, type: WidthType.DXA }, columnWidths: Wd, borders: { ...nob, insideHorizontal: NONE, insideVertical: NONE }, rows }), new Paragraph({ spacing: { after: 160 }, children: [] }));
+      return;
+    }
+    const sp = { h: { before: 200, after: 120 }, h2: { before: 160, after: 60 }, h3: { before: 200, after: 80 } }[b.k] || { after: 120 };
+    kids.push(new Paragraph({ keepNext: !!b.keep, spacing: sp, alignment: b.k === 'p' ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
+      children: [A(tx, { b: b.k === 'h' || b.k === 'h3', i: b.k === 'pi' })] }));
   });
   const out = [{ properties: { page: { size: { width: 12240, height: 15840 }, margin: { top: 1152, right: 1440, bottom: 1296, left: 1800, header: 0, footer: 720 }, pageNumbers: start ? { start } : undefined } },
     footers: start ? { default: footer() } : undefined, children: kids }];
@@ -402,13 +466,13 @@ export async function notesSections(doc, start) {
     const p = doc.ppe, n = p.cols.length;
     const first = 2000, rest = Math.floor((14400 - 1440 - first) / (n + 1));
     const Wd = [first, ...Array(n + 1).fill(rest)];
-    const c = (tx, w, o = {}) => cell(tx, w, { ...o, size: 16 });
+    const c = (tx, w, o = {}) => cell(tx, w, { ...o, size: 17 });
     const rows = [new TableRow({ tableHeader: true, children: [c('Cost', Wd[0]), ...p.cols.map((x, i) => c(x.label, Wd[i + 1])), c('Total', Wd[n + 1])] }),
       ...ppeRows(p).slice(1).map((r) => r.head ? new TableRow({ children: [c(r.t, Wd.reduce((s, w) => s + w, 0), { b: true, span: n + 2 })] })
         : new TableRow({ cantSplit: true, children: [c(r.t, Wd[0], { b: r.b }), ...r.v.map((v, i) => c(v ? money(v, { dash: '' }) : '', Wd[i + 1], { al: AlignmentType.RIGHT, b: r.b }))] }))];
     out.push({ properties: { page: { size: { width: 12240, height: 15840, orientation: PageOrientation.LANDSCAPE }, margin: { top: 1080, right: 720, bottom: 1080, left: 720, header: 0, footer: 576 } } },
       footers: start ? { default: footer() } : undefined,
-      children: [new Paragraph({ spacing: { after: 160 }, children: [A(`${p.no})  ${p.title}`)] }), new Table({ width: { size: Wd.reduce((s, w) => s + w, 0), type: WidthType.DXA }, columnWidths: Wd, rows })] });
+      children: [new Paragraph({ spacing: { after: 160 }, children: [A(`${p.no})  ${p.title}`, { b: true })] }), new Table({ width: { size: Wd.reduce((s, w) => s + w, 0), type: WidthType.DXA }, columnWidths: Wd, rows })] });
   }
   return out;
 }
