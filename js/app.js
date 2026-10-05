@@ -16,6 +16,7 @@ import { findings } from './views/findings.js';
 import { aoms } from './views/aoms.js';
 import { print } from './views/print.js';
 import { review, reviewList, reviewQueue } from './views/review.js';
+import { baarReview, baarFinal, baarQueue } from './views/baarreview.js';
 import { pool } from './views/library.js';
 import { drafts } from './views/drafts.js';
 import { exitconf } from './views/exitconf.js';
@@ -41,6 +42,8 @@ function route(hash) {
   if (p[0] === 'audits' && p[1] && p[2] === 'findings') return [findings, { id: p[1] }, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'aoms') return [aoms, { id: p[1] }, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'print') return [print, { id: p[1] }, q];
+  if (p[0] === 'baar-review' && p[1]) return [baarReview, { id: p[1] }, q];
+  if (p[0] === 'baar-final' && p[1]) return [baarFinal, { id: p[1] }, q];
   if (p[0] === 'review' && p[1]) return [review, { id: p[1] }, q];
   if (p[0] === 'review') return [reviewList, {}, q];
   if (p[0] === 'library') return [pool, {}, q];
@@ -80,7 +83,8 @@ async function navCounts(refs) {
   const all = await store.list('aoms');
   const mine = all.filter((a) => (a.data.memberId === refs.me.id) && [ST.DRAFT, ST.RETURNED].includes(a.data.status || ST.DRAFT));
   const q = await reviewQueue(refs);
-  return { drafts: mine.length, review: q.reduce((n, x) => n + x.list.length, 0) };
+  const bq = await baarQueue(refs).catch(() => []);
+  return { drafts: mine.length, review: q.reduce((n, x) => n + x.list.length, 0) + bq.length };
 }
 function clickGo(e) {
   const t = e.target.closest('[data-go]');

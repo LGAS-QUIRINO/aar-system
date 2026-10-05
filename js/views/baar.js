@@ -21,6 +21,7 @@ import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_C
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { annexLetter, excelSheets, cleanRows, annexPagesHTML, annexPrint, annexToc, annexFileName, annexSections, ANNEX_CSS } from '../baar-annex.js';
+import { reviewStrip, wireReviewStrip, partLocked } from './baarreview.js';
 import { P3_STATUS, readPart2, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -125,7 +126,7 @@ export async function baarList(refs, params, q) {
 }
 
 // Everything Part 01 needs: the saved BAAR record with the standard wording filled in where nothing is saved yet.
-async function loadTransmittal(ctx) {
+export async function loadTransmittal(ctx) {
   const { audit } = ctx;
   const rec = await store.get('letters', recId(ctx.rec.id));
   const stdRec = await store.get('letters', stdId(ctx.teamId));
@@ -219,9 +220,9 @@ function annexBox() {
 const annexPill = (list) => ((list || []).length ? pill('Ready to Print', 'ok') : pill('No Annexes', 'grey'));
 
 // The complete BAAR: every built part, in order, for one printout or one Word file.
-async function completeBAAR(ctx) {
+export async function completeBAAR(ctx, L0) {
   const { audit, lgu, mun, team, atl, sa } = ctx;
-  const L = await loadTransmittal(ctx);
+  const L = L0 || await loadTransmittal(ctx);
   const tr = buildTransmittal({ t: { ...L.B.tr, opinion: L.B.opinion }, audit, lgu, mun, team, atl, sa, gaa: gaaFor(L.gaa, audit.periodTo), pw: L.pw });
   const cv = buildCover({ audit, lgu, mun, pw: L.pw });
   const pages = baarPages(ctx, L);
@@ -233,9 +234,13 @@ async function completeBAAR(ctx) {
   const p2d = buildP2(ctx), p2pages = paginateP2(p2d.paras, p2Box());
   const p3d = buildP3(L.B.p3), p3pages = p3d.rows.length ? paginateP3(p3d, p3Box()) : [];
   const fileName = `${String(lgu.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_${String(mun.name).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_BAAR_${audit.auditYear}_Complete`;
+  // Each part's printout ({ css, html }), for the review screens.
+  const prints = () => ({ '01': transmittalPrint(tr), '02': coverPrint(cv), '03': tocPrint(toc), '04': iarPrint(ia, paginateIar(ia.items, measureBox())), '05': smrPrint(sm), '06': fsPrint(fd), '07': notesPrint(nd, pages.notes), '08': p2Print(p2pages, pages.p2),
+    ...(p3pages.length ? { '09': p3Print(p3d, p3pages, pages.p3) } : {}), ...((L.B.annexes || []).length ? { '10': annexPrint(L.B.annexes, annexCtx(ctx), annexBox()) } : {}) });
   return {
-    print() { const ps = [transmittalPrint(tr), coverPrint(cv), tocPrint(toc), iarPrint(ia, paginateIar(ia.items, measureBox())), smrPrint(sm), fsPrint(fd), notesPrint(nd, pages.notes), p2Print(p2pages, pages.p2), ...(p3pages.length ? [p3Print(p3d, p3pages, pages.p3)] : []), ...((L.B.annexes || []).length ? [annexPrint(L.B.annexes, annexCtx(ctx), annexBox())] : [])]; printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
-    async word() { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2)), ...(p3d.rows.length ? await p3Sections(p3d, pages.p3) : []), ...(await annexSections(L.B.annexes || [], annexCtx(ctx)))], fileName, 'BAAR'); }
+    prints, L,
+    print(title) { const ps = Object.values(prints()); printPages(ps.map((x) => x.css).join('\n'), ps.map((x) => x.html).join(''), title || `BAAR ${audit.auditYear} · ${lgu.name} · Complete`); },
+    async word(name) { await saveDocx([...(await transmittalSections(tr)), ...(await coverSections(cv)), ...(await tocSections(toc)), ...(await iarSections(ia)), ...(await smrSections(sm)), ...(await fsSections(fd)), ...(await notesSections(nd, pages.notes)), ...(await p2Sections(p2d, pages.p2)), ...(p3d.rows.length ? await p3Sections(p3d, pages.p3) : []), ...(await annexSections(L.B.annexes || [], annexCtx(ctx)))], name || fileName, 'BAAR'); }
   };
 }
 // The Independent Auditor's Report built from the saved BAAR record.
@@ -255,9 +260,18 @@ function baarHead(ctx) {
   const { audit, lgu, mun } = ctx;
   return `${stepsBar(ctx, 'BAAR')}
     <div class="page-head"><div><h1>BAAR · Barangay ${esc(lgu.name)}</h1><p>${esc(mun.name)}, Quirino · ${esc(periodPhrase(audit.periodFrom, audit.periodTo))}</p></div>
-      <div class="btn-row"><button class="btn" type="button" id="all-print">Print Complete BAAR</button><button class="btn primary" type="button" id="all-word">Complete BAAR · Word</button></div></div>`;
+      <div class="btn-row"><button class="btn" type="button" id="all-print">Print Complete BAAR</button><button class="btn primary" type="button" id="all-word">Complete BAAR · Word</button></div></div>
+    ${ctx.baarB ? reviewStrip(ctx, ctx.baarB) : ''}`;
 }
 function wireComplete(root, ctx, me) {
+  if (ctx.baarB) {
+    wireReviewStrip(root, ctx, me);
+    // A part under review or Final is read-only here: changes are made in the review.
+    if (ctx.curPart && partLocked(ctx.baarB, ctx.curPart)) {
+      $$('.xform input, .xform textarea, .xform select, .xform button, .p3cols .p3row textarea, .p3cols .p3row button, #p3-imp, #p3-add, #p3-save, #x-add, .savebar .btn.primary', root).forEach((el) => { el.disabled = true; });
+      $$('.p3act, .savebar .save-state', root).forEach((el) => { el.hidden = true; });
+    }
+  }
   const p = $('#all-print', root), w = $('#all-word', root);
   if (p) p.onclick = async () => { (await completeBAAR(ctx)).print(); await store.log('printed the complete BAAR', `${ctx.lgu.name} · ${ctx.audit.auditYear}`, ctx.teamId, me.email); };
   if (w) w.onclick = async () => {
@@ -272,9 +286,10 @@ export async function baar(refs, params, q) {
   if (!ctx) return { active: '#/baar', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
   const me = refs.me;
   const { audit, lgu, mun, team, atl, sa } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
-  const canStd = has(me, 'sa') || has(me, 'admin');
   const L = await loadTransmittal(ctx);
+  ctx.baarB = L.B; ctx.curPart = q.get('p') || '01';
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '01');
+  const canStd = has(me, 'sa') || has(me, 'admin');
   const { rec, standard, stdOp, exitL, B, T, isNew } = L;
   let { gaa, pw } = L;
   const gaaYear = Number(audit.periodTo);
@@ -289,6 +304,7 @@ export async function baar(refs, params, q) {
     '09': p3Pill(L.B.p3),
     '10': annexPill(L.B.annexes)
   };
+  ctx.st = st;
   if (q.get('p') === '02') return coverPart({ ctx, me, pw, st });
   if (q.get('p') === '03') return tocPart({ ctx, me, pw, st, L });
   if (q.get('p') === '04') return iarPart({ ctx, me, refs, L, st });
@@ -556,7 +572,7 @@ function tocPart({ ctx, me, pw, st, L }) {
 function iarPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const { B, I, iStandard, iStdOp } = L;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '04');
   const canStd = has(me, 'sa') || has(me, 'admin');
   const dis = canEdit ? '' : 'disabled';
   const list = basesList(ctx, I);
@@ -681,7 +697,7 @@ function iarPart({ ctx, me, refs, L, st }) {
 function smrPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const { S, sStandard } = L;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '05');
   const canStd = has(me, 'sa') || has(me, 'admin');
   const dis = canEdit ? '' : 'disabled';
   const sg = smrSigners(audit);
@@ -791,7 +807,7 @@ const OPEN07 = new Set();   // the boxes left open, kept while moving around the
 export function notesPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const F = L.FS;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '07');
   const dis = canEdit ? '' : 'disabled';
   const N = clone(L.B.notes || {});
   N.km = N.km || {}; N.inv = N.inv || {}; N.ppe = N.ppe || {};
@@ -940,7 +956,7 @@ async function previousBAAR(refs, ctx) {
 }
 export async function p3Part({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '09');
   const dis = canEdit ? '' : 'disabled';
   const saved = L.B.p3 && (L.B.p3.recs || []).length ? clone(L.B.p3) : null;
   let carried = null;
@@ -1092,7 +1108,7 @@ export async function p3Part({ ctx, me, refs, L, st }) {
 /* ── Part 10 · Part IV – Annexes ── */
 export function annexPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId);
+  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '10');
   const dis = canEdit ? '' : 'disabled';
   const A = clone(L.B.annexes || []);
   const uid = () => 'x' + Math.random().toString(36).slice(2, 10);

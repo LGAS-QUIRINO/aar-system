@@ -40,7 +40,7 @@ export function aomTrail(a, info) {
       const x = (A.blocks || []).find((b) => b.id === id), y = (B.blocks || []).find((b) => b.id === id);
       const px = x ? plainOf(x) : '', py = y ? plainOf(y) : '';
       if (px === py) return;
-      blocks.push({ label: BLOCK_LABELS[(y || x).type] || 'Block', segs: diffWords(px, py), who: (B.editedBy || {})[id] || B.by });
+      blocks.push({ label: (y || x).label || BLOCK_LABELS[(y || x).type] || 'Block', segs: diffWords(px, py), who: (B.editedBy || {})[id] || B.by });
     });
     const from = A.at || '', to = B.pending ? '9999' : (B.at || '9999');
     const comments = (d.comments || []).filter((c) => (c.at || '') > from && (c.at || '') <= to);
@@ -55,7 +55,9 @@ export function aomTrail(a, info) {
   const finalParas = [];
   if (d.title) finalParas.push({ t: fill(d.title), i: true });
   (d.blocks || []).forEach((b) => plainOf(b).split('\n').filter(Boolean).forEach((t) => finalParas.push({ t, b: b.type === 'topic' || b.type === 'recommendation' })));
-  return { no: info.no, title: fill(d.title), status: d.status || ST.DRAFT, history: d.history || [], rounds, finalParas, legacy, nameOf: info.nameOf };
+  // A BAAR part names itself (info.head); its final text is the wording that can be corrected (info.finalBlocks).
+  if (info.finalBlocks) { finalParas.length = 0; info.finalBlocks.forEach((b) => { if (b.label) finalParas.push({ t: b.label, b: true }); plainOf(b).split('\n').filter(Boolean).forEach((t) => finalParas.push({ t })); }); }
+  return { no: info.no, title: fill(d.title), head: info.head, finalHead: info.finalHead, status: d.status || ST.DRAFT, history: d.history || [], rounds, finalParas, legacy, nameOf: info.nameOf };
 }
 
 /* ── Printout ── */
@@ -76,7 +78,7 @@ sup.w{font:700 7.5pt Arial,sans-serif;border:1px solid #000;border-radius:2px;pa
 `;
 function aomHTML(t, first) {
   const ini = (e) => initials(t.nameOf(e) || e);
-  return `<h2 class="aomh ${first ? 'first' : ''}" style="margin-top:${first ? '14pt' : '0'}">AOM No. ${escH(t.no)} · ${escH(t.title)}</h2>
+  return `<h2 class="aomh ${first ? 'first' : ''}" style="margin-top:${first ? '14pt' : '0'}">${escH(t.head || `AOM No. ${t.no} · ${t.title}`)}</h2>
     <h3>History</h3><table><tr><th style="width:24%">Date and Time</th><th>Action</th><th style="width:30%">By</th></tr>
     ${t.history.map((h) => `<tr><td>${escH(stamp(h.at))}</td><td>${escH(h.action)}</td><td>${escH(t.nameOf(h.by))}${h.by ? ` (${escH(ini(h.by))})` : ''}</td></tr>`).join('')}</table>
     ${t.legacy ? '<p class="note" style="margin-top:6pt">This AOM was reviewed before the Review Trail was added, so only the corrections on record are shown, not each earlier round.</p>' : ''}
@@ -86,7 +88,7 @@ function aomHTML(t, first) {
         ${(c.replies || []).map((rp) => `<div class="r"><span class="b">Reply · ${escH(t.nameOf(rp.by))}</span> · ${escH(stamp(rp.at))}<br>${escH(rp.text)}</div>`).join('')}
         ${c.resolved ? `<div class="r i">Resolved by ${escH(t.nameOf(c.resolvedBy))}${c.resolvedAt ? ' · ' + escH(stamp(c.resolvedAt)) : ''}</div>` : ''}</div>`).join('')}` : ''}`).join('')
     : '<p class="note" style="margin-top:6pt">No review rounds yet.</p>'}
-    <h3>${t.status === ST.FINAL ? 'Final Text' : 'Current Text'} · AOM No. ${escH(t.no)}</h3>
+    ${t.finalParas.length ? `<h3>${t.status === ST.FINAL ? 'Final Text' : 'Current Text'} · ${escH(t.finalHead || 'AOM No. ' + t.no)}</h3>` : ''}
     ${t.finalParas.map((p) => `<p class="${p.b ? 'b' : ''} ${p.i ? 'i' : ''}">${escH(p.t)}</p>`).join('')}`;
 }
 export function includedLine(chosen, total) {
@@ -102,7 +104,7 @@ export function printTrail(file) {
       @top-right{content:"REVIEW TRAIL – Not for Issuance";font:700 10pt 'Times New Roman';color:#777}
       @bottom-right{content:${foot};white-space:pre;font:10pt 'Times New Roman';text-align:right}}`;
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escH(file.title)}</title><style>${css}</style></head><body>
-    <h1>AOM REVIEW TRAIL</h1><p class="c">${escH(file.place)}</p><p class="inc">${escH(file.included)}</p>
+    <h1>${escH(file.heading || 'AOM REVIEW TRAIL')}</h1><p class="c">${escH(file.place)}</p><p class="inc">${escH(file.included)}</p>
     <p class="key" style="text-align:center">Key: <del>struck through</del> = removed · <ins>underlined</ins> = added · <sup class="w">GB</sup> = initials of the person who made the change.</p>
     ${file.trails.map((t, i) => aomHTML(t, i === 0)).join('')}</body></html>`;
   const f = document.createElement('iframe');
@@ -124,10 +126,10 @@ export async function trailWord(file) {
   const H = (t, o = {}) => P([T(t, { b: o.b !== false, size: o.size, i: o.i })], { al: o.al || AlignmentType.LEFT, after: o.after ?? 100, pb: o.pb });
   const cellP = (t, b) => new Paragraph({ children: [T(t, { size: 20, b })] });
   const W = [2300, 4560, 2500];
-  const children = [H('AOM REVIEW TRAIL', { al: AlignmentType.CENTER, size: 28 }), H(file.place, { al: AlignmentType.CENTER, b: false }), H(file.included, { al: AlignmentType.CENTER, b: false, after: 160 }),
+  const children = [H(file.heading || 'AOM REVIEW TRAIL', { al: AlignmentType.CENTER, size: 28 }), H(file.place, { al: AlignmentType.CENTER, b: false }), H(file.included, { al: AlignmentType.CENTER, b: false, after: 160 }),
     H('In Word, open the Review tab: All Markup shows every correction with the name of the person who made it.', { al: AlignmentType.CENTER, b: false, i: true, size: 20, after: 240 })];
   file.trails.forEach((t, ti) => {
-    children.push(H(`AOM No. ${t.no} · ${t.title}`, { pb: ti > 0, size: 25 }));
+    children.push(H(t.head || `AOM No. ${t.no} · ${t.title}`, { pb: ti > 0, size: 25 }));
     children.push(H('History', { after: 80 }));
     children.push(new Table({ width: { size: 9360, type: WidthType.DXA }, columnWidths: W,
       rows: [new TableRow({ tableHeader: true, children: ['Date and Time', 'Action', 'By'].map((h, i) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: [cellP(h, true)] })) }),
@@ -147,7 +149,7 @@ export async function trailWord(file) {
         if (c.resolved) children.push(P([T(`Resolved by ${t.nameOf(c.resolvedBy)}${c.resolvedAt ? ' · ' + stamp(c.resolvedAt) : ''}`, { i: true, size: 22 })], { after: 100 }));
       });
     });
-    children.push(H(`${t.status === ST.FINAL ? 'Final Text' : 'Current Text'} · AOM No. ${t.no}`, { after: 80 }));
+    if (t.finalParas.length) children.push(H(`${t.status === ST.FINAL ? 'Final Text' : 'Current Text'} · ${t.finalHead || 'AOM No. ' + t.no}`, { after: 80 }));
     t.finalParas.forEach((p) => children.push(P([T(p.t, { b: p.b, i: p.i })])));
   });
   const doc = new Document({ creator: 'Annual Audit Report System', title: file.title, features: { trackRevisions: true }, styles: { default: { document: { run: { font: FONT, size: 24 } } } },

@@ -43,7 +43,8 @@ export function reviewCounts(aom) {
 
 /**
  * Show the Review View inside host.
- * opts: { rec, vars, me, users, canAct, heading, navEl, onChange(data) }
+ * opts: { rec, vars, me, users, canAct, heading, navEl, onChange(data), load(), save(data), noun, readOnlyTitle }
+ * load/save: where the document lives (default: the AOM record); noun: what the reviewer selects words in (default 'AOM').
  * Returns { flush() } — flush() saves any comment or reply still being typed.
  */
 export function mountReview(host, opts) {
@@ -152,7 +153,7 @@ export function mountReview(host, opts) {
     const docParts = [];
     const tBefore = fill(data.submitted ? data.submitted.title : data.title), tAfter = fill(data.title);
     docParts.push(`<div class="aomno">${esc(opts.heading || '')}</div>`);
-    docParts.push(partHTML('_title', tBefore, tAfter, 'title', 'ttl', '', '', iniOf(data.editedBy?._title)));
+    if (!opts.readOnlyTitle) docParts.push(partHTML('_title', tBefore, tAfter, 'title', 'ttl', '', '', iniOf(data.editedBy?._title)));
     if (tBefore !== tAfter) correctionCard('_title', 'Finding Title', tBefore, tAfter);
     (byBlock._title || []).sort((a, b) => (found[a.id] ?? 1e9) - (found[b.id] ?? 1e9)).forEach(commentCard);
 
@@ -175,8 +176,8 @@ export function mountReview(host, opts) {
       let html = '';
       keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; html += partHTML(id, fill(partVal(old, p.k)), cur ? fill(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
       if (b.type === 'table') html += tableHTML(b, id);
-      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${html}</div>`);
-      const label = BLOCK_LABELS[b.type] || 'Block';
+      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${b.label ? `<div class="rv-flabel">${esc(b.label)}</div>` : ''}${html}</div>`);
+      const label = b.label || BLOCK_LABELS[b.type] || 'Block';
       if (base && (!old || !cur || blockPlain(old) !== blockPlain(cur))) correctionCard(id, label, fill(old ? blockPlain(old) : ''), fill(cur ? blockPlain(cur) : ''), !old ? 'added' : !cur ? 'removed' : '');
       (byBlock[id] || []).sort((a, c) => (found[a.id] ?? 1e9) - (found[c.id] ?? 1e9)).forEach(commentCard);
     });
@@ -190,7 +191,7 @@ export function mountReview(host, opts) {
       <div class="rv-doc" id="rv-doc">${docParts.join('')}
         ${opts.canAct ? '<button class="btn sm primary rv-float" id="rv-float" hidden>💬 Comment</button>' : ''}</div>
       <aside class="rv-margin" id="rv-margin"><h3>Comments and Corrections</h3>
-        ${opts.canAct ? '<div class="hint rv-tip">Select words in the AOM to comment on them.</div>' : ''}
+        ${opts.canAct ? `<div class="hint rv-tip">Select words in the ${esc(opts.noun || 'AOM')} to comment on them.</div>` : ''}
         ${newCard}${cards.join('') || '<div class="hint">No corrections or comments.</div>'}</aside></div>`;
     navUpdate();
     if (focus) applyFocus(false);
@@ -227,11 +228,11 @@ export function mountReview(host, opts) {
 
   // Save a change on the latest copy of the AOM (another person may have saved in between).
   async function act(mutate, action) {
-    const fresh = await store.get('aoms', rec.id);
+    const fresh = opts.load ? await opts.load() : await store.get('aoms', rec.id);
     const d = ensureIds(clone(fresh ? fresh.data : data));
     if (mutate(d) === false) return;
     if (action) d.history = [...(d.history || []), { at: new Date().toISOString(), by: me.email, action }];
-    await store.save('aoms', rec.id, d, { silent: true });
+    if (opts.save) await opts.save(d); else await store.save('aoms', rec.id, d, { silent: true });
     rec.data = d; data = ensureIds(clone(d));
     dirtyCheck();
     render();
@@ -259,7 +260,7 @@ export function mountReview(host, opts) {
     return true;
   }
 
-  const LABEL = (d, id) => (id === '_title' ? 'Finding Title' : BLOCK_LABELS[(d.blocks.find((b) => b.id === id) || (d.submitted?.blocks || []).find((b) => b.id === id) || {}).type] || 'block');
+  const LABEL = (d, id) => { if (id === '_title') return 'Finding Title'; const b = d.blocks.find((x) => x.id === id) || (d.submitted?.blocks || []).find((x) => x.id === id) || {}; return b.label || BLOCK_LABELS[b.type] || 'block'; };
 
   host.addEventListener('click', async (e) => {
     const nav = e.target.closest('[data-nav]');
