@@ -83,7 +83,10 @@ function focusData(F) {
   const accts = allAccounts(F);
   return FOCI.map(f => {
     const rows = accts.filter(x => isFocusAccount(x.a,f));
-    return { ...f, rows, cy:rows.reduce((s,x)=>s+x.cy,0), py:rows.reduce((s,x)=>s+x.py,0), status:rows.length?'Applicable':'Not Applicable' };
+    // Trust Liabilities – DRRM must be in the trial balance whenever the 5% BDRRMF has an unutilized balance at year-end.
+    const b = f.id === 't' && F.figY && F.figY.bdrrmf;
+    const must = !!(b && b.unutilized > 0 && !rows.length);
+    return { ...f, rows, cy:rows.reduce((s,x)=>s+x.cy,0), py:rows.reduce((s,x)=>s+x.py,0), status:rows.length||must?'Applicable':'Not Applicable', missing: must ? b.unutilized : 0 };
   });
 }
 
@@ -153,6 +156,7 @@ function detailTable(item,F,refs){
 }
 
 function leadPanel(cur, F, refs) {
+  if (cur.missing) return `<div class="note warn" style="display:block">Not in the trial balance. The unutilized 5% BDRRMF of ₱${money(cur.missing)} should be shown here as Trust Liabilities – DRRM. See Possible Findings on the Results tab.</div>`;
   if (!cur.rows || !cur.rows.length) return '<div class="empty" style="padding:14px 4px">No balance in the trial balance.</div>';
   const ch = (cur.cy||0) - (cur.py||0), pct = cur.py ? (ch / Math.abs(cur.py) * 100) : null;
   return `<div class="ls-figs">
@@ -207,7 +211,7 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         ${list.map((x,i)=>`<tr data-fa-row data-href="${rowLink(x)}" data-text="${esc(x.title.toLowerCase())}" class="${cur===x?'sel':''} ${x.status==='Not Applicable'?'na':''}">
           <td>${cat==='focus'?esc(x.id):i+1}</td>
           <td><a class="fa-link" href="${rowLink(x)}">${esc(x.title)}</a>${x.rows&&x.rows.length===1?`<small class="mono">${esc(x.rows[0].a.code)}</small>`:x.rows&&x.rows.length>1?`<small>${x.rows.length} accounts</small>`:''}</td>
-          ${cat==='c6'?`<td>${appPill(x.status)}</td>`:`<td class="n">${x.rows&&x.rows.length?money(x.cy||0,{dash:'0.00'}):'<span class="hint">—</span>'}</td><td>${wpCol(x)}</td>`}
+          ${cat==='c6'?`<td>${appPill(x.status)}</td>`:`<td class="n">${x.rows&&x.rows.length?money(x.cy||0,{dash:'0.00'}):x.missing?'<span class="fa-missing">Not in the TB</span>':'<span class="hint">—</span>'}</td><td>${wpCol(x)}</td>`}
           <td>${resultPill(auditResultOf(x,cat,F,ctx))}</td></tr>`).join('')}
         ${!list.length?`<tr><td colspan="5"><div class="empty">No items to show.</div></td></tr>`:''}
       </tbody></table></div>

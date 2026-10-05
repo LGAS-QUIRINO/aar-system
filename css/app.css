@@ -618,6 +618,7 @@ body.has-pdfside .main{margin-right:44vw}
 .fa-table tr:hover .fa-link,.fa-table tr.sel .fa-link{color:var(--primary);text-decoration:underline}
 .fa-table tr.na .fa-link{color:var(--muted);font-weight:500}
 .fa-table td.n{font-variant-numeric:tabular-nums}
+.fa-missing{color:var(--bad-ink);font-weight:600;font-size:13px}
 .fa-wpref{font-size:13px;color:var(--primary);font-weight:600}
 .fa-more{display:inline-block;margin-top:10px;font-size:13px}
 .fa-wp{position:sticky;top:76px}

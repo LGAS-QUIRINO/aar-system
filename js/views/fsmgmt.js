@@ -108,7 +108,9 @@ export async function mgmtPanel({ F, ctx, me, q, base, canEdit: can0 }) {
         <td class="n">${x.diff === null ? '' : x.diff ? `<b style="color:var(--warn-ink)">${money(x.diff)}</b>` : '-'}</td></tr>`).join('')}
       ${c.extra.map((x) => `<tr><td>${esc(x.label)}<div class="hint">Not in the template</div></td><td class="n">${money(cents(x.amt), { dash: '-' })}</td><td></td><td></td></tr>`).join('')}</tbody></table>`;
   }
-  const body = `<section class="panel" data-transient><div class="panel-head"><h2>Management's Statements vs. the Trial Balance</h2>
+  const body = !m ? `<section class="panel" data-transient><div class="panel-head"><h2>Management's Statements</h2><span class="hint" style="margin-left:8px">not imported</span>
+      <span class="btn-row" style="margin-left:auto">${canEdit ? `<label class="btn sm ghost" for="m-file" title="Excel file; each statement needs its title, for example &quot;Statement of Financial Position&quot;, and the amounts beside the lines">Import</label><input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div></section>`
+    : `<section class="panel" data-transient><div class="panel-head"><h2>Management's Statements vs. the Trial Balance</h2>
       <span class="btn-row" style="margin-left:auto">${canEdit ? `<label class="btn sm ${m ? 'ghost' : 'primary'}" for="m-file">${m ? 'Replace' : 'Import Management\'s Statements'}</label>${m ? '<button class="btn sm ghost" type="button" id="m-rm">Remove</button>' : ''}<input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div><div class="panel-body">
     ${m ? `<div class="hint" style="margin-bottom:6px">📄 ${esc(m.name)} · read ${esc((m.at || '').slice(0, 10))}; only the amounts are kept.</div>
       <div class="tabs2">${st.map((s) => `<a class="t ${s === cur ? 'on' : ''}" href="${base}&s=fs&ms=${s.k}">${esc(s.t)} ${pillOf(s)}</a>`).join('')}</div>
