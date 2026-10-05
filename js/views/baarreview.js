@@ -10,7 +10,7 @@ import { loadAudit, stepsBar, advanceStage } from '../auditctx.js';
 import { ST, statusPill, clone, ensureIds, snapshot } from '../aom.js';
 import { mountReview, when } from '../reviewpane.js';
 import { aomTrail, printTrail, trailWord } from '../reviewtrail.js';
-import { nice, timeAgo, periodPhrase, longDate } from '../format.js';
+import { nice, timeAgo, periodPhrase } from '../format.js';
 import { TR_KEYS } from '../baar-transmittal.js';
 import { IAR_KEYS } from '../baar-iar.js';
 import { KM, PPE_CLS } from '../baar-notes.js';
@@ -101,9 +101,45 @@ function itemDoc(B, item, audit, viewBlocks = []) {
 }
 
 /* ── Saving ── */
-// The latest BAAR record, with the standard wording filled in where nothing is saved yet (as the part screens show it).
-async function freshB(ctx) { return clone((await loadTransmittal(ctx)).B); }
-async function saveB(ctx, B) { await store.save('letters', recId(ctx.rec.id), B, { silent: true }); }
+// A sheet cell holds at most 50,000 characters, so each part's review (its rounds, comments and corrections) is kept in a
+// record of its own; the BAAR record keeps only each part's status.
+const HEAVY = ['submitted', 'versions', 'comments', 'editedBy', 'history'];
+const hid = (ctx, key) => `baarrv-${ctx.rec.id}-${String(key).replace(/[^A-Za-z0-9]+/g, '-')}`;
+const lastHeavy = {};
+// Each round keeps only the boxes that changed since the round before (the rest are read back from it).
+const packV = (vs) => { const prev = {}; return (vs || []).map((v) => ({ ...v, blocks: (v.blocks || []).map((b) => { const same = prev[b.id] === b.text; prev[b.id] = b.text; return same ? { id: b.id, same: 1 } : b; }) })); };
+const unpackV = (vs) => { const prev = {}; return (vs || []).map((v) => ({ ...v, blocks: (v.blocks || []).map((b) => { const x = b.same ? { ...prev[b.id] } : b; prev[b.id] = x; return x; }) })); };   // what was last read or saved for each part, so unchanged parts are not saved again
+// The latest BAAR record, with the standard wording filled in where nothing is saved yet (as the part screens show it),
+// and each part's review read back in.
+async function freshB(ctx) {
+  const B = clone((await loadTransmittal(ctx)).B);
+  const items = (B.review && B.review.items) || {};
+  await Promise.all(Object.keys(items).map(async (k) => {
+    const r = await store.get('letters', hid(ctx, k));
+    const h = r && !r.deleted ? r.data.review || {} : {};
+    HEAVY.forEach((f) => { if (h[f] !== undefined) items[k][f] = f === 'versions' ? unpackV(h[f]) : h[f]; });
+    lastHeavy[hid(ctx, k)] = JSON.stringify(Object.fromEntries(HEAVY.map((f) => [f, items[k][f]])));
+  }));
+  return B;
+}
+// A BAAR saved before the reviews were kept apart: move them out so the record fits a sheet cell again.
+export async function slimReview(ctx, B) {
+  const items = (B && B.review && B.review.items) || {};
+  if (!Object.values(items).some((x) => HEAVY.some((f) => x[f] !== undefined))) return false;
+  await saveB(ctx, await freshB(ctx));
+  return true;
+}
+async function saveB(ctx, B0) {
+  const B = clone(B0);
+  const items = (B.review && B.review.items) || {};
+  for (const k of Object.keys(items)) {
+    const h = Object.fromEntries(HEAVY.map((f) => [f, f === 'versions' ? packV(items[k][f]) : items[k][f]]));
+    const json = JSON.stringify(Object.fromEntries(HEAVY.map((f) => [f, items[k][f]]))), id = hid(ctx, k);
+    if (lastHeavy[id] !== json) { await store.save('letters', id, { type: 'baar-review-part', auditId: ctx.rec.id, teamId: ctx.teamId, key: k, review: h }, { silent: true }); lastHeavy[id] = json; }
+    HEAVY.forEach((f) => { delete items[k][f]; });
+  }
+  await store.save('letters', recId(ctx.rec.id), B, { silent: true });
+}
 const putItem = (B, key, patch) => { B.review = B.review || { items: {}, history: [] }; B.review.items = B.review.items || {}; B.review.items[key] = { ...(B.review.items[key] || { status: ST.DRAFT }), ...patch }; };
 const logB = (B, by, action) => { B.review = B.review || { items: {}, history: [] }; B.review.history = [...(B.review.history || []), { at: new Date().toISOString(), by, action }]; };
 const fieldSnap = (item, B, audit) => (item.fields ? fieldsOf(item, B, audit) : []);
@@ -119,7 +155,7 @@ export function reviewStrip(ctx, B) {
   const S = reviewSummary(B);
   if (!S.total) return '';
   const id = ctx.rec.id;
-  if (S.allFinal) return `<div class="panel brv-strip ok"><span><b>✓ Final · Locked</b> · approved by the SA${B.review.finalAt ? ' on ' + esc(longDate(B.review.finalAt.slice(0, 10))) : ''}. Every part is locked.</span><a class="btn sm primary" href="#/baar-final/${id}">Open Final BAAR</a></div>`;
+  if (S.allFinal) return `<div class="panel brv-strip ok"><span><b>✓ Final · Locked</b> · approved by the SA${B.review.finalAt ? ' on ' + esc(new Date(B.review.finalAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })) : ''}. Every part is locked.</span><a class="btn sm primary" href="#/baar-final/${id}">Open Final BAAR</a></div>`;
   const parts = [];
   if (S.final) parts.push(`${S.final} approved by the SA`);
   if (S.sa) parts.push(`${S.sa} with the SA`);
@@ -206,6 +242,7 @@ export async function baarReview(refs, params, q) {
     await saveB(ctx, fresh);
     L = await loadTransmittal(ctx); B = L.B;
   }
+  B = await freshB(ctx);
   const mineNow = (i) => { const s = itemSt(B, i.key).status; return (s === ST.ATL && iAmATL) || (s === ST.SA && iAmSA); };
   let cur = items.find((i) => i.key === q.get('part')) || items.find(mineNow) || items.find((i) => itemSt(B, i.key).status === ST.RETURNED) || items[0];
   const idx = items.indexOf(cur);
@@ -384,7 +421,7 @@ export async function baarReview(refs, params, q) {
 
 /* ── Review Trail (printout or Word with Track Changes), every part ── */
 async function trailFile(ctx, refs, how) {
-  const L = await loadTransmittal(ctx), B = L.B;
+  const B = await freshB(ctx);
   const nameOf = (e) => (e ? nice(refs.users.find((u) => u.data.email === e)?.data.name || e) : '');
   const vars = {};   // the wording as typed, with its [PLACEHOLDERS], the same as in Correct Text
   const trails = reviewItems(B).map((i) => aomTrail({ data: itemDoc(B, i, ctx.audit, []) }, { no: i.short, head: i.name, finalHead: i.name, vars, nameOf, finalBlocks: i.fields ? fieldsOf(i, B, ctx.audit) : [] }));

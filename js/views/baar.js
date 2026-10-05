@@ -21,7 +21,7 @@ import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_C
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { annexLetter, excelSheets, cleanRows, annexPagesHTML, annexPrint, annexToc, annexFileName, annexSections, ANNEX_CSS } from '../baar-annex.js';
-import { reviewStrip, wireReviewStrip, partLocked } from './baarreview.js';
+import { reviewStrip, wireReviewStrip, partLocked, slimReview } from './baarreview.js';
 import { P3_STATUS, readPart2, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
@@ -286,7 +286,8 @@ export async function baar(refs, params, q) {
   if (!ctx) return { active: '#/baar', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
   const me = refs.me;
   const { audit, lgu, mun, team, atl, sa } = ctx;
-  const L = await loadTransmittal(ctx);
+  let L = await loadTransmittal(ctx);
+  if (await slimReview(ctx, L.B).catch(() => false)) L = await loadTransmittal(ctx);
   ctx.baarB = L.B; ctx.curPart = q.get('p') || '01';
   const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '01');
   const canStd = has(me, 'sa') || has(me, 'admin');
