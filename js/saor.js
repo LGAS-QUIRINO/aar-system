@@ -91,7 +91,10 @@ export const SAOR_CSS = `
 .saor-doc .rule::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .saor-t{border-collapse:collapse;width:100%;margin-top:10pt;table-layout:fixed}
 .saor-t th,.saor-t td{border:1px solid #000;padding:.06in .08in;vertical-align:top;text-align:left}
-.saor-t th{text-align:center;font-weight:700}
+.saor-t th{text-align:center;font-weight:700;border-bottom:2px solid #000}
+.saor-t tr.in td{border-top:1px dotted #555;border-bottom:1px dotted #555}
+.saor-t tr.in td.rec,.saor-t td.rec{border-top:1px solid #000}
+.saor-t tr.o1.multi td:not(.rec){border-bottom:1px dotted #555}
 .saor-t td.ref{white-space:normal}
 .saor-t td.no{text-align:center;font-weight:700}
 .saor-t td.j{text-align:justify}
@@ -102,6 +105,7 @@ export const SAOR_CSS = `
 .saor-t tr.sec td{font-weight:700;background:#F2F2F2}
 .saor-t tr.tot td{font-weight:700}
 .saor-t .amt{float:right;padding-left:6pt}
+.saor-t tr.tot .amt{border-top:1px solid #000;border-bottom:3px double #000;line-height:1.3}
 .saor-wm{position:absolute;top:38%;left:0;right:0;text-align:center;font:700 90pt Arial,sans-serif;color:rgba(0,0,0,.06);transform:rotate(-20deg);pointer-events:none}
 `;
 // Cell text: paragraphs with a small space between them; a./b./c. items get a hanging indent.
@@ -112,13 +116,16 @@ const paras = (t, lead = '') => String(t || '').split('\n').filter((x) => x.trim
 }).join('') || (lead ? `<p>${lead}</p>` : '');
 // AOM No. on two lines: "AOM No. 2026-001" / "(2024-2025)".
 const refSplit = (r) => { const m = /^(.*?)\s*(\(.*\))$/.exec(String(r || '')); return m ? [m[1], m[2]] : [String(r || '')]; };
+// ₱ only on the first amount of an observation and on its Total.
+const firstAmt = (o) => o.lines.findIndex((l) => l.amount !== null);
+const amtTxt = (n, sign) => sign ? peso(n) : peso(n).slice(1);
 const refHTML = (r) => refSplit(r).map((x) => `<p>${escH(x)}</p>`).join('');
 export function saorHTML(m, head) {
   const one = (o) => { const l = o.lines[0]; return `<tr><td class="no">${o.n}.</td><td class="ref">${refHTML(l.ref)}</td><td class="j">${paras(o.obs, `<b>Barangay ${escH(l.brgy)}:</b> `)}</td><td class="j">${paras(o.rec)}</td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`; };
   const rows = m.sections.map((s) => `<tr class="sec"><td colspan="6">${escH(s.code)}. ${escH(s.title.toUpperCase())}</td></tr>` + s.obs.map((o) => o.single ? one(o) : `
-    <tr><td class="no">${o.n}.</td><td></td><td class="j">${paras(o.obs)}</td><td class="j">${paras(o.rec)}</td><td></td><td></td></tr>
-    ${o.lines.map((l) => `<tr><td></td><td class="ref">${refHTML(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(peso(l.amount))}</span>` : ''}</td><td></td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`).join('')}
-    ${o.money ? `<tr class="tot"><td></td><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td><td></td></tr>` : ''}`).join('')).join('');
+    <tr class="o1 multi"><td class="no">${o.n}.</td><td></td><td class="j">${paras(o.obs)}</td><td class="j rec" rowspan="${1 + o.lines.length + (o.money ? 1 : 0)}">${paras(o.rec)}</td><td></td><td></td></tr>
+    ${o.lines.map((l, i) => `<tr class="in"><td></td><td class="ref">${refHTML(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(amtTxt(l.amount, firstAmt(o) === i))}</span>` : ''}</td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`).join('')}
+    ${o.money ? `<tr class="tot in"><td></td><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td></tr>` : ''}`).join('')).join('');
   return `<div class="saor-doc"><div class="saor-wm">CONFIDENTIAL</div>
     <div class="lh2"><img class="seal" src="img/lh-seal.jpg" alt="Commission on Audit seal"><img class="name" src="img/lh-name.jpg" alt="Republic of the Philippines, Commission on Audit" style="width:3in;height:.434in"></div>
     <p class="c b">REGIONAL OFFICE NO. II</p><p class="c">PROVINCE OF QUIRINO</p><p class="c">PROVINCIAL SATELLITE AUDITING OFFICE</p><p class="c" style="font-size:9pt">Capitol Hills, Cabarroguis, Quirino</p>
@@ -146,7 +153,7 @@ export function printSaor(m, head) {
 /* ── Word (folio landscape) ── */
 export async function saorWord(m, head) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, PageOrientation, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType, ShadingType } = D;
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, VerticalMergeType, AlignmentType, Footer, Header, PageNumber, PageOrientation, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType, ShadingType } = D;
   const FONT = 'Times New Roman', EMU = 914400;
   const load = async (src) => { try { return await (await fetch(src)).arrayBuffer(); } catch (e) { return null; } };
   const seal = await load('img/lh-seal.jpg'), name = await load('img/lh-name.jpg');
@@ -162,9 +169,10 @@ export async function saorWord(m, head) {
   const refP = (r) => refSplit(r).map((x) => new Paragraph({ spacing: { after: 0 }, children: [R(x)] }));
   const noP = (n) => [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(n + '.', { b: true })] })];
   const W = [650, 2160, 4500, 3750, 2950, 2550];   // 16560 twips: 13" folio landscape less .75" margins
-  const cell = (kids, i, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids.length ? kids : [new Paragraph({ children: [] })], columnSpan: o.span, shading: o.shade ? { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' } : undefined });
-  const amtPara = (brgy, amt, b) => new Paragraph({ spacing: { after: 0 }, tabStops: [{ type: 'right', position: W[2] - 240 }], children: [R(brgy, { b }), ...(amt !== null ? [new TextRun({ text: '\t' + peso(amt), font: FONT, size: 21, bold: !!b })] : [])] });
-  const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: ['No.', 'Reference No.', 'Observations', 'Recommendations', 'Management Comments', "Auditor's Rejoinder"].map((h, i) => cell([new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(h, { b: true })] })], i)) })];
+  const DOT = { style: BorderStyle.DOTTED, size: 4, color: '555555' }, SOL = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
+  const cell = (kids, i, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids.length ? kids : [new Paragraph({ children: [] })], columnSpan: o.span, verticalMerge: o.vm, borders: o.bd, shading: o.shade ? { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' } : undefined });
+  const amtPara = (brgy, amt, b, sign = true) => new Paragraph({ spacing: { after: 0 }, tabStops: [{ type: 'right', position: W[2] - 240 }], children: [R(brgy, { b }), ...(amt !== null ? [new TextRun({ text: '\t' }), new TextRun({ text: amtTxt(amt, sign), font: FONT, size: 21, bold: !!b, underline: b ? { type: 'double' } : undefined })] : [])] });
+  const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: ['No.', 'Reference No.', 'Observations', 'Recommendations', 'Management Comments', "Auditor's Rejoinder"].map((h, i) => cell([new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(h, { b: true })] })], i, { bd: { bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' } } })) })];
   m.sections.forEach((s) => {
     rows.push(new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 6, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
     s.obs.forEach((o) => {
@@ -174,9 +182,13 @@ export async function saorWord(m, head) {
           cell(lines(o.rec), 3), cell(lines(l.comment), 4), cell(lines(l.rejoinder), 5)] }));
         return;
       }
-      rows.push(new TableRow({ children: [cell(noP(o.n), 0), cell([], 1), cell(lines(o.obs), 2), cell(lines(o.rec), 3), cell([], 4), cell([], 5)] }));
-      o.lines.forEach((l) => rows.push(new TableRow({ cantSplit: true, children: [cell([], 0), cell(refP(l.ref), 1), cell([amtPara(l.brgy, l.amount)], 2), cell([], 3), cell(lines(l.comment), 4), cell(lines(l.rejoinder), 5)] })));
-      if (o.money) rows.push(new TableRow({ cantSplit: true, children: [cell([], 0), cell([], 1), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 2), cell([], 3), cell([], 4), cell([], 5)] }));
+      const fa = firstAmt(o), top = { top: DOT }, bot = { bottom: DOT }, both = { top: DOT, bottom: DOT };
+      const last = o.lines.length - 1 + (o.money ? 1 : 0);   // index of the group's last inner row
+      const bd = (k) => k === last ? top : both;
+      const cont = (k) => cell([], 3, { vm: VerticalMergeType.CONTINUE, bd: { top: SOL } });
+      rows.push(new TableRow({ children: [cell(noP(o.n), 0, { bd: bot }), cell([], 1, { bd: bot }), cell(lines(o.obs), 2, { bd: bot }), cell(lines(o.rec), 3, { vm: VerticalMergeType.RESTART }), cell([], 4, { bd: bot }), cell([], 5, { bd: bot })] }));
+      o.lines.forEach((l, k) => rows.push(new TableRow({ cantSplit: true, children: [cell([], 0, { bd: bd(k) }), cell(refP(l.ref), 1, { bd: bd(k) }), cell([amtPara(l.brgy, l.amount, false, fa === k)], 2, { bd: bd(k) }), cont(k), cell(lines(l.comment), 4, { bd: bd(k) }), cell(lines(l.rejoinder), 5, { bd: bd(k) })] })));
+      if (o.money) { const k = last; rows.push(new TableRow({ cantSplit: true, children: [cell([], 0, { bd: bd(k) }), cell([], 1, { bd: bd(k) }), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 2, { bd: bd(k) }), cont(k), cell([], 4, { bd: bd(k) }), cell([], 5, { bd: bd(k) })] })); }
     });
   });
   const lh = [];
