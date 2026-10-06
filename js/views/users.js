@@ -5,7 +5,7 @@ import { ST } from '../aom.js';
 import { ROLE_NAMES, nice, upper, longDate } from '../format.js';
 import { CONFIG, DEMO } from '../config.js';
 
-const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', 'State Auditor II', 'State Auditor I', 'State Auditing Examiner II', 'Job Order'];
+const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', 'State Auditor II', 'State Auditor I', 'State Auditing Examiner II', 'OSA Staff', 'Job Order'];
 const PERMS = [
   ['Encode setup, findings, AOM drafts', 1, 1, 1, 0], ['Forward to Audit Team Leader', 1, 0, 0, 0], ['Review, correct, return', 0, 1, 1, 0],
   ['Approve and forward to Supervising Auditor', 0, 1, 0, 0], ['Final approval, lock numbers', 0, 0, 1, 0], ['Reopen a final document', 0, 0, 1, 0],
