@@ -20,9 +20,10 @@ export async function fsStep(refs, params, q) {
   if (!ctx) return { active: '#/audits', crumbs: '<a href="#/audits">My Audit</a> / <b>Not Found</b>', body: '<div class="note bad">This audit was not found on this device.</div>' };
   const me = refs.me;
   const F = await loadFS(ctx);
-  const canEdit = !!(ctx.isMember || ctx.atl?.id === me.id || ctx.sa?.id === me.id || has(me, 'admin'));
   const base = `#/audits/${ctx.rec.id}/fs?v=1`;
   const s = TABS.some(([k]) => k === q.get('s')) ? q.get('s') : 'input';
+  // Team Staff of the team may encode the trial balance; the rest is the auditor's work.
+  const canEdit = !!(ctx.isMember || ctx.atl?.id === me.id || ctx.sa?.id === me.id || has(me, 'admin') || (s === 'input' && has(me, 'staff') && (me.teamIds || []).includes(ctx.teamId)));
   let v;
   if (s === 'input') v = inputScreen({ F, ctx, me, q, base, canEdit });
   else if (s === 'budget') v = await budgetTab({ F, ctx, me, q, base, canEdit });

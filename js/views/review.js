@@ -7,7 +7,7 @@ import { loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
 import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
-import { has, myTeamIds } from '../refs.js';
+import { has, myTeamIds, viewOnly } from '../refs.js';
 import { aomPreviewHTML, checksHTML, commentsHTML } from './aoms.js';
 import { baarQueue } from './baarreview.js';
 import { saorQueue } from './saorreview.js';
@@ -30,7 +30,61 @@ export async function reviewQueue(refs) {
   return Object.entries(by).map(([auditId, list]) => ({ auditId, list }));
 }
 
+
+// OSA Staff: everything waiting for an ATL or SA, in every team, oldest first, so they can follow up. View only.
+export async function oversightQueue(refs) {
+  const out = [];
+  const nm = (id) => nice(refs.user[id]?.data.name || '') || 'Not assigned';
+  const byEmail = (e) => nice(refs.users.find((u) => u.data.email === e)?.data.name || e || '');
+  const who = (teamId, sa) => { const t = refs.team[teamId]?.data || {}; return { name: nm(sa ? t.saUserId : t.atlUserId), role: (sa ? 'SA' : 'ATL') + ' · ' + (t.name || '') }; };
+  const atlS = [ST.WITH_ATL, ST.ATL], saS = [ST.WITH_SA, ST.SA];
+  const audits = Object.fromEntries((await store.list('audits')).map((a) => [a.id, a]));
+  const groups = {};
+  (await store.list('aoms')).forEach((a) => {
+    const s = a.data.status, sa = saS.includes(s);
+    if (!sa && !atlS.includes(s)) return;
+    const k = a.data.auditId + (sa ? '|sa' : '|atl');
+    (groups[k] = groups[k] || { a, sa, list: [] }).list.push(a);
+  });
+  Object.values(groups).forEach((g) => {
+    const au = audits[g.a.data.auditId]?.data; if (!au) return;
+    const first = g.list.slice().sort((x, y) => String(x.data.forwardedAt || '').localeCompare(String(y.data.forwardedAt || '')))[0];
+    out.push({ href: `#/review/${g.a.data.auditId}`, place: refs.lgu[au.lguId]?.data.name || '?', doc: `AOMs · Audit Year ${au.auditYear}`, items: `${g.list.length} AOM${g.list.length > 1 ? 's' : ''}`,
+      who: who(au.teamId, g.sa), by: byEmail(first.data.forwardedBy), at: first.data.forwardedAt || '' });
+  });
+  (await store.list('letters')).forEach((l) => {
+    const d = l.data;
+    if (d.type === 'baar' && d.review) {
+      const its = Object.values(d.review.items || {});
+      [false, true].forEach((sa) => {
+        const n = its.filter((x) => (sa ? saS : atlS).includes(x.status)).length; if (!n) return;
+        const au = audits[d.auditId]?.data; if (!au) return;
+        out.push({ href: `#/baar-review/${d.auditId}`, place: refs.lgu[au.lguId]?.data.name || '?', doc: `BAAR CY ${au.periodTo}`, items: `${n} part${n > 1 ? 's' : ''}`, who: who(d.teamId, sa), by: byEmail(d.review.forwardedBy), at: d.review.forwardedAt || '' });
+      });
+    }
+    if (d.type === 'saor' && d.review && [...atlS, ...saS].includes(d.review.status)) {
+      const sa = saS.includes(d.review.status);
+      out.push({ href: `#/saor-review?m=${encodeURIComponent(d.munId)}&y=${d.auditYear}`, place: refs.lgu[d.munId]?.data.name || '?', doc: `SAOR · Audit Year ${d.auditYear}`, items: 'SAOR', who: who(d.teamId, sa), by: byEmail(d.review.forwardedBy), at: d.review.forwardedAt || '' });
+    }
+  });
+  return out.sort((x, y) => String(x.at).localeCompare(String(y.at)));
+}
+function oversightList(list) {
+  const cols = 'grid-template-columns:minmax(150px,1fr) 110px minmax(150px,1fr) minmax(150px,1fr) 80px';
+  return {
+    active: '#/review', crumbs: '<b>For My Review</b>',
+    body: `<div class="page-head"><div><h1>For My Review</h1><p>Everything waiting for the Audit Team Leaders and Supervising Auditors, so you can follow up with them. View only.</p></div>${pill('OSA Staff', 'violet')}</div>
+      <section class="panel"><div class="panel-head"><h2>Waiting for Review · ${list.length}</h2></div>
+        ${list.length ? `<div style="overflow-x:auto"><div class="t-head" style="${cols};min-width:680px"><span>Barangay / Document</span><span>Items</span><span>Waiting for</span><span>Forwarded</span><span></span></div>
+        ${list.map((x) => `<a class="t-row click" href="${x.href}" style="${cols};min-width:680px;text-decoration:none;color:inherit"><span><b>${esc(x.place)}</b><br><small class="hint">${esc(x.doc)}</small></span><span>${esc(x.items)}</span>
+          <span>${esc(x.who.name)}<br><small class="hint">${esc(x.who.role)}</small></span><span>${esc(x.by)}<br><small class="hint">${esc(timeAgo(x.at))}</small></span><span><span class="btn sm ghost">View</span></span></a>`).join('')}</div>`
+        : '<div class="empty">Nothing is waiting for review.</div>'}</section>
+      <span class="hint">Oldest items first. Opening an item does not start the review, so the member can still retrieve it.</span>`
+  };
+}
+
 export async function reviewList(refs) {
+  if (viewOnly(refs.me)) return oversightList(await oversightQueue(refs));
   const q = await reviewQueue(refs);
   const audits = await Promise.all(q.map((x) => store.get('audits', x.auditId)));
   const bq = await baarQueue(refs);

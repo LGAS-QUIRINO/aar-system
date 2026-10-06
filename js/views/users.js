@@ -6,11 +6,15 @@ import { ROLE_NAMES, nice, upper, longDate } from '../format.js';
 import { CONFIG, DEMO } from '../config.js';
 
 const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', 'State Auditor II', 'State Auditor I', 'State Auditing Examiner II', 'OSA Staff', 'Job Order'];
+// Columns follow ROLE_NAMES: Team Member, Team Staff, Audit Team Leader, Supervising Auditor, OSA Staff, Admin.
 const PERMS = [
-  ['Encode setup, findings, AOM drafts', 1, 1, 1, 0], ['Forward to Audit Team Leader', 1, 0, 0, 0], ['Review, correct, return', 0, 1, 1, 0],
-  ['Approve and forward to Supervising Auditor', 0, 1, 0, 0], ['Final approval, lock numbers', 0, 0, 1, 0], ['Reopen a final document', 0, 0, 1, 0],
-  ['Print final copies', 1, 1, 1, 0], ['Approve AOM Library updates', 0, 0, 1, 1], ['Manage users and LGU list', 0, 0, 0, 1]
+  ['Encode setup, officials, trial balance', 1, 1, 1, 1, 0, 0], ['Encode findings, AOM drafts, comments', 1, 0, 1, 1, 0, 0], ['Forward to Audit Team Leader', 1, 0, 0, 0, 0, 0],
+  ['Review, correct, return', 0, 0, 1, 1, 0, 0], ['Approve and forward to Supervising Auditor', 0, 0, 1, 0, 0, 0], ['Final approval, lock numbers', 0, 0, 0, 1, 0, 0],
+  ['Reopen a final document', 0, 0, 0, 1, 0, 0], ['See all teams', 0, 0, 0, 1, 1, 1], ['Print final copies', 1, 0, 1, 1, 1, 0],
+  ['Approve AOM Library updates', 0, 0, 0, 1, 0, 1], ['Manage users and LGU list', 0, 0, 0, 0, 0, 1]
 ];
+const ROLE_NOTE = { staff: 'Encodes Setup, officials and trial balance only', osa: 'View and print only, all teams' };
+const ONLY_STAFF = (roles) => roles.length > 0 && roles.every((r) => r === 'staff' || r === 'osa');
 
 export async function users(refs) {
   if (!(refs.me.roles || []).includes('admin')) return { active: '#/users', crumbs: '<b>Users & Roles</b>', body: '<div class="note bad">Only the Admin can open this page.</div>' };
@@ -43,8 +47,8 @@ export async function users(refs) {
     </section></div>
     <div style="display:flex;flex-direction:column;gap:20px">
     <section class="panel"><div class="panel-head"><h2>What Each Role Can Do</h2></div>
-      <div class="t-head" style="grid-template-columns: 1fr repeat(4, 44px);padding:10px 14px;font-size:10.5px"><span></span><span>Team Member</span><span>Audit Team Leader</span><span>Super-vising Auditor</span><span>Admin</span></div>
-      ${PERMS.map((p) => `<div class="t-row" style="grid-template-columns: 1fr repeat(4, 44px);padding:9px 14px;font-size:13px"><span>${p[0]}</span>${p.slice(1).map((v) => `<span style="text-align:center;color:${v ? 'var(--ok)' : '#B4BEC9'}" aria-label="${v ? 'Yes' : 'No'}">${v ? '✓' : '–'}</span>`).join('')}</div>`).join('')}
+      <div class="t-head" style="grid-template-columns: 1fr repeat(6, 40px);padding:10px 14px;font-size:10px"><span></span><span>Team Member</span><span>Team Staff</span><span>Audit Team Leader</span><span>Super-vising Auditor</span><span>OSA Staff</span><span>Admin</span></div>
+      ${PERMS.map((p) => `<div class="t-row" style="grid-template-columns: 1fr repeat(6, 40px);padding:9px 14px;font-size:13px"><span>${p[0]}</span>${p.slice(1).map((v) => `<span style="text-align:center;color:${v ? 'var(--ok)' : '#B4BEC9'}" aria-label="${v ? 'Yes' : 'No'}">${v ? '✓' : '–'}</span>`).join('')}</div>`).join('')}
     </section>
     <section class="panel"><div class="panel-head"><h2>Good to Know</h2></div><div class="panel-body" style="font-size:13px;line-height:1.5;gap:8px">
       <span>• One person can hold two roles, e.g. Team Member and Admin.</span>
@@ -66,6 +70,23 @@ export async function users(refs) {
     let next = null;
     const res = await modal({
       onOpen: (bg) => {
+        const munsOf = (tid) => refs.lgus.filter((l) => l.data.kind === 'municipality' && l.data.teamId === tid).sort((a, b) => a.data.name.localeCompare(b.data.name));
+        const picked = new Set(d.munIds || []);
+        const drawMuns = () => {
+          $$('input[name=mun]', bg).forEach((x) => { if (x.checked) picked.add(x.value); else picked.delete(x.value); });
+          const teams = $$('input[name=team]:checked', bg).map((x) => x.value);
+          $('#u-muns', bg).innerHTML = teams.map((tid) => `<div class="u-muns"><span class="hint">${esc(refs.team[tid]?.data.name || tid)}</span><div class="grid-2">${munsOf(tid).map((m) => `<label class="check"><input type="checkbox" name="mun" value="${m.id}" ${picked.has(m.id) ? 'checked' : ''}>${esc(m.data.name)}</label>`).join('') || '<span class="hint">No municipalities</span>'}</div></div>`).join('') || '<span class="hint">Tick a team first.</span>';
+        };
+        const roleState = () => {
+          const roles = $$('input[name=role]:checked', bg).map((x) => x.value);
+          const only = ONLY_STAFF(roles), des = $('#u-des', bg);
+          if (only) { if (!des.disabled) des.dataset.was = des.value; des.value = ''; des.placeholder = 'None'; des.disabled = true; }
+          else if (des.disabled) { des.disabled = false; des.value = des.dataset.was || ''; des.placeholder = 'e.g. OIC-Audit Team Leader'; }
+          $('#u-munbox', bg).hidden = !(roles.includes('member') || roles.includes('staff')) || roles.some((r) => ['atl', 'sa', 'osa', 'admin'].includes(r));
+        };
+        $$('input[name=team]', bg).forEach((x) => { x.onchange = drawMuns; });
+        $$('input[name=role]', bg).forEach((x) => { x.addEventListener('change', roleState); });
+        drawMuns(); roleState();
         const go = (what) => { next = what; $('.x', bg).click(); };
         const rp = $('#u-replace', bg); if (rp) rp.onclick = () => go('replace');
         const dl = $('#u-delete', bg); if (dl) dl.onclick = () => go('delete');
@@ -76,8 +97,10 @@ export async function users(refs) {
         <div class="field"><label class="label" for="u-nick">Name to Greet (optional)</label><input class="input" id="u-nick" value="${esc(d.nickname || '')}" placeholder="e.g. Cess"><span class="hint">Shown only on the Dashboard greeting.</span></div>
         <div class="grid-2"><div class="field"><label class="label" for="u-pos">Position</label><input class="input" id="u-pos" list="pos-list" value="${esc(d.position)}"><datalist id="pos-list">${POSITIONS.map((p) => `<option>${p}</option>`).join('')}</datalist></div>
         <div class="field"><label class="label" for="u-des">Designation</label><input class="input" id="u-des" value="${esc(d.designation)}" placeholder="e.g. OIC-Audit Team Leader"></div></div>
-        <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="label">Roles</legend><div class="grid-2">${Object.entries(ROLE_NAMES).map(([k, v]) => `<label class="check"><input type="checkbox" name="role" value="${k}" ${(d.roles || []).includes(k) ? 'checked' : ''}>${v}</label>`).join('')}</div></fieldset>
+        <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="label">Roles</legend><div class="grid-2">${Object.entries(ROLE_NAMES).map(([k, v]) => `<label class="check"><input type="checkbox" name="role" value="${k}" ${(d.roles || []).includes(k) ? 'checked' : ''}>${ROLE_NOTE[k] ? `<span>${v}<small class="u-rnote">${ROLE_NOTE[k]}</small></span>` : v}</label>`).join('')}</div></fieldset>
         <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="label">Teams</legend><div class="grid-2">${refs.teams.map((t) => `<label class="check"><input type="checkbox" name="team" value="${t.id}" ${(d.teamIds || []).includes(t.id) ? 'checked' : ''}>${esc(t.data.name)}</label>`).join('')}</div></fieldset>
+        <fieldset class="field" style="border:0;padding:0;margin:0" id="u-munbox"><legend class="label">Municipalities</legend><div id="u-muns"></div>
+          <span class="hint">Leave all unticked to give access to every municipality of the team. For Team Members and Team Staff only.</span></fieldset>
         ${u ? `<div class="field"><label class="label" for="u-status">Status</label><select class="input" id="u-status">${[['invited', 'Invited (not signed in yet)'], ['active', 'Active'], ['disabled', 'Removed (history kept)']].map(([v, l]) => `<option value="${v}" ${d.status === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>` : ''}
         ${canReplace ? `<div class="u-sec"><span class="label">Replace This User</span><div class="sv-foot"><span class="hint">When someone takes over this person's work, for example after a transfer.</span><button class="btn ghost" type="button" id="u-replace">Replace With…</button></div></div>` : ''}
         ${neverWorked ? `<div class="u-danger"><span><b>${esc(nice(d.name))}</b> was invited but never signed in, and nothing in the records points to them. Deleting erases them completely.</span><button class="btn u-del" type="button" id="u-delete">Delete User</button></div>` : ''}`,
@@ -94,6 +117,9 @@ export async function users(refs) {
           if (id === refs.me.id && (!roles.includes('admin') || status === 'disabled')) { toast('You cannot remove your own Admin access.', 'bad'); return false; }
           editUser.out = { email, name: upper($('#u-name', bg).value.trim()), nickname: $('#u-nick', bg).value.trim(), position: $('#u-pos', bg).value.trim(), designation: $('#u-des', bg).value.trim(),
             roles, teamIds: $$('input[name=team]:checked', bg).map((x) => x.value), status };
+          const teamsNow = editUser.out.teamIds;
+          editUser.out.munIds = $('#u-munbox', bg).hidden ? [] : $$('input[name=mun]:checked', bg).map((x) => x.value).filter((mid) => teamsNow.includes(refs.lgu[mid]?.data.teamId));
+          if (ONLY_STAFF(roles)) editUser.out.designation = '';
           return true;
         }
       }]

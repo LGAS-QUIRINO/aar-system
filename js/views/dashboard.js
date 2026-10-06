@@ -41,7 +41,7 @@ export async function dashboard(refs) {
   const year = new Date().getFullYear();
   const thisYear = rows.filter((r) => Number(r.rec.data.auditYear) === year);
   const pendingSetup = rows.filter((r) => (r.rec.data.stage || 'Setup') === 'Setup').length;
-  const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa');
+  const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa') || has(refs.me, 'staff');
   const ids = new Set(rows.map((r) => r.rec.id));
   const am = (await store.list('aoms')).filter((a) => ids.has(a.data.auditId));
   const cnt = (f) => am.filter(f).length;

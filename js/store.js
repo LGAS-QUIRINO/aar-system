@@ -8,12 +8,15 @@ export const emitChange = (src) => listeners.forEach((fn) => fn(src));
 export const newId = (prefix) => prefix + '-' + (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 
 export const store = {
+  policy: null,      // set at sign-in: (table, data) => reason this person may not save it, or ''
   async get(table, id) { return db.get('records', [table, id]); },
   async list(table, { withDeleted = false } = {}) {
     const all = await db.all('records', table);
     return withDeleted ? all : all.filter((r) => !r.deleted);
   },
   async save(table, id, data, { deleted = false, silent = false } = {}) {
+    const why = this.policy ? this.policy(table, data) : '';
+    if (why) { window.dispatchEvent(new CustomEvent('save-blocked', { detail: why })); throw new Error(why); }
     const cur = await db.get('records', [table, id]);
     const queued = await db.get('outbox', [table, id]);
     const baseVersion = queued ? queued.baseVersion : cur ? cur.version : 0;

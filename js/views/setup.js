@@ -3,7 +3,7 @@ import { store, newId } from '../store.js';
 import { N1_WORKFORCE } from '../baar-notes.js';
 import { esc, toast, setDirty, guard, modal, pill, $, $$ } from '../ui.js';
 import { ST } from '../aom.js';
-import { has, myTeamIds, canEditAudits } from '../refs.js';
+import { has, myTeamIds, canEditSetup } from '../refs.js';
 import { aomRange, aomNo, periodYears, longDate, fullName, upper, nice } from '../format.js';
 
 const TITLES = ['Hon.', 'Mr.', 'Ms.', 'Mrs.', 'Atty.', 'Engr.', 'Dr.', ''];
@@ -26,7 +26,7 @@ export async function setup(refs, params) {
 
   const allAudits = await store.list('audits');
   const teamIds = myTeamIds(refs.me, refs.teams);
-  const editable = canEditAudits(refs.me) && (!rec || teamIds.includes(rec.data.teamId));
+  const editable = canEditSetup(refs.me) && (!rec || teamIds.includes(rec.data.teamId));
   const muns = refs.lgus.filter((l) => l.data.kind === 'municipality' && teamIds.includes(l.data.teamId)).sort((a, b) => a.data.name.localeCompare(b.data.name));
   const brgysOf = (munId) => refs.lgus.filter((l) => l.data.kind === 'barangay' && l.data.parentId === munId && (l.data.active || (rec && rec.data.lguId === l.id))).sort((a, b) => a.data.name.localeCompare(b.data.name));
 

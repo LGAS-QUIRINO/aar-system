@@ -75,14 +75,14 @@ const ADMIN_NAV = [
 export function roleLine(me) {
   if (!me) return '';
   const r = me.roles || [];
-  const main = r.includes('sa') ? 'Supervising Auditor' : r.includes('atl') ? 'Audit Team Leader' : r.includes('member') ? 'Team Member' : '';
+  const main = r.includes('sa') ? 'Supervising Auditor' : r.includes('atl') ? 'Audit Team Leader' : r.includes('member') ? 'Team Member' : r.includes('osa') ? 'OSA Staff' : r.includes('staff') ? 'Team Staff' : '';
   return [me.position, [main, r.includes('admin') ? 'Admin' : ''].filter(Boolean).join(' + ')].filter(Boolean).join(' · ');
 }
 
 export function shell({ me, team, active, crumbs, body, counts = {} }) {
   const isAdmin = (me.roles || []).includes('admin');
   const isSA = (me.roles || []).includes('sa');
-  const reviewer = (me.roles || []).some((r) => r === 'atl' || r === 'sa');
+  const reviewer = (me.roles || []).some((r) => r === 'atl' || r === 'sa' || r === 'osa');
   const link = (n) => n.reviewer && !reviewer ? '' : n.href
     ? `<a href="${n.href}" class="${active === n.href ? 'active' : ''}"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}${n.count && counts[n.count] ? `<span class="count">${counts[n.count]}</span>` : ''}</a>`
     : `<a class="disabled" aria-disabled="true"><span aria-hidden="true">${n.icon}</span>${esc(n.label)}<span class="soon">Phase ${n.phase}</span></a>`;

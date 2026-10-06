@@ -39,7 +39,20 @@ async function load() {
 }
 
 const roles = (u) => u.data.roles || [];
-const seesAll = (u) => roles(u).includes('admin') || roles(u).includes('sa');
+const seesAll = (u) => roles(u).includes('admin') || roles(u).includes('sa') || roles(u).includes('osa');
+const manages = (u) => roles(u).includes('admin') || roles(u).includes('sa');
+const auditor = (u) => ['member', 'atl', 'sa', 'admin'].some((r) => roles(u).includes(r));
+const staffOnly = (u) => roles(u).includes('staff') && !auditor(u);
+const munLimit = (u) => (['atl', 'sa', 'osa', 'admin'].some((r) => roles(u).includes(r)) ? null : (u.data.munIds || []).length ? u.data.munIds : null);
+function munOf(state, table, id, d = {}) {
+  const lguMun = (lid) => { const l = state.lgus[lid]?.data; return !l ? '' : l.kind === 'municipality' ? lid : l.kind === 'barangay' ? l.parentId || '' : ''; };
+  if (table === 'lgus') return d.kind === 'province' ? '' : d.kind === 'municipality' ? id : d.parentId || '';
+  if (table === 'audits') return lguMun(d.lguId);
+  if (d.munId) return d.munId;
+  if (d.lguId) return lguMun(d.lguId);
+  if (d.auditId && state.audits[d.auditId]) return lguMun(state.audits[d.auditId].data.lguId);
+  return '';
+}
 
 export const demoServer = {
   async handle(action, payload, email) {
@@ -47,13 +60,18 @@ export const demoServer = {
     const state = await load();
     const user = Object.values(state.users).find((u) => !u.deleted && u.data.email === email);
     if (!user || user.data.status === 'disabled') throw new Error('Your Gmail (' + email + ') is not registered. Ask the Admin to add you in Users & Roles.');
-    const pub = { id: user.id, email: user.data.email, name: user.data.name, position: user.data.position, designation: user.data.designation, roles: roles(user), teamIds: user.data.teamIds || [] };
+    const pub = { id: user.id, email: user.data.email, name: user.data.name, position: user.data.position, designation: user.data.designation, roles: roles(user), teamIds: user.data.teamIds || [], munIds: user.data.munIds || [] };
     if (action === 'bootstrap') return { ok: true, me: pub, serverTime: now() };
     if (action === 'pull') {
       const records = {};
       TABLES.forEach((t) => {
+        const muns = munLimit(user);
         records[t] = Object.values(state[t]).filter((r) => {
           if (payload.since && r.updatedAt <= payload.since) return false;
+          if (muns) {
+            if (t === 'auditlog' && r.data.by !== email) return false;
+            if (!['auditlog', 'users', 'teams', 'aom_library'].includes(t)) { const m = munOf(state, t, r.id, r.data); if (m && !muns.includes(m)) return false; }
+          }
           if (REFERENCE.includes(t) || r.scope === '*') return true;
           if (t === 'letters' && r.scope === '') return true;
           return seesAll(user) || (user.data.teamIds || []).includes(r.scope);
@@ -65,15 +83,28 @@ export const demoServer = {
       const results = (payload.changes || []).map((c) => {
         try {
           if (!TABLES.includes(c.table)) throw new Error('Unknown table');
+          if (!auditor(user) && c.table !== 'auditlog') {
+            const ok = staffOnly(user) && (c.table === 'audits' || (c.table === 'letters' && c.data && ['tb', 'raomap'].includes(c.data.type)));
+            if (!ok) throw new Error(staffOnly(user) ? 'Team Staff can encode the Setup, the officials and the trial balance only.' : 'OSA Staff can view and print only.');
+          }
           if (ADMIN_ONLY.includes(c.table) && !roles(user).includes('admin')) throw new Error('Only the Admin can change ' + c.table + '.');
           if (c.table === 'aom_library' && !roles(user).some((r) => r === 'admin' || r === 'sa')) throw new Error('Only the Supervising Auditor or Admin can change the AOM Library.');
           let scope = REFERENCE.includes(c.table) ? '*' : String((c.data && c.data.teamId) || '');
           if (c.table === 'letters' && c.data && ['coa', 'gaa', 'wording', 'flagrules'].includes(c.data.type)) {
-            if (!seesAll(user)) throw new Error('Only the Supervising Auditor or Admin can change this.');
+            if (!manages(user)) throw new Error('Only the Supervising Auditor or Admin can change this.');
             scope = '*';
           }
           if (scope !== '*' && !seesAll(user) && !(user.data.teamIds || []).includes(scope)) throw new Error('This record belongs to another team.');
           const cur = state[c.table][c.id];
+          const muns = munLimit(user);
+          if (muns && c.table !== 'auditlog' && !REFERENCE.includes(c.table)) {
+            const mNew = munOf(state, c.table, c.id, c.data), mOld = cur ? munOf(state, c.table, c.id, cur.data) : '';
+            if ((mNew && !muns.includes(mNew)) || (mOld && !muns.includes(mOld))) throw new Error('This record belongs to a municipality not assigned to you.');
+          }
+          if (staffOnly(user) && c.table === 'audits') {
+            if (c.deleted) throw new Error('Team Staff cannot delete an audit.');
+            if (cur && cur.data.memberId && c.data && c.data.memberId !== cur.data.memberId) throw new Error('Only the Supervising Auditor or Admin can change the auditor.');
+          }
           const base = Number(c.baseVersion || 0);
           if ((cur && cur.version !== base) || (!cur && base !== 0)) return { table: c.table, id: c.id, status: 'conflict', record: cur || null };
           if (c.table === 'auditlog' && cur) throw new Error('Activity entries cannot be changed.');
@@ -90,6 +121,7 @@ export const demoServer = {
     // Files: kept in this browser for Demo Mode (the real backend keeps them in Google Drive).
     const canTeam = (t) => seesAll(user) || (user.data.teamIds || []).includes(String(t || ''));
     if (action === 'uploadFile') {
+      if (!auditor(user)) throw new Error('Signed copies are uploaded by the auditor.');
       if (!canTeam(payload.teamId)) throw new Error('This audit belongs to another team.');
       if (!String(payload.data || '').startsWith('JVBER')) throw new Error('Only PDF files can be uploaded.');
       const id = 'file-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);

@@ -6,7 +6,7 @@ export async function audits(refs, params, q) {
   const years = [...new Set(rows.map((r) => r.rec.data.auditYear))].sort().reverse();
   const yr = q.get('year') || '';
   const shown = yr ? rows.filter((r) => String(r.rec.data.auditYear) === yr) : rows;
-  const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa');
+  const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa') || has(refs.me, 'staff');
   return {
     active: '#/audits', crumbs: '<b>My Audit</b>',
     body: `<div class="page-head"><div><h1>My Audit</h1><p>Every Barangay audit you can see. Click a row to open it.</p></div>

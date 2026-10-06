@@ -4,7 +4,8 @@ import { auth } from './auth.js';
 import { db } from './db.js';
 import { store, onChange } from './store.js';
 import { syncNow, startSync, syncState } from './sync.js';
-import { loadRefs } from './refs.js';
+import { loadRefs, writeBlock, staffOnly, viewOnly } from './refs.js';
+import { oversightQueue } from './views/review.js';
 import { shell, wireShell, guard, setDirty, modal, confirmBox, toast, esc, $ } from './ui.js';
 import { loginHtml } from './views/login.js';
 import { dashboard } from './views/dashboard.js';
@@ -66,10 +67,16 @@ function route(hash) {
 async function render() {
   const refs = await loadRefs();
   if (!refs.me) return showLogin('Your Gmail is not in the user list on this device yet. Connect to the internet and sign in again.');
+  store.policy = (t, d) => writeBlock(refs.me, t, d);
+  document.body.classList.toggle('ro-staff', staffOnly(refs.me));
+  document.body.classList.toggle('ro-osa', viewOnly(refs.me));
   const [view, params, q] = route(location.hash);
   const sameRoute = lastRoute === location.hash.split('?')[0];
   const team = refs.team[(refs.me.teamIds || [])[0]];
-  const v = await view(refs, params, q);
+  // Team Staff: the printed AOMs are the auditor's.
+  const v = staffOnly(refs.me) && view === print ? { active: '#/audits', crumbs: '<b>Print</b>', body: '<div class="note warn">Printing is the auditor\'s work. Team Staff can encode the Setup, the officials and the trial balance.</div>' } : await view(refs, params, q);
+  const roNote = roleNote(refs.me, view, q);
+  if (roNote) v.body = roNote + v.body;
   const y = window.scrollY;
   const counts = await navCounts(refs);
   app.innerHTML = shell({ me: refs.me, team, active: v.active, crumbs: v.crumbs, body: v.body, counts });
@@ -77,11 +84,28 @@ async function render() {
   wireShell(signOut);
   app.addEventListener('click', clickGo);
   if (v.mount) v.mount($('#page'));
+  if (roNote) lockControls($('#page'));
   if (v.keepScroll || sameRoute) window.scrollTo(0, y);
   lastRoute = location.hash.split('?')[0];
   const h = $('#page h1'); document.title = (h ? h.textContent + ' · ' : '') + 'Annual Audit Report System';
 }
+// On a view-only screen: boxes cannot be typed in and save buttons are hidden; moving around and printing still work.
+function lockControls(root) {
+  const nav = (el) => el.closest('.page-head, .mc-filt, .seg, .rv-bar, .rv-nav, [role=group], .steptabs, .modal-bg') || /^(find|p-find|s-m|s-y)$/.test(el.id || '');
+  root.querySelectorAll('textarea, input, select, [contenteditable=true]').forEach((el) => { if (nav(el) || el.type === 'search') return; if (el.isContentEditable) el.contentEditable = 'false'; else el.disabled = true; });
+  root.querySelectorAll('button.btn.primary, button.btn.success, button.btn.dashed, .savebar').forEach((el) => { if (nav(el) || /print|word|trail/i.test(el.id || '')) return; el.hidden = true; });
+}
+// One note at the top of a screen that is view only for this person.
+function roleNote(me, view, q) {
+  if (viewOnly(me) && ![dashboard].includes(view)) return '<div class="note info ro-note">View only. As OSA Staff you can view and print everything, but not change it.</div>';
+  if (staffOnly(me)) {
+    const allowed = view === setup || (view === fsStep && (!q.get('s') || q.get('s') === 'input')) || [dashboard, audits, print].includes(view);
+    if (!allowed) return '<div class="note warn ro-note">View only. Findings, AOMs, the SAOR and the BAAR are the auditor\'s work. As Team Staff you can encode the Setup, the officials and the trial balance.</div>';
+  }
+  return '';
+}
 async function navCounts(refs) {
+  if (viewOnly(refs.me)) return { drafts: 0, review: (await oversightQueue(refs)).length };
   const all = await store.list('aoms');
   const mine = all.filter((a) => (a.data.memberId === refs.me.id) && [ST.DRAFT, ST.RETURNED].includes(a.data.status || ST.DRAFT));
   const q = await reviewQueue(refs);
@@ -237,6 +261,8 @@ async function boot() {
   await render();
 }
 
+window.addEventListener('save-blocked', (e) => toast(e.detail, 'bad'));
+window.addEventListener('unhandledrejection', (e) => { if (e.reason && /can (encode|view and print) only|Team Staff can|OSA Staff can/.test(String(e.reason.message || ''))) e.preventDefault(); });
 (async function main() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
   const s = await auth.restore();

@@ -2,7 +2,7 @@
 // Part 01 · Transmittal Letters can be printed as soon as its own details are filled in, before the rest of the BAAR is done.
 import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
-import { has, myTeamIds } from '../refs.js';
+import { has, myTeamIds, canWork } from '../refs.js';
 import { loadAudit, stepsBar } from '../auditctx.js';
 import { ST, clone } from '../aom.js';
 import { periodPhrase, longDate, nice } from '../format.js';
@@ -289,7 +289,7 @@ export async function baar(refs, params, q) {
   let L = await loadTransmittal(ctx);
   if (await slimReview(ctx, L.B).catch(() => false)) L = await loadTransmittal(ctx);
   ctx.baarB = L.B; ctx.curPart = q.get('p') || '01';
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '01');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '01');
   const canStd = has(me, 'sa') || has(me, 'admin');
   const { rec, standard, stdOp, exitL, B, T, isNew } = L;
   let { gaa, pw } = L;
@@ -573,7 +573,7 @@ function tocPart({ ctx, me, pw, st, L }) {
 function iarPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const { B, I, iStandard, iStdOp } = L;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '04');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '04');
   const canStd = has(me, 'sa') || has(me, 'admin');
   const dis = canEdit ? '' : 'disabled';
   const list = basesList(ctx, I);
@@ -698,7 +698,7 @@ function iarPart({ ctx, me, refs, L, st }) {
 function smrPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const { S, sStandard } = L;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '05');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '05');
   const canStd = has(me, 'sa') || has(me, 'admin');
   const dis = canEdit ? '' : 'disabled';
   const sg = smrSigners(audit);
@@ -808,7 +808,7 @@ const OPEN07 = new Set();   // the boxes left open, kept while moving around the
 export function notesPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const F = L.FS;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '07');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '07');
   const dis = canEdit ? '' : 'disabled';
   const N = clone(L.B.notes || {});
   N.km = N.km || {}; N.inv = N.inv || {}; N.ppe = N.ppe || {};
@@ -957,7 +957,7 @@ async function previousBAAR(refs, ctx) {
 }
 export async function p3Part({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '09');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '09');
   const dis = canEdit ? '' : 'disabled';
   const saved = L.B.p3 && (L.B.p3.recs || []).length ? clone(L.B.p3) : null;
   let carried = null;
@@ -1109,7 +1109,7 @@ export async function p3Part({ ctx, me, refs, L, st }) {
 /* ── Part 10 · Part IV – Annexes ── */
 export function annexPart({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
-  const canEdit = myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '10');
+  const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '10');
   const dis = canEdit ? '' : 'disabled';
   const A = clone(L.B.annexes || []);
   const uid = () => 'x' + Math.random().toString(36).slice(2, 10);
