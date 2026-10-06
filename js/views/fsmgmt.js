@@ -3,7 +3,7 @@
 // that the statement was reconstructed by the audit team. Only the amounts are kept, never the file.
 import { store, emitChange } from '../store.js';
 import { esc, toast, confirmBox, pill, $, $$ } from '../ui.js';
-import { fsId, loadFsRec, money, cents, parseAmt } from '../fs.js';
+import { fsId, loadFsRec, money, cents, parseAmt, scbaaNotSubmitted } from '../fs.js';
 import { normTitle, similar } from '../coa.js';
 import { loadScript } from '../wp.js';
 import { fsDoc } from './baarfs.js';
@@ -108,10 +108,14 @@ export async function mgmtPanel({ F, ctx, me, q, base, canEdit: can0 }) {
         <td class="n">${x.diff === null ? '' : x.diff ? `<b style="color:var(--warn-ink)">${money(x.diff)}</b>` : '-'}</td></tr>`).join('')}
       ${c.extra.map((x) => `<tr><td>${esc(x.label)}<div class="hint">Not in the template</div></td><td class="n">${money(cents(x.amt), { dash: '-' })}</td><td></td><td></td></tr>`).join('')}</tbody></table>`;
   }
+  // SCBAA submitted by management? (No: left out of the audited FS and a Possible Finding)
+  const noSc = scbaaNotSubmitted(F.rec), dis = canEdit ? '' : 'disabled';
+  const scRow = `<div class="tbm-row" style="margin:0;border:0;padding:0"><span class="label" style="margin:0">SCBAA submitted by management?</span><div class="seg" role="group" aria-label="SCBAA submitted by management">${[['yes', 'Yes'], ['no', 'No']].map(([k, l]) => `<button type="button" data-scg="${k}" class="${(noSc ? 'no' : 'yes') === k ? 'on' : ''}" ${dis}>${l}</button>`).join('')}</div></div>`;
+  const scNote = noSc ? '<div class="note warn" style="display:block;font-weight:400;margin:0 18px 14px"><b>SCBAA not submitted.</b> The Statement of Comparison of Budget and Actual Amounts is left out of the audited financial statements (Part 06, print and Word, page numbers and Table of Contents) and is a Possible Finding on the Results tab.</div>' : '';
   const body = !m ? `<section class="panel" data-transient><div class="panel-head"><h2>Management's Statements</h2><span class="hint" style="margin-left:8px">not imported</span>
-      <span class="btn-row" style="margin-left:auto">${canEdit ? `<label class="btn sm ghost" for="m-file" title="Excel file; each statement needs its title, for example &quot;Statement of Financial Position&quot;, and the amounts beside the lines">Import</label><input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div></section>`
+      <span class="btn-row" style="margin-left:auto;gap:18px;align-items:center">${scRow}${canEdit ? `<label class="btn sm ghost" for="m-file" title="Excel file; each statement needs its title, for example &quot;Statement of Financial Position&quot;, and the amounts beside the lines">Import</label><input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div>${scNote}</section>`
     : `<section class="panel" data-transient><div class="panel-head"><h2>Management's Statements vs. the Trial Balance</h2>
-      <span class="btn-row" style="margin-left:auto">${canEdit ? `<label class="btn sm ${m ? 'ghost' : 'primary'}" for="m-file">${m ? 'Replace' : 'Import Management\'s Statements'}</label>${m ? '<button class="btn sm ghost" type="button" id="m-rm">Remove</button>' : ''}<input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div><div class="panel-body">
+      <span class="btn-row" style="margin-left:auto;gap:18px;align-items:center">${scRow}${canEdit ? `<label class="btn sm ${m ? 'ghost' : 'primary'}" for="m-file">${m ? 'Replace' : 'Import Management\'s Statements'}</label>${m ? '<button class="btn sm ghost" type="button" id="m-rm">Remove</button>' : ''}<input type="file" id="m-file" accept=".xlsx,.xls,.xlsm" hidden>` : ''}</span></div><div class="panel-body">${scNote.replace('margin:0 18px 14px', 'margin:0 0 10px')}
     ${m ? `<div class="hint" style="margin-bottom:6px">📄 ${esc(m.name)} · read ${esc((m.at || '').slice(0, 10))}; only the amounts are kept.</div>
       <div class="tabs2">${st.map((s) => `<a class="t ${s === cur ? 'on' : ''}" href="${base}&s=fs&ms=${s.k}">${esc(s.t)} ${pillOf(s)}</a>`).join('')}</div>
       ${cur.given ? `<label class="check" style="min-height:0"><input type="checkbox" id="m-nt" ${m.notTpl && m.notTpl[cur.k] ? 'checked' : ''} ${canEdit ? '' : 'disabled'}>Management's ${esc(cur.t)} does not follow the template (reconstructed by the audit team)</label>` : `<p class="hint">Management gave no ${esc(cur.t)}; the one built from the trial balance is recorded as reconstructed by the audit team.</p>`}
@@ -139,7 +143,14 @@ export async function mgmtPanel({ F, ctx, me, q, base, canEdit: can0 }) {
       if (rm) rm.onclick = async () => { if (await confirmBox('Remove', 'Remove management\'s statements read from the file?', 'Remove')) await save(null, 'removed management\'s financial statements'); };
       const nt = $('#m-nt', root);
       if (nt) nt.onchange = () => save({ ...m, notTpl: { ...(m.notTpl || {}), [cur.k]: nt.checked } }, '');
-      void $$;
+      $$('[data-scg]', root).forEach((b) => { b.onclick = async () => {
+        const no = b.dataset.scg === 'no'; if (no === noSc) return;
+        const rec = (await loadFsRec(F.lguId, F.y)) || { type: 'fs', teamId: ctx.teamId, lguId: F.lguId, year: F.y, auditId: ctx.rec.id };
+        const sc = { rows: {}, ...(rec.scbaa || {}) }; if (no) sc.notSubmitted = true; else delete sc.notSubmitted;
+        await store.save('letters', fsId(F.lguId, F.y), { ...rec, scbaa: sc }, { silent: true });
+        await store.log(no ? 'recorded: SCBAA not submitted by management' : 'recorded: SCBAA submitted by management', `${ctx.lgu.name} · ${ctx.audit.auditYear}`, ctx.teamId, me.email);
+        emitChange('local');
+      }; });
     }
   };
 }
