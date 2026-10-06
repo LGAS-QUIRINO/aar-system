@@ -251,11 +251,13 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
   } else if (t.none) {
     content += '<div class="empty">No separate trial balance for this fund.</div>';
   } else {
+    // A row the team has corrected counts as Corrected, no longer as Check or For Verification.
+    const fixed = (x) => !!(x.r.use && x.res.acct);
     const h = headingCheck(t, ctx.lgu.name, cur.yr);
     const ft = t.file && t.file.totals;
     content += `<div class="note ${h.known && !(h.okName && h.okYear) ? 'warn' : 'ok'}" style="display:block;font-weight:400">${t.file && t.file.name ? `Imported <b>${esc(t.file.name)}</b>` : 'Pasted rows'}${h.known ? ` · ${esc(h.text)}${h.okName && h.okYear ? ' ✓' : ''}` : ''} · ${t.rows.length} accounts${t.file && t.file.byName ? ` · by ${esc(nice(t.file.byName))}, ${esc(longDate((t.file.at || '').slice(0, 10)))}` : ''}
       ${ft ? `<br><span class="hint">Grand totals in the file: debit ${esc(shown(ft.dr))} · credit ${esc(shown(ft.cr))}</span>` : ''}</div>
-      <div class="sumc" style="grid-template-columns:repeat(4,1fr)"><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart === 'manual').length}</b>Manual</div><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart !== 'manual').length}</b>COA Circular 2015-009${s.rows.some((x) => x.res.m.chart === 'added') ? ' / Added' : ''}</div><div><b style="color:var(--warn-ink)">${s.check}</b>Check</div><div><b style="color:var(--bad-ink)">${s.ver}</b>For Verification</div></div>`;
+      <div class="sumc" style="grid-template-columns:repeat(5,1fr)"><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart === 'manual').length}</b>Manual</div><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart !== 'manual').length}</b>COA Circular 2015-009${s.rows.some((x) => x.res.m.chart === 'added') ? ' / Added' : ''}</div><div><b style="color:var(--warn-ink)">${s.rows.filter((x) => x.res.m.st === 'check' && !fixed(x)).length}</b>Check</div><div><b style="color:var(--bad-ink)">${s.rows.filter((x) => x.res.m.st === 'ver' && !fixed(x)).length}</b>For Verification</div><div><b style="color:var(--ok-ink)">${s.rows.filter(fixed).length}</b>Corrected</div></div>`;
     // Amounts with more than 2 decimals
     const decRows = s.rows.filter((x) => hasDec(x.r.dr) || hasDec(x.r.cr));
     if (decRows.length) {
@@ -271,7 +273,7 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
     }
     const rowHTML = ({ r, i, res }) => {
       const m = res.m;
-      const hid = (filter === 'open' && !res.open && !needsFix(r)) || (filter === 'check' && m.st !== 'check') || (filter === 'ver' && m.st !== 'ver');
+      const hid = (filter === 'open' && !res.open && !needsFix(r)) || (filter === 'check' && (m.st !== 'check' || fixed({ r, res }))) || (filter === 'ver' && (m.st !== 'ver' || fixed({ r, res }))) || (filter === 'fixed' && !fixed({ r, res }));
       let chart = '';
       const a = res.acct;
       // What the file had, shown only when it differs from the account used.
@@ -298,7 +300,7 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
       return `<tr class="${cls}" ${hid ? 'hidden' : ''} data-f="${esc((code + ' ' + title + ' ' + r.code + ' ' + r.title).toLowerCase())}"><td class="mono">${esc(code)}</td><td>${esc(title)}</td><td class="n">${esc(shown(r.dr))}</td><td class="n">${esc(shown(r.cr))}</td><td>${chart}</td></tr>`;
     };
     const flink = (f, label) => `<a href="${base}&s=input&t=${cur.key}&f=${f}" class="${filter === f ? 'on' : ''}">${label}</a>`;
-    content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('ver', 'For Verification')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
+    content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('ver', 'For Verification')} · ${flink('fixed', 'Corrected')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
       <div class="tbwrap"><table class="tbt fixed"><colgroup><col style="width:96px"><col><col style="width:106px"><col style="width:106px"><col style="width:250px"></colgroup><thead><tr><th>Code</th><th>Account Title</th><th class="n">Debit</th><th class="n">Credit</th><th>Status</th></tr></thead>
         <tbody>${s.rows.map(rowHTML).join('')}</tbody>
         <tfoot><tr><td></td><td>Totals${s.decOpen ? ' (amounts as shown in Excel)' : ''}</td><td class="n">${money(s.dr)}</td><td class="n">${money(s.cr)}</td><td>${s.balanced ? pill('✓ Balanced', 'ok') : pill(`Off by ₱${money(Math.abs(s.dr - s.cr))}${s.decOpen ? ' after rounding' : ''}`, 'warn')}</td></tr></tfoot></table></div>
