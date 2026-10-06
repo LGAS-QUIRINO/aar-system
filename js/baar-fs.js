@@ -87,7 +87,7 @@ export function scbaaHTML({ rows, data, y, lgu, mun, start }) {
 // All of Part 06 as pages. fs: { stmts: [sfperf, sfpos, scne, scf], scbaa: { rows, data }, y, lgu, mun, pages: { sfperf, … } }
 export function fsPagesHTML(fs) {
   const out = fs.stmts.map((s) => stmtHTML(s, { lgu: fs.lgu, mun: fs.mun, page: fs.pages[s.key] }));
-  return out.concat(scbaaHTML({ ...fs.scbaa, y: fs.y, lgu: fs.lgu, mun: fs.mun, start: fs.pages.scbaa }));
+  return fs.noScbaa ? out : out.concat(scbaaHTML({ ...fs.scbaa, y: fs.y, lgu: fs.lgu, mun: fs.mun, start: fs.pages.scbaa }));
 }
 export function fsPrint(fs) {
   return { css: `${FS_CSS} @page fs { size: 8.5in 11in; margin: 0; } .pg-fs { page: fs; }`, html: fsPagesHTML(fs).map((x) => `<div class="pg pg-fs">${x}</div>`).join('') };
@@ -147,6 +147,7 @@ export async function fsSections(fs) {
     ];
     out.push(page(fs.pages[s.key], children));
   });
+  if (fs.noScbaa) return out;   // not submitted by management: left out
   base = 22;
   // SCBAA (Manual format), Arial 8.5
   const A = (t, o = {}) => T(t, { ...o, font: 'Arial', size: o.size || 17 });

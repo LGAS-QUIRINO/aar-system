@@ -84,6 +84,8 @@ export function resolveRow(r, chart) {
 export const interChoice = (r, a) => !!a && (['tr_to', 'tr_from'].includes(a.line) || /due (to|from) other funds/i.test(a.title)) && /other funds|bdrrm|drrm|\bsk\b|10%|5%/i.test(`${r.title} ${a.title}`);
 export function isCombined(r, a) {
   if (!a) return false;
+  // Only Subsidy/Transfer and Due to/from Other Funds accounts can be between funds (not Trust Liabilities – DRRMF, Cash in Bank – BDRRMF…).
+  if (!['tr_to', 'tr_from'].includes(a.line) && !/due (to|from) other funds/i.test(a.title) && !a.interfund) return false;
   if (r.inter) return r.inter === 'combined';
   if (/due (to|from) other funds/i.test(a.title)) return true;
   const t = `${r.title}`;
@@ -306,6 +308,8 @@ export function buildScf(sy, sp, fy, fp, begY, begP, y) {
 }
 
 /* ── Statement of Comparison of Budget and Actual Amounts (newer Manual format) ── */
+// Management did not submit the SCBAA (Budget tab: No): it is left out of the audited FS and becomes a Possible Finding.
+export const scbaaNotSubmitted = (rec) => !!(rec && rec.scbaa && rec.scbaa.notSubmitted);
 // codes: accounts that show this row has an amount in the trial balance (prefixes allowed).
 export const SCBAA = [
   { h: 'Revenue' },

@@ -171,7 +171,7 @@ function baarPages(ctx, L) {
   const notes = s + fsPageCount(L.FS);
   const p2 = notes + notesPageCount(notesOf(ctx, L));
   const p3 = p2 + p2PagesOf(ctx).length;
-  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, notes, p2, p3, next: p3 + p3PagesOf(L.B.p3).length };
+  return { iar: 1, smr, sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: L.FS && L.FS.rec && L.FS.rec.scbaa && L.FS.rec.scbaa.notSubmitted ? null : s + 4, notes, p2, p3, next: p3 + p3PagesOf(L.B.p3).length };
 }
 // Part 08 · Part II, from the Final AOMs and their management comments; laid out on Letter pages.
 function p2Box() {

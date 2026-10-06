@@ -10,6 +10,7 @@ import { fromTemplate, blankAom, placeholders, SETUP_VAR_NAMES, ST } from '../ao
 import { activeTemplates } from './library.js';
 import { bdrrmfCheck } from './baarfs.js';
 import { budgetFlags } from './fsbudget.js';
+import { leadNoFindings } from './fsleads.js';
 
 export const RULES = [
   { k: 'advances', t: 'Unliquidated cash advances', acc: 'Advances (1-03-03 / 1-03-05)', def: 'OBS-002' },
@@ -26,7 +27,8 @@ export const RULES = [
   { k: 'bdrrmf', t: 'Unutilized 5% BDRRMF not shown as Trust Liabilities – BDRRMF', acc: 'Trust Liabilities – BDRRMF', def: 'OBS-009' },
   { k: 'rao', t: 'RAO: obligations more than the appropriation, or totals that don\'t add up', acc: 'RAO', def: '' },
   { k: 'statutory', t: 'Statutory allocation less than required', acc: 'Budget and Subsidy', def: '' },
-  { k: 'nobudget', t: 'No Annual Budget at the Audit Team', acc: 'Budget', def: '' }
+  { k: 'nobudget', t: 'No Annual Budget at the Audit Team', acc: 'Budget', def: '' },
+  { k: 'noscbaa', t: 'Statement of Comparison of Budget and Actual Amounts not submitted', acc: 'Budget and Actual', def: '' }
 ];
 export const FLAG_ID = 'flagrules';
 export async function loadRules() {
@@ -103,8 +105,20 @@ export async function findingsPanel({ F, ctx, me, base, canEdit }) {
   const pf = pfOf(F);
   const flags = computeFlags(F);
   const inFindings = (f) => (ctx.aoms || []).find((a) => a.data.flag === f.id) || (rules[f.rule] && (ctx.aoms || []).find((a) => a.data.poolCode === rules[f.rule]));
-  const live = flags.filter((f) => !pf.set[f.id] && !pf.del[f.id]);
+  // A flag on accounts the Lead Schedule marked No Findings is set aside by itself (it comes back if the result changes).
+  const nf = leadNoFindings(F, ctx);
+  const leadOf = (f) => {
+    if (pf.set[f.id] || pf.del[f.id] || inFindings(f)) return null;
+    if (f.rule === 'bdrrmf') return nf.find((i) => i.bdrrmf) || null;
+    const codes = f.codes || [];
+    if (!codes.length) return null;
+    const hit = codes.map((c) => nf.find((i) => i.codes.has(c)));
+    return hit.every(Boolean) ? { title: [...new Set(hit.map((i) => i.title))].join(', ') } : null;
+  };
+  const auto = new Map(flags.map((f) => [f.id, leadOf(f)]).filter(([, v]) => v));
+  const live = flags.filter((f) => !pf.set[f.id] && !pf.del[f.id] && !auto.has(f.id));
   const aside = flags.filter((f) => pf.set[f.id]);
+  const autoAside = flags.filter((f) => auto.has(f.id));
   const row = (f) => {
     const t = rules[f.rule] ? tplOf(rules[f.rule]) : null, done = inFindings(f);
     return `<tr><td><b>${esc(f.t)}</b>${f.d ? `<div class="hint">${esc(f.d)}</div>` : ''}</td><td class="n">${f.amt === null || f.amt === undefined ? '' : '₱' + money(f.amt, { dash: '0.00' })}</td>
@@ -117,7 +131,7 @@ export async function findingsPanel({ F, ctx, me, base, canEdit }) {
     ${!F.figY.any ? '<div class="empty">Runs once the trial balances are entered.</div>' : `<table class="pf"><colgroup><col><col style="width:110px"><col style="width:170px"><col style="width:150px"></colgroup>
       <thead><tr><th>What the trial balance and the budget show</th><th class="n">Amount</th><th>AOM Library</th><th></th></tr></thead>
       <tbody>${live.map(row).join('') || '<tr><td colspan="4"><div class="empty">Nothing flagged.</div></td></tr>'}</tbody></table>`}
-    ${aside.length ? `<div style="margin-top:12px"><div class="label">Set aside · not a finding</div>${aside.map((f) => `<div class="lr-row" style="justify-content:flex-start;gap:8px;border-top:1px solid var(--line-2);padding:6px 0"><span><b>${esc(f.t)}</b>${f.amt ? ` ₱${money(f.amt)}` : ''} · “${esc(pf.set[f.id].reason)}” <span class="hint">${esc(nice(pf.set[f.id].byName || pf.set[f.id].by))}</span></span>${canEdit ? `<button class="reset" type="button" data-pfback="${esc(f.id)}">Put back</button>` : ''}</div>`).join('')}</div>` : ''}
+    ${aside.length || autoAside.length ? `<div style="margin-top:12px"><div class="label">Set aside · not a finding</div>${autoAside.map((f) => `<div class="lr-row" style="justify-content:flex-start;gap:8px;border-top:1px solid var(--line-2);padding:6px 0"><span><b>${esc(f.t)}</b>${f.amt ? ` ₱${money(f.amt)}` : ''} · “No Findings per Lead Schedule (${esc(auto.get(f.id).title)})”</span><a class="hint" href="#/audits/${ctx.rec.id}/fs?v=1&s=leads">change it in the Lead Schedule</a></div>`).join('')}${aside.map((f) => `<div class="lr-row" style="justify-content:flex-start;gap:8px;border-top:1px solid var(--line-2);padding:6px 0"><span><b>${esc(f.t)}</b>${f.amt ? ` ₱${money(f.amt)}` : ''} · “${esc(pf.set[f.id].reason)}” <span class="hint">${esc(nice(pf.set[f.id].byName || pf.set[f.id].by))}</span></span>${canEdit ? `<button class="reset" type="button" data-pfback="${esc(f.id)}">Put back</button>` : ''}</div>`).join('')}</div>` : ''}
     ${Object.keys(pf.del).length && canEdit ? `<div class="hint" style="margin-top:8px">${Object.keys(pf.del).length} with no balance deleted · <button class="reset" type="button" id="pf-undel">Put back</button></div>` : ''}
     <p class="hint" style="margin:8px 0 0">Add to Findings makes a Draft AOM from the template with the amount filled in. For a flag that is not a finding, use Not a finding and give the reason, so only undecided flags stay on the list. The templates are linked to the flags in Admin › Flag Rules${has(me, 'sa') || has(me, 'admin') ? ' (<a href="#/flags">open</a>)' : ''}.</p></div></section>`;
   return {

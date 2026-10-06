@@ -3,7 +3,7 @@
 // the statutory allocations, and the entry grid. Files are read on this device; only the values are kept.
 import { store, emitChange } from '../store.js';
 import { esc, toast, modal, confirmBox, pill, $, $$ } from '../ui.js';
-import { fsId, loadFsRec, SCBAA, scbaaLine, money, cents, parseAmt, shown, interChoice, isCombined } from '../fs.js';
+import { fsId, loadFsRec, scbaaNotSubmitted, SCBAA, scbaaLine, money, cents, parseAmt, shown, interChoice, isCombined } from '../fs.js';
 import { LINE } from '../coa.js';
 import { readRao, readBudget, defaultCol, raoFlags, placeOf, autoLayer, memKey, statRowOf, raoMapId } from '../rao.js';
 import { afsScreen, checkHTML } from './baarfs.js';
@@ -52,6 +52,7 @@ export function statRows(F, scb) {
 /* ── What the budget shows that may be a finding (for Possible Findings) ── */
 export function budgetFlags(F) {
   const scb = scbOf(F), out = [];
+  if (scbaaNotSubmitted(F.rec)) out.push({ id: 'noscbaa', rule: 'noscbaa', t: 'Statement of Comparison of Budget and Actual Amounts not submitted by management', d: 'Answered No on the Budget tab', amt: null });
   if (scb.none) out.push({ id: 'nobudget', rule: 'nobudget', t: 'No Annual Budget at the Audit Team', d: 'Ticked on the Budget tab', amt: null });
   raoFlags(scb.rao).forEach((f) => {
     if (f.kind === 'total') out.push({ id: `rao-total-${f.sheet}`, rule: 'rao', t: `RAO ${f.sheet}: the TOTAL COMMITMENT column (₱${money(f.commit, { dash: '0.00' })}) is ₱${money(Math.abs(f.diff))} ${f.diff > 0 ? 'less' : 'more'} than the items added up (₱${money(f.sum)})`, amt: Math.abs(f.diff) });
@@ -82,6 +83,8 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
       <div><h3>Not available</h3><p class="hint" style="margin:0 0 6px">Tick when the Annual Budget is not at the Audit Team. It is recorded in the Results and becomes a Possible Finding.</p>
         <label class="check" style="min-height:0"><input type="checkbox" id="b-none" ${scb.none ? 'checked' : ''} ${dis}>No Annual Budget at the Audit Team</label></div>
     </div>
+    <div class="tbm-row" style="margin-top:10px"><span class="label">Management submitted the Statement of Comparison of Budget and Actual Amounts?</span><div class="seg" role="group" aria-label="SCBAA submitted by management">${[['yes', 'Yes'], ['no', 'No']].map(([k, l]) => `<button type="button" data-scg="${k}" class="${(scbaaNotSubmitted(F.rec) ? 'no' : 'yes') === k ? 'on' : ''}" ${dis}>${l}</button>`).join('')}</div></div>
+    ${scbaaNotSubmitted(F.rec) ? '<div class="note warn" style="display:block;font-weight:400"><b>Not submitted.</b> The SCBAA is left out of the audited financial statements (Part 06, the print and Word, the page numbers and the Table of Contents) and is a Possible Finding on the Results tab. The amounts on this tab are still used for the RAO and statutory allocation checks.</div>' : ''}
     <div class="lr-row" style="margin-top:8px"><span class="hint">Revenue is not in the RAO, so it comes from the Annual Budget or is typed. A file is read here and not uploaded; only the amounts are kept.</span>
       <span><label class="btn sm ghost" for="b-pdf">View a PDF beside the entry</label><input type="file" id="b-pdf" accept=".pdf" hidden></span></div></div></section>`;
   // the RAO as read
@@ -207,6 +210,8 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
         const map = { ...(scb.map || {}) }; Object.keys(map).forEach((x) => { if (x.startsWith(k + '|')) delete map[x]; });
         await saveScb({ [k]: undefined, map }, `removed the ${name} from the budget`);
       }; });
+      $$('[data-scg]', root).forEach((b) => { b.onclick = () => { const no = b.dataset.scg === 'no'; if (no === scbaaNotSubmitted(F.rec)) return;
+        saveScb({ notSubmitted: no || undefined }, no ? 'recorded: SCBAA not submitted by management' : 'recorded: SCBAA submitted by management'); }; });
       const nb = $('#b-none', root); if (nb) nb.onchange = () => saveScb({ none: nb.checked || undefined }, nb.checked ? 'recorded: no Annual Budget at the Audit Team' : 'cleared: no Annual Budget at the Audit Team');
       if (cur) {
         const place = async (pairs) => {

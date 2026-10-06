@@ -22,7 +22,7 @@ export function buildToc({ audit, lgu, mun, pw, pages = {}, annexes = [] }) {
     { k: 'item', text: `Statement of Financial Position as at December 31, ${y}`, sub: [cmp], page: pg('sfpos') },
     { k: 'item', text: 'Consolidated Statement of Changes in Net Assets/Equity', sub: [year, cmp], page: pg('scne') },
     { k: 'item', text: 'Statement of Cash Flows', sub: [year, cmp], page: pg('scf') },
-    { k: 'item', text: 'Statement of Comparison of Budget and Actual Amounts', page: pg('scbaa') },
+    ...(pages.scbaa === null ? [] : [{ k: 'item', text: 'Statement of Comparison of Budget and Actual Amounts', page: pg('scbaa') }]),
     { k: 'item', text: 'Notes to Financial Statements', page: pg('notes') },
     { k: 'part', text: 'PART II – Observations and Recommendations', page: pg('p2') },
     { k: 'part', text: 'PART III – Status of Implementation of Prior Years’ Audit Recommendations' },

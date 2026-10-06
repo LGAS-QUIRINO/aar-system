@@ -54,7 +54,8 @@ const C6 = [
 ].map((title,i)=>({ id:String(i+1), title }));
 
 const norm = s => String(s || '').replace(/[–—]/g,'-').replace(/\s+/g,' ').trim();
-const isFocusAccount = (a,f) => f.re.some(re => re.test(norm(a.title)));
+// The title as is, and without a closing note in brackets: the Manual's "Trust Liabilities - Disaster Risk Reduction and Management Fund (DRRMF)".
+const isFocusAccount = (a,f) => { const t = norm(a.title), t2 = t.replace(/\s*\([^)]*\)\s*$/,''); return f.re.some(re => re.test(t) || re.test(t2)); };
 
 export function wpRefs(F, ctx) {
   const out = {};
@@ -145,6 +146,16 @@ function auditResultOf(item, cat, F, ctx) {
   const saved = F.rec && F.rec.auditResults && F.rec.auditResults[resultKey(cat,item)];
   if (saved) return saved;
   return workingPapersFor(item,cat,F,ctx).length ? 'In Progress' : 'Not Started';
+}
+// Lead schedule items marked No Findings (no AOM on them): their accounts, so Possible Findings can set their flags aside.
+export function leadNoFindings(F, ctx) {
+  if (!F.figY || !F.figY.any) return [];
+  const out = [];
+  [['focus', focusData(F)], ['oma', omaData(F)]].forEach(([cat, items]) => items.forEach((it) => {
+    if (auditResultOf(it, cat, F, ctx) !== 'No Findings') return;
+    out.push({ title: it.title, codes: new Set((it.rows || []).map((r) => r.a.code)), bdrrmf: cat === 'focus' && it.id === 't' });
+  }));
+  return out;
 }
 const RESULT_PILL = { 'Not Started':'grey', 'In Progress':'', 'No Findings':'ok', 'With Finding':'bad' };
 const resultPill = (v) => v ? pill(v, RESULT_PILL[v]) : '<span class="hint">—</span>';

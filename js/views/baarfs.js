@@ -7,7 +7,7 @@ import { has } from '../refs.js';
 import { nice, longDate, aomNo } from '../format.js';
 import { normTitle, rowKey, loadChart, CHART_NAME } from '../coa.js';
 import { interChoice, isCombined, keyCode, zeroRow, fundsOf, ALL_FUNDS, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
-  posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb,
+  posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb, scbaaNotSubmitted,
   money, shown, rawText, parseAmt, cents } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
 import { FS_CSS, stmtHTML, scbaaHTML, scbaaPages, fsPrint, fsSections, fsFileName } from '../baar-fs.js';
@@ -156,16 +156,17 @@ export function fsDoc(F, start, work = {}) {
   const scbaa = work.scbaa || (F.rec && F.rec.scbaa) || { rows: {} };
   const allRows = scbaaRows(F.figY.accts, F.chart);
   const prows = scbaaPrintRows(allRows, scbaa);
-  const nB = scbaaPages(prows).length;
+  const noSc = scbaaNotSubmitted(F.rec);
+  const nB = noSc ? 0 : scbaaPages(prows).length;
   const s = start || 0;
-  const pages = s ? { sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: s + 4, next: s + 4 + nB } : { next: 0 };
+  const pages = s ? { sfperf: s, sfpos: s + 1, scne: s + 2, scf: s + 3, scbaa: noSc ? null : s + 4, next: s + 4 + nB } : { next: 0 };
   return {
-    y: F.y, lgu: ctx.lgu, mun: ctx.mun, pages, allRows, scbaa: { rows: prows, data: scbaa },
+    y: F.y, lgu: ctx.lgu, mun: ctx.mun, pages, allRows, scbaa: { rows: prows, data: scbaa }, noScbaa: noSc,
     stmts: [buildPerf(fy, fp, F.y, noteRefs(F)), buildPos(fy, fp, F.y, noteRefs(F)), buildScne(fy, fp, F.y), buildScf(scfY, scfP, fy, fp, begY, begP, F.y)],
     scfNums: { begY, begP, scfY, scfP }
   };
 }
-export const fsPageCount = (F) => 4 + scbaaPages(scbaaPrintRows(scbaaRows(F.figY.accts, F.chart), (F.rec && F.rec.scbaa) || { rows: {} })).length;
+export const fsPageCount = (F) => 4 + (scbaaNotSubmitted(F.rec) ? 0 : scbaaPages(scbaaPrintRows(scbaaRows(F.figY.accts, F.chart), (F.rec && F.rec.scbaa) || { rows: {} })).length);
 
 // Checks of the statements: { st, t } and the status of each statement.
 export function afsChecks(F, doc) {
@@ -203,7 +204,8 @@ export function afsChecks(F, doc) {
       else { out.push({ st: 'warn', t: `Cash Flows ${yr}: ₱${money(Math.abs(cash - t.end))} left to explain (end ₱${money(t.end, { dash: '0.00' })} vs. cash ₱${money(cash, { dash: '0.00' })})` }); stat.scf = 'warn'; }
     });
     const typed = doc.allRows.some((r) => !r.h && scbaaLine(r, doc.scbaa.data).typed);
-    if (!typed) { out.push({ st: 'wait', t: 'Budget and Actual: enter the budget' }); stat.scbaa = 'grey'; }
+    if (doc.noScbaa) { out.push({ st: 'info', t: 'Budget and Actual: not submitted by management · left out of the audited financial statements (Possible Findings)' }); stat.scbaa = 'none'; }
+    else if (!typed) { out.push({ st: 'wait', t: 'Budget and Actual: enter the budget' }); stat.scbaa = 'grey'; }
     else out.push({ st: 'ok', t: `Budget and Actual: ${doc.scbaa.rows.filter((r) => !r.h).length} rows with amounts` });
     if (F.funds.length > 1) out.push(...interCheck(F.figY, F));
     const waitFunds = [...new Set(tabs(F).filter((x) => !entered(F.tb[x.yr][x.fund])).map((x) => x.label))];
@@ -213,7 +215,7 @@ export function afsChecks(F, doc) {
   ['sfperf', 'sfpos', 'scne', 'scf', 'scbaa'].forEach((k) => { stat[k] = stat[k] || base; });
   return { out, stat };
 }
-const STAT_PILL = { ok: ['Ready', 'ok'], warn: ['Check', 'warn'], grey: ['Enter amounts', 'grey'] };
+const STAT_PILL = { ok: ['Ready', 'ok'], warn: ['Check', 'warn'], grey: ['Enter amounts', 'grey'], none: ['Not submitted', 'grey'] };
 const stmtPill = (k, s) => pill(k === 'scbaa' && s === 'grey' ? 'Enter budget' : STAT_PILL[s][0], STAT_PILL[s][1]);
 
 // The pill of Part 06 on the parts strip.
@@ -515,7 +517,8 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
         const d = fsDoc(F, start, work);
         const pages = d.pages;
         const idx = { sfperf: 0, sfpos: 1, scne: 2, scf: 3 };
-        const html = sel === 'scbaa' ? scbaaHTML({ ...d.scbaa, y: F.y, lgu, mun, start: pages.scbaa }) : [stmtHTML(d.stmts[idx[sel]], { lgu, mun, page: pages[sel] })];
+        const html = sel === 'scbaa' && d.noScbaa ? ['<div class="empty" style="padding:40px 20px">Not submitted by management. The Statement of Comparison of Budget and Actual Amounts is left out of the audited financial statements.</div>']
+          : sel === 'scbaa' ? scbaaHTML({ ...d.scbaa, y: F.y, lgu, mun, start: pages.scbaa }) : [stmtHTML(d.stmts[idx[sel]], { lgu, mun, page: pages[sel] })];
         $('#f-paper', root).innerHTML = html.map((x) => `<div class="sheet fsheet">${x}</div>`).join('');
         const pgEl = $('#f-pg', root); if (pgEl) pgEl.textContent = !pages[sel] ? '' : sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
         const c = afsChecks(F, d);
