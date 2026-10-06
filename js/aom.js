@@ -22,9 +22,43 @@ export function setupVars(audit, lgu, mun) {
   const period = f === t ? String(t) : `${f} to ${t}`;
   // PERIOD_END_YEAR: the last year the audit covers (e.g. 2025 for Audit Year 2026). AUDIT_YEAR gives the same value and stays for older templates.
   // Years count back from the last year, so a template means the same years in a two- or three-year audit.
-  return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
+  const len = t - f + 1;
+  return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`, AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'BARANGAY', 'MUNICIPALITY'];
+// Filled in by the app (not typed in the working paper): from Audit Setup, and TABLEn_ITEMS from the AOM Tables.
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS'];
+export const isTableVar = (n) => /^TABLE\d+_ITEMS$/.test(n);
+// COA style for small numbers: 0 to 9 in words with the numeral, e.g. "two (2)"; 10 and up in numerals.
+const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
+export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
+// "A", "A and B", "A, B and C"
+export const joinAnd = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+// [TABLE1_ITEMS] etc.: the first-column entries of each AOM Table (without the Total row), so the wording names
+// exactly what the table shows.
+export function tableVars(d) {
+  const out = {};
+  const tables = (d && d.wpData && d.wpData.tables) || {};
+  Object.keys(tables).forEach((n) => {
+    const rows = (tables[n].rows || []).slice(1).map((r) => String((r || [])[0] ?? '').trim()).filter((x) => x && !/^total$/i.test(x));
+    if (rows.length) out[`TABLE${n}_ITEMS`] = joinAnd(rows);
+  });
+  return out;
+}
+// The years of the audit period, oldest first, read from the Setup values.
+export function periodYearList(vars) {
+  const m = /(\d{4})(?:\s*to\s*(\d{4}))?/.exec(String((vars && vars.AUDIT_PERIOD) || (vars && vars.PERIOD_END_YEAR) || ''));
+  if (!m) return [];
+  const f = Number(m[1]), t = Number(m[2] || m[1]), out = [];
+  for (let y = f; y <= t; y++) out.push(String(y));
+  return out;
+}
+// A table block's planned columns ("Account, [EACH_YEAR]"): [EACH_YEAR] becomes one column per year of the period,
+// other [PLACEHOLDERS] are filled from Setup. Returns null when the block has none.
+export function plannedCols(block, vars) {
+  const raw = String((block && block.cols) || '').split(',').map((x) => x.trim()).filter(Boolean);
+  if (!raw.length) return null;
+  return raw.flatMap((h) => (/^\[EACH_YEAR\]$/i.test(h) ? periodYearList(vars) : [fillText(h, vars || {})]));
+}
 
 const money = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Same rules as the workbook macro (FormatWPVariableValue), plus a few more money words.

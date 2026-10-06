@@ -53,6 +53,7 @@ export function blocksHTML(aom, o = {}) {
           <div class="field"><label class="label">Placement</label><select class="input" data-bi="${bi}" data-k="annex" ${dis}>
             <option value="0" ${b.annex ? '' : 'selected'}>In the text</option><option value="1" ${b.annex ? 'selected' : ''}>As an annex (after the AOM)</option></select></div>
           <div class="field"><label class="label">Caption (optional)</label><input class="input" data-bi="${bi}" data-k="caption" value="${esc(b.caption || '')}" ${dis}></div></div>
+        <div class="field"><label class="label">Columns (when filled in the app)</label><input class="input" data-bi="${bi}" data-k="cols" value="${esc(b.cols || '')}" placeholder="e.g. Account, [EACH_YEAR]" ${dis}><span class="hint">Separate with commas. [EACH_YEAR] gives one amount column per year of the audit period.</span></div>
         ${t ? `<div class="hint">From sheet "${esc(t.sheet)}" · ${t.rows.length - 1} rows · ${t.rows[0].length} columns. Edit the numbers in the working paper, then re-import.</div>`
           : '<div class="note warn">Not imported yet. Import the working paper on the Findings screen.</div>'}`;
     } else if (b.type === 'subheading') {

@@ -5,7 +5,7 @@
 import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has, myTeamIds } from '../refs.js';
-import { ST, statusPill, clone, ensureIds, snapshot, setupVars, formatVar, SETUP_VAR_NAMES } from '../aom.js';
+import { ST, statusPill, clone, ensureIds, snapshot, setupVars, formatVar, SETUP_VAR_NAMES, tableVars } from '../aom.js';
 import { mountReview, when } from '../reviewpane.js';
 import { aomTrail, printTrail, trailWord } from '../reviewtrail.js';
 import { nice, timeAgo } from '../format.js';
@@ -46,6 +46,7 @@ export async function loadSaor(refs, munId, year) {
     if (wp && wp.vars) Object.entries(wp.vars).forEach(([k, x]) => { v[k] = formatVar(k, x.raw); });
     const base = setupVars(au.data, refs.lgu[au.data.lguId]?.data, mun);
     SETUP_VAR_NAMES.forEach((k) => { if (base[k]) v[k] = base[k]; });
+    Object.assign(v, tableVars(a.data || a));
     return v;
   };
   const model = buildSaor({ audits: list.map((au) => ({ rec: au, lgu: refs.lgu[au.data.lguId]?.data.name || '?', vars: varsOf(au) })), aoms, templates, overrides: S.overrides });

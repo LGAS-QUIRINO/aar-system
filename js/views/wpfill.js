@@ -4,13 +4,13 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar } from '../aom.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar } from '../aom.js';
 import { money, cents, parseAmt } from '../fs.js';
 import { loadScript } from '../wp.js';
 
 const FILLED = '(filled in the app)';
 const WP_COLS = { 'WP-CA01': ['Name of Accountable Officer', 'Date Granted', 'Amount'], 'WP-REC001': ['Name of Debtor', 'Date', 'Amount'], 'WP-TAX01': ['Particulars', 'Month', 'Amount'] };
-const isAmtCol = (h) => /amount|total|balance|₱/i.test(h || '');
+const isAmtCol = (h) => /amount|total|balance|₱/i.test(h || '') || /^(19|20)\d\d$/.test(String(h || '').trim());   // a year heading is an amount column
 const KINDS = ['Amount', 'Number', 'Date', 'Text'];
 
 /* ── What a finding's working paper needs ── */
@@ -37,9 +37,13 @@ function tbFor(d, p, F) {
   if (!keys.length) return null;
   return { amt: keys.reduce((t, k) => t + (F.figY.accts[k] || 0), 0), label: keys.map((k) => F.chart.byKey[k].title).join(', ') };
 }
-const colsFor = (d, n) => {
+// v: the finding's values (Setup years), for columns planned in the AOM Table block.
+const colsFor = (d, n, v) => {
   const t = d.wpData && d.wpData.tables && d.wpData.tables[n];
   if (t && t.rows && t.rows.length) return t.rows[0];
+  const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
+  const planned = plannedCols(blk, v);
+  if (planned && planned.length) return planned;
   const def = ((d.wpDef && d.wpDef.tables) || []).find((x) => x.n === n);
   if (def) return def.cols.map((c) => c.t);
   return (WP_COLS[d.wp] && n === 1) ? WP_COLS[d.wp] : ['Particulars', 'Amount'];
@@ -72,7 +76,7 @@ export function fillHTML(d, F, ctx, editable) {
   }).join('');
   const tables = tn.map((n) => {
     const t = w.tables && w.tables[n];
-    const cols = colsFor(d, n), rows = dataRows(t), ac = amtCols(d, n, cols);
+    const cols = colsFor(d, n, v), rows = dataRows(t), ac = amtCols(d, n, cols);
     const tot = ac.length ? cols.map((_, i) => ac.includes(i) ? money(rows.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : '') : null;
     return `<div style="margin-top:12px"><div class="lr-row"><b style="color:var(--navy)">AOM Table ${n}</b>${editable ? `<span class="btn-row"><button class="btn sm ghost" type="button" data-wppaste="${n}">Paste from Excel</button><button class="btn sm ghost" type="button" data-wpaddrow="${n}">+ Add Row</button><button class="btn sm ghost" type="button" data-wpaddcol="${n}">+ Column</button></span>` : ''}</div>
       <table class="pf wpt"><thead><tr>${cols.map((h, i) => `<th${ac.includes(i) ? ' class="n"' : ''}>${editable ? `<input class="input" data-wph="${n}:${i}" value="${esc(h)}" aria-label="Column ${i + 1}">` : esc(h)}</th>`).join('')}<th style="width:30px"></th></tr></thead><tbody>
@@ -98,9 +102,9 @@ export function wpResults(d, F, ctx) {
   return out;
 }
 // Wires the Fill in Here inputs. d: the finding (changed in place); changed(): marks it unsaved and redraws.
-export function wireFill(root, d, me, changed, F) {
+export function wireFill(root, d, me, changed, F, v) {
   const W = () => { d.wpData = d.wpData || { file: FILLED, at: new Date().toISOString(), by: me.email, vars: {}, tables: {} }; d.wpData.vars = d.wpData.vars || {}; d.wpData.tables = d.wpData.tables || {}; if (d.wpData.file !== FILLED) { d.wpData.file = FILLED; } d.wpData.at = new Date().toISOString(); d.wpData.by = me.email; return d.wpData; };
-  const getRows = (n) => { const t = (d.wpData && d.wpData.tables || {})[n]; return { cols: [...colsFor(d, n)], rows: dataRows(t).map((r) => [...r]) }; };
+  const getRows = (n) => { const t = (d.wpData && d.wpData.tables || {})[n]; return { cols: [...colsFor(d, n, v)], rows: dataRows(t).map((r) => [...r]) }; };
   const putRows = (n, cols, rows) => { W().tables[n] = withTotal(d, n, cols, rows); changed(); };
   $$('[data-wpv]', root).forEach((el) => { el.onchange = () => { const w = W(), p = el.dataset.wpv, t = el.value.trim(); if (t === '') delete w.vars[p]; else { const n = parseAmt(t); w.vars[p] = { raw: n !== null && !isNaN(n) && /^[-\d,.()₱\s]+$/.test(t) ? n : t }; } changed(); }; });
   $$('[data-wptb]', root).forEach((b) => { b.onclick = () => { const p = b.dataset.wptb, tb = tbFor(d, p, F); if (!tb) return; const w = W(); w.vars[p] = { raw: tb.amt / 100 }; changed(); }; });
@@ -131,12 +135,12 @@ export async function downloadWp(d, ctx) {
   const { ph, tn } = wpNeeds(d), w = d.wpData || {}, v = ctx.varsFor({ data: d });
   const wb = XLSX.utils.book_new();
   const head = [[`${d.wp || 'Working Paper'} · ${d.title}`], [`Barangay ${ctx.lgu.name}, ${ctx.mun.name}, Quirino`], [], ['VARIABLE', 'VALUE']];
-  const vars = [...SETUP_VAR_NAMES.filter((k) => v[k] !== undefined).map((k) => [k, v[k]]), ...ph.map((p) => [p, w.vars && w.vars[p] ? w.vars[p].raw : ''])];
+  const vars = [...SETUP_VAR_NAMES.filter((k) => v[k] !== undefined && !isTableVar(k)).map((k) => [k, v[k]]), ...ph.map((p) => [p, w.vars && w.vars[p] ? w.vars[p].raw : ''])];
   const ws = XLSX.utils.aoa_to_sheet([...head, ...vars]); ws['!cols'] = [{ wch: 30 }, { wch: 40 }];
   XLSX.utils.book_append_sheet(wb, ws, 'WP');
   tn.forEach((n) => {
     const t = w.tables && w.tables[n];
-    const cols = colsFor(d, n), rows = dataRows(t), ac = amtCols(d, n, cols);
+    const cols = colsFor(d, n, v), rows = dataRows(t), ac = amtCols(d, n, cols);
     const data = rows.map((r) => cols.map((_, i) => { const x = r[i] ?? ''; if (ac.includes(i)) { const k = parseAmt(x); return k === null || isNaN(k) ? x : k; } return x; }));
     const tot = ac.length && rows.length ? [cols.map((_, i) => (i === 0 ? 'Total' : ac.includes(i) ? data.reduce((s, r) => s + (typeof r[i] === 'number' ? r[i] : 0), 0) : ''))] : [];
     const s = XLSX.utils.aoa_to_sheet([cols, ...data, ...tot]); s['!cols'] = cols.map(() => ({ wch: 24 }));

@@ -106,7 +106,7 @@ export async function pool(refs, params, q) {
         location.hash = go(code);
       };
       if (!rec) return;
-      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
+      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${/^TABLE\d+_ITEMS$/.test(n) ? 'from the table' : SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
       ph();
       const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
       if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);

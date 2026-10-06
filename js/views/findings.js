@@ -180,7 +180,7 @@ export async function findings(refs, params, q) {
       };
       function wireWp() {
         const cur = items.find((x) => x.id === sel);
-        if (cur) wireFill($('#f-wp', root), cur.data, refs.me, () => dirty(), F);
+        if (cur) wireFill($('#f-wp', root), cur.data, refs.me, () => dirty(), F, ctx.varsFor({ data: cur.data }));
         const dl = $('#wp-dl', root);
         if (dl && cur) dl.onclick = async () => { try { await downloadWp(cur.data, ctx); } catch (err) { toast('Excel failed: ' + err.message, 'bad'); } };
         const nw = $('#wp-new', root);
