@@ -364,6 +364,9 @@ export function buildLetter(info) {
   });
 
   body.push(BL()); body.push(BL());
+  // From "May we have your comments…" down to the Proof of Receipt table: kept on one page; if it does not fit, it all moves to the next page.
+  const keepFrom = body.length;
+  body.push({ kind: 'keepStart' });
   body.push(P('May we have your comments on the foregoing audit observation within five (5) calendar days upon receipt hereof.', { align: 'both', ind: { firstLine: 567 } }));
   const sig = (u, boldAll) => {
     if (!u) return;
@@ -385,8 +388,10 @@ export function buildLetter(info) {
   const sigW = Math.round((9360 - nameW) * 0.56);
   body.push({
     kind: 'table', receipt: true, widths: [nameW, sigW, 9360 - nameW - sigW],
-    rows: [['Proof of Receipt of AOM', 'Signature', 'Date'], ...rrows.map((c) => [c, '', ''])]
+    rows: [['Proof of Receipt of AOM', 'Signature', 'Date'], ...rrows.map((c) => [c, '', ''])], keepTogether: true
   });
+  body.slice(keepFrom).forEach((p) => { if (p.kind === 'p') p.keep = true; });
+  body.push({ kind: 'keepEnd' });
 
   const annexParts = annexes.map((x) => {
     const tbl = ((x.aom.data.wpData && x.aom.data.wpData.tables) || {})[x.block.n];
@@ -426,6 +431,8 @@ function runsHTML(runs, mark) {
 export function paraHTML(p, mark = true) {
   if (p.kind === 'image') return `<div class="lh"><img src="${p.src}" alt="Commission on Audit letterhead" style="width:${p.w}in;height:${p.h}in"></div>`;
   if (p.kind === 'letterhead') return `<div class="lh2"><img class="seal" src="${p.seal.src}" alt="Commission on Audit seal" style="width:${p.seal.w}in;height:${p.seal.h}in;left:${p.seal.left}in;top:${p.seal.top}in"><img class="name" src="${p.name.src}" alt="Republic of the Philippines, Commission on Audit" style="width:${p.name.w}in;height:${p.name.h}in"></div>`;
+  if (p.kind === 'keepStart') return '<div class="keepblk">';
+  if (p.kind === 'keepEnd') return '</div>';
   if (p.kind === 'table') return tableHTML(p);
   if (p.blank) return `<p class="bl"${p.keep ? ' style="break-after:avoid;page-break-after:avoid"' : ''}>&nbsp;</p>`;
   const ind = p.ind || {};
@@ -474,6 +481,7 @@ export const DOC_CSS = `
 .aom-doc .lh img{display:inline-block}
 .aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
+.keepblk{break-inside:avoid;page-break-inside:avoid}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
 .aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
 .aom-t th{font-weight:700;text-align:center}

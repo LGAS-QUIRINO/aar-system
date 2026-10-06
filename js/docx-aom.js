@@ -28,7 +28,7 @@ export async function downloadWord(doc) {
       border: p.ruleBelow ? { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 24, color: '000000', space: 4 } } : undefined
     });
   };
-  const cellP = (text, o = {}) => new Paragraph({ alignment: o.align || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(text || ''), bold: !!o.bold, font: FONT, size: o.size || 22 })] });
+  const cellP = (text, o = {}) => new Paragraph({ keepNext: !!o.keep, alignment: o.align || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(text || ''), bold: !!o.bold, font: FONT, size: o.size || 22 })] });
   const table = (t) => {
     if (t.receipt) {
       // Word prints these cells in 12 pt (the preview uses 11 pt): give the name column a little more room so names stay on one line.
@@ -37,10 +37,12 @@ export async function downloadWord(doc) {
       return new Table({
         columnWidths: t.widths, width: { size: t.widths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
         rows: t.rows.map((r, i) => new TableRow({
+          cantSplit: true,
           children: r.map((c, ci) => new TableCell({
             width: { size: t.widths[ci], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER,
-            children: i === 0 ? [cellP(c, { bold: true, align: AlignmentType.CENTER, size: 24 })]
-              : Array.isArray(c) ? [cellP(c[0], { bold: true, size: 24 }), cellP(c[1], { size: 24 })] : [cellP('')]
+            // Rows keep with the next row, so the whole table stays on one page with what comes before it.
+            children: i === 0 ? [cellP(c, { bold: true, align: AlignmentType.CENTER, size: 24, keep: true })]
+              : Array.isArray(c) ? [cellP(c[0], { bold: true, size: 24, keep: true }), cellP(c[1], { size: 24, keep: i < t.rows.length - 1 })] : [cellP('', { keep: i < t.rows.length - 1 })]
           }))
         }))
       });
@@ -57,7 +59,7 @@ export async function downloadWord(doc) {
       })
     });
   };
-  const toChildren = (list) => list.map((p) => {
+  const toChildren = (list) => list.filter((p) => p.kind !== 'keepStart' && p.kind !== 'keepEnd').map((p) => {
     if (p.kind === 'table') return table(p);
     if (p.kind === 'letterhead') {
       const kids = [];
