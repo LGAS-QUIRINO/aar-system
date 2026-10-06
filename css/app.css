@@ -766,3 +766,5 @@ body.ro-staff :is(button, a)[id$="print"], body.ro-staff :is(button, a)[id$="wor
 .sheet .pv-foot .pv-pg{color:#666}
 /* AOM print preview: one sheet per page */
 .paper-wrap .sheet.pv-page{padding:0;width:8.5in;margin:0 auto 16px}
+/* Review View: blank line between paragraphs of one part */
+.pgap{display:block;height:.75em}
