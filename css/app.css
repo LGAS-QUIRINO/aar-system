@@ -772,3 +772,13 @@ body.ro-staff :is(button, a)[id$="print"], body.ro-staff :is(button, a)[id$="wor
 .upd-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:9999;display:flex;align-items:center;gap:12px;background:var(--navy);color:#fff;padding:10px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(20,40,63,.3);font-size:14px;max-width:calc(100vw - 32px);flex-wrap:wrap}
 /* Setup: Trial Balance Used (label at the left, choices at the right) */
 .tbm-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line-2);padding-top:14px;margin-top:14px}
+/* Match the items (Budget tab): one box per section of the statement */
+details.mgrp{border:1px solid var(--line,#DCE3EA);border-radius:8px;margin:8px 0;background:#fff}
+details.mgrp>summary{list-style:none;cursor:pointer;user-select:none;display:flex;align-items:center;gap:10px;padding:10px 14px}
+details.mgrp>summary::-webkit-details-marker{display:none}
+details.mgrp>summary::before{content:'';width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(-45deg);transition:transform .15s;flex-shrink:0}
+details.mgrp[open]>summary::before{transform:rotate(45deg)}
+details.mgrp>summary b{color:var(--navy)}
+details.mgrp>summary .hint{margin-right:auto}
+details.mgrp>summary:hover b{color:var(--primary)}
+details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}

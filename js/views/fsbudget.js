@@ -21,6 +21,7 @@ export const STAT = [
   { k: 'bcpc', t: '1% BCPC', rate: 1, base: 'nta', row: '1% Barangay Council for the Protection of Children' }
 ];
 const BASE_NAME = { reg: 'Income from regular sources', nta: 'Share from National Tax Allotment (IRA/NTA)' };
+const MG_OPEN = new Set();   // the groups of Match the items left open (kept while the screen redraws)
 const ntaRow = SCBAA.find((r) => r.t === 'Share from Internal Revenue Collections');
 // The subsidy the General Fund gave: Combined (to the 5% BDRRMF) and Transfer (to the 10% SK Fund).
 function subsidies(F) {
@@ -116,13 +117,22 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
     const rows = cur.items.map((x, i) => ({ ...x, i, p: placeOf(scb, mem, cur.src, cur.sheet, x.label) }));
     const placed = rows.filter((x) => x.p.k && x.p.how !== 'suggested').length, sugg = rows.filter((x) => x.p.how === 'suggested').length;
     const how = (p) => !p.k ? pill('Choose', 'grey') : p.how === 'suggested' ? pill('Suggested', 'warn') : p.k === 'skip' ? pill('Left out', 'grey') : pill(p.how === 'chosen' ? '✓ Chosen' : p.how === 'remembered' ? '✓ Remembered' : '✓ By name', 'ok');
+    // Accordion: items to place first (open), then one group per section of the statement, then the items left out.
+    const secOf = {}; let h = '';
+    SCBAA.forEach((r) => { if (r.h) h = r.h; else secOf[r.k] = h; });
+    const todo = (x) => !x.p.k || x.p.how === 'suggested';
+    const gmap = new Map([['todo', { key: 'todo', name: 'To place', rows: [] }], ...[...new Set(Object.values(secOf))].map((n) => [n, { key: n, name: n, rows: [] }]), ['skip', { key: 'skip', name: 'Left out', rows: [], left: true }]]);
+    rows.forEach((x) => gmap.get(todo(x) ? 'todo' : x.p.k === 'skip' ? 'skip' : secOf[x.p.k] || 'todo').rows.push(x));
+    const groups = [...gmap.values()].filter((g) => g.rows.length).map((g) => ({ ...g, todo: g.key === 'todo' ? g.rows.length : 0, open: g.key === 'todo' || MG_OPEN.has(`${cur.id}|${g.key}`) }));
     matchHTML = `<section class="panel" id="b-match" data-transient><div class="panel-head"><h2>Match the items</h2><span class="hint" style="margin-left:8px">${placed} of ${rows.length} placed</span>
         ${canEdit && sugg ? `<button class="btn sm ghost" type="button" id="b-sugg" style="margin-left:auto">Use the ${sugg} suggestion${sugg > 1 ? 's' : ''}</button>` : ''}</div><div class="panel-body">
       <div class="tabs2">${srcs.map((x) => `<a class="t ${x === cur ? 'on' : ''}" href="${base}&s=budget&m=${encodeURIComponent(x.id)}">${esc(x.label)}</a>`).join('')}</div>
+      ${groups.length > 1 ? '<div class="lr-row" style="justify-content:flex-end;margin:6px 0 2px"><button class="reset" type="button" data-mg-all="1">Open all</button><button class="reset" type="button" data-mg-all="0">Close all</button></div>' : ''}
+      ${groups.map((g) => `<details class="mgrp" data-mg="${esc(g.key)}" ${g.open ? 'open' : ''}><summary><b>${esc(g.name)}</b><span class="hint">${g.rows.length} item${g.rows.length > 1 ? 's' : ''} · ₱${money(g.rows.reduce((n, x) => n + (x.a || 0), 0), { dash: '0.00' })}</span>${g.todo ? pill(`${g.todo} to place`, 'warn') : pill(g.left ? 'Left out' : '✓ Placed', g.left ? 'grey' : 'ok')}</summary>
       <table class="pf"><colgroup><col><col style="width:130px"><col style="width:130px"><col style="width:300px"><col style="width:110px"></colgroup>
         <thead><tr><th>Item in the ${cur.src === 'rao' ? 'RAO' : esc(SRC_NAME[cur.src])}</th><th class="n">${cur.src === 'rao' ? 'Appropriation' : 'Amount'}</th><th class="n">${cur.src === 'rao' ? 'Obligations' : ''}</th><th>Row of the statement</th><th></th></tr></thead><tbody>
-        ${rows.map((x) => `<tr><td>${esc(x.label)}${x.group && x.group !== x.label ? `<div class="hint">${esc(x.group)}</div>` : ''}</td><td class="n">${money(x.a, { dash: '-' })}</td><td class="n">${x.b === undefined ? '' : money(x.b, { dash: '-' })}</td>
-          <td><select class="sel" style="width:100%" data-place="${x.i}" aria-label="Row for ${esc(x.label)}" ${dis}>${opts(x.p.k)}</select></td><td>${how(x.p)}</td></tr>`).join('')}</tbody></table>
+        ${g.rows.map((x) => `<tr><td>${esc(x.label)}${x.group && x.group !== x.label ? `<div class="hint">${esc(x.group)}</div>` : ''}</td><td class="n">${money(x.a, { dash: '-' })}</td><td class="n">${x.b === undefined ? '' : money(x.b, { dash: '-' })}</td>
+          <td><select class="sel" style="width:100%" data-place="${x.i}" aria-label="Row for ${esc(x.label)}" ${dis}>${opts(x.p.k)}</select></td><td>${how(x.p)}</td></tr>`).join('')}</tbody></table></details>`).join('')}
       <p class="hint" style="margin:8px 0 0">Matched by name; your choices are remembered for Barangay ${esc(ctx.lgu.name)}, so next year's file matches by itself. Items going to the same row are added together.${cur.src === 'rao' ? ' The statutory sheets (20%, 5%, 1%) go to their row as a whole.' : ''}</p></div></section>`;
   }
   // statutory allocations
@@ -143,6 +153,9 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
     body: v.body,
     mount(root) {
       v.mount(root);
+      const mid = cur ? cur.id : '';
+      root.querySelectorAll('details.mgrp').forEach((d) => d.addEventListener('toggle', () => { const k = `${mid}|${d.dataset.mg}`; if (d.open) MG_OPEN.add(k); else MG_OPEN.delete(k); }));
+      root.querySelectorAll('[data-mg-all]').forEach((b) => b.addEventListener('click', () => root.querySelectorAll('details.mgrp').forEach((d) => { d.open = b.dataset.mgAll === '1'; })));
       const { lgu } = ctx;
       const saveScb = async (patch, what, memPatch) => {
         const rec = (await loadFsRec(F.lguId, F.y)) || { type: 'fs', teamId: ctx.teamId, lguId: F.lguId, year: F.y, auditId: ctx.rec.id };
