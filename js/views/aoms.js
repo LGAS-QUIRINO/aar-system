@@ -178,8 +178,9 @@ export async function aoms(refs, params, q) {
         const blocked = recs.filter((a) => openComments(a.id === cur.id ? state.aom : a.data, refs.me.email).length);
         if (blocked.length) { toast(`Answer or mark resolved every comment first: ${blocked.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. Open Review View to reply.`, 'bad'); return; }
         const problems = recs.filter((a) => allChecks(a, a.id === cur.id ? state.aom : a.data).some((c) => c.st === 'bad'));
-        if (problems.length && !(await confirmBox('Some Draft Results Need Fixing', `${problems.length} AOM${problems.length > 1 ? 's have' : ' has'} missing values or tables (${problems.map((a) => esc(a.data.title)).join(', ')}). Forward anyway?`, 'Forward Anyway'))) return;
-        if (!problems.length && !(await confirmBox('Forward for Review', `Forward ${recs.length} AOM${recs.length > 1 ? 's' : ''} to ${esc(nice(ctx.atl ? ctx.atl.name : 'the reviewer'))}? You can retrieve ${recs.length > 1 ? 'them' : 'it'} until the review starts.`, 'Forward', 'success'))) return;
+        // Every placeholder must have its value (and every table its data) before an AOM goes for review.
+        if (problems.length) { toast(`Fill in the missing values or tables first: ${problems.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. See Draft Results.`, 'bad'); return; }
+        if (!(await confirmBox('Forward for Review', `Forward ${recs.length} AOM${recs.length > 1 ? 's' : ''} to ${esc(nice(ctx.atl ? ctx.atl.name : 'the reviewer'))}? You can retrieve ${recs.length > 1 ? 'them' : 'it'} until the review starts.`, 'Forward', 'success'))) return;
         const now = new Date().toISOString();
         for (const a of recs) {
           const d = a.id === cur.id ? clone(state.aom) : clone(a.data);

@@ -279,6 +279,14 @@ export async function review(refs, params, q) {
         const fresh = await store.get('aoms', cur.id);
         state.aom = ensureIds(clone(fresh.data));
       }
+      // An AOM with a missing value or an empty table cannot be approved: it would print with blanks.
+      const unfilled = (data) => checks(data, ctx.varsFor({ data }), ctx.audit).filter((c) => c.st === 'bad');
+      const filledOk = (items) => {
+        const bad = items.filter((x) => unfilled(x.data).length);
+        if (!bad.length) return true;
+        toast(`Cannot approve yet: ${bad.map((x) => fillText(x.data.title, ctx.varsFor({ data: x.data }))).join(', ')} still has missing values or tables. Fill them in (Correct Text) or return it to the member.`, 'bad');
+        return false;
+      };
       const numOk = () => { if (!$('#r-numok', root).checked) { toast('Tick "I checked the AOM numbering" first.', 'warn'); return false; } return true; };
       const approveOne = (d, id) => {
         const now = new Date().toISOString();
@@ -296,6 +304,7 @@ export async function review(refs, params, q) {
       $('#r-approve', root).onclick = async () => {
         if (!numOk()) return;
         await settle();
+        if (!filledOk([{ data: state.aom }])) return;
         const d = approveOne(clone(state.aom), cur.id);
         await store.save('aoms', cur.id, d, { silent: true });
         await store.log(willFinal ? 'approved an AOM as Final' : 'approved an AOM and forwarded it to the SA', `${ctx.lgu.name} · ${cur.data.title}`, ctx.teamId, me.email);
@@ -324,6 +333,7 @@ export async function review(refs, params, q) {
         if (!numOk()) return;
         if (!(await confirmBox('Approve Remaining', `Approve this AOM and the ${pendingMine.length} other${pendingMine.length > 1 ? 's' : ''} waiting for you${willFinal ? ' as Final' : ' and forward them to the SA'}? Open each one first if you have not reviewed it.`, 'Approve All', 'success'))) return;
         await settle();
+        if (!filledOk([{ data: state.aom }, ...pendingMine.map((a) => ({ data: a.data }))])) return;
         for (const a of [cur, ...pendingMine]) {
           const d = approveOne(clone(a.id === cur.id ? state.aom : a.data), a.id);
           await store.save('aoms', a.id, d, { silent: true });
