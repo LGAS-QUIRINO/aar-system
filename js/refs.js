@@ -1,9 +1,11 @@
 // Loads the shared lists every screen needs, and answers "who am I / what may I see".
 import { store } from './store.js';
 import { auth } from './auth.js';
+import { fixDesignation } from './format.js';
 
 export async function loadRefs() {
-  const [users, teams, lgus] = await Promise.all([store.list('users'), store.list('teams'), store.list('lgus')]);
+  const [users0, teams, lgus] = await Promise.all([store.list('users'), store.list('teams'), store.list('lgus')]);
+  const users = users0.map((u) => (u.data.designation ? { ...u, data: { ...u.data, designation: fixDesignation(u.data.designation) } } : u));
   const meRec = users.find((u) => String(u.data.email).toLowerCase() === auth.email);
   const me = meRec ? { id: meRec.id, ...meRec.data } : null;
   const byId = (arr) => Object.fromEntries(arr.map((r) => [r.id, r]));

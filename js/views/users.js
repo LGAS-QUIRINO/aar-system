@@ -2,7 +2,7 @@
 import { store, newId, emitChange } from '../store.js';
 import { esc, modal, toast, pill, confirmBox, $, $$ } from '../ui.js';
 import { ST } from '../aom.js';
-import { ROLE_NAMES, nice, upper, longDate } from '../format.js';
+import { ROLE_NAMES, nice, upper, longDate, fixDesignation } from '../format.js';
 import { CONFIG, DEMO } from '../config.js';
 
 const POSITIONS = ['State Auditor V', 'State Auditor IV', 'State Auditor III', 'State Auditor II', 'State Auditor I', 'State Auditing Examiner II', 'OSA Staff', 'Job Order'];
@@ -115,7 +115,7 @@ export async function users(refs) {
           if (!roles.length) { toast('Choose at least one role.', 'bad'); return false; }
           const status = u ? $('#u-status', bg).value : 'invited';
           if (id === refs.me.id && (!roles.includes('admin') || status === 'disabled')) { toast('You cannot remove your own Admin access.', 'bad'); return false; }
-          editUser.out = { email, name: upper($('#u-name', bg).value.trim()), nickname: $('#u-nick', bg).value.trim(), position: $('#u-pos', bg).value.trim(), designation: $('#u-des', bg).value.trim(),
+          editUser.out = { email, name: upper($('#u-name', bg).value.trim()), nickname: $('#u-nick', bg).value.trim(), position: $('#u-pos', bg).value.trim(), designation: fixDesignation($('#u-des', bg).value),
             roles, teamIds: $$('input[name=team]:checked', bg).map((x) => x.value), status };
           const teamsNow = editUser.out.teamIds;
           editUser.out.munIds = $('#u-munbox', bg).hidden ? [] : $$('input[name=mun]:checked', bg).map((x) => x.value).filter((mid) => teamsNow.includes(refs.lgu[mid]?.data.teamId));

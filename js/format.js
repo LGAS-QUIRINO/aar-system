@@ -31,5 +31,7 @@ export const timeAgo = (iso) => {
   const sameDay = new Date().toDateString() === d.toDateString();
   return (sameDay ? 'Today, ' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ') + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 };
+// Designations print the same way everywhere: "OIC Audit Team Leader" → "OIC-Audit Team Leader".
+export const fixDesignation = (s) => String(s || '').trim().replace(/^OIC\s*[-–—]?\s*/i, 'OIC-');
 export const ROLE_NAMES = { member: 'Team Member', staff: 'Team Staff', atl: 'Audit Team Leader', sa: 'Supervising Auditor', osa: 'OSA Staff', admin: 'Admin' };
 export const FUND_NAMES = { GF: 'General Fund', BDRRMF: '5% BDRRMF', SEF: 'Special Education Fund', TF: 'Trust Fund' };

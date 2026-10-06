@@ -34,7 +34,9 @@ export async function print(refs, params, q) {
     mount(root) {
       const draw = () => {
         const d = doc();
-        $('#pr-prev', root).innerHTML = `<div class="sheet">${letterHTML(d, false)}</div>`;
+        // The footer, as printed at the bottom right of every page (the page number is added when printed).
+        const foot = `<div class="pv-foot"><div class="pv-pg">Page # of #</div>${d.footer.map((t) => `<div>${esc(t)}</div>`).join('')}</div>`;
+        $('#pr-prev', root).innerHTML = `<div class="sheet">${letterHTML(d, false)}${foot}</div><div class="hint" style="text-align:right;margin-top:6px">The footer prints at the bottom right of every page, with the page number.</div>`;
         $('#pr-mode', root).innerHTML = d.draft ? '<div class="note warn">Prints as <b>DRAFT</b> with a watermark.</div>' : '<div class="note ok">All chosen AOMs are Final. Prints without a watermark.</div>';
         $('#pr-print', root).disabled = $('#pr-word', root).disabled = chosen.size === 0;
       };
