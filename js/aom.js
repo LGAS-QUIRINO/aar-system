@@ -373,14 +373,18 @@ export function buildLetter(info) {
     if (u.designation) body.push(P(u.designation, { bold: boldAll, ind: { left: 4770 } }));
   };
   const oneStep = atl && sa && atl.id === sa.id;
-  if (!oneStep) sig(atl, true);
+  if (!oneStep) sig(atl, false);   // only the name is bold
   sig(sa, false);
   body.push(BL()); body.push(BL());
   body.push(P('Proof of Receipt of AOM:', { bold: true }));
   const rec = officials.filter((o) => o.role === 'For' || o.role === 'Attention');
+  // The name column fits the longest name or position; Signature and Date share the rest of the 6.5" width.
+  const rrows = rec.map((o) => [fullName(o), pos(o)]);
+  const nameW = Math.min(5040, Math.max(2900, ...rrows.map(([n, p]) => Math.max(String(n).length * 128, String(p).length * 105)), 'Proof of Receipt of AOM'.length * 118) + 280);
+  const sigW = Math.round((9360 - nameW) * 0.56);
   body.push({
-    kind: 'table', receipt: true, widths: [5040, 2340, 1980],
-    rows: [['Proof of Receipt of AOM', 'Signature', 'Date'], ...rec.map((o) => [[fullName(o), pos(o)], '', ''])]
+    kind: 'table', receipt: true, widths: [nameW, sigW, 9360 - nameW - sigW],
+    rows: [['Proof of Receipt of AOM', 'Signature', 'Date'], ...rrows.map((c) => [c, '', ''])]
   });
 
   const annexParts = annexes.map((x) => {
@@ -473,7 +477,7 @@ export const DOC_CSS = `
 .aom-t th{font-weight:700;text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
-.aom-t.receipt td{height:.55in}
+.aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}
 .ph-fill{background:#E3F1E7;border-radius:2px}
 .ph-miss{background:#FDE2E1;color:#9F1C1C;font-weight:700;border-radius:2px}

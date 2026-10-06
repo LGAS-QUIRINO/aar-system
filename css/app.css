@@ -245,7 +245,7 @@ a.t-row:focus-visible, .t-row:focus-visible, .btn:focus-visible { outline: 2px s
 .aom-t th{font-weight:700;text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
-.aom-t.receipt td{height:.55in}
+.aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}
 .ph-fill{background:#E3F1E7;border-radius:2px}
 .ph-miss{background:#FDE2E1;color:#9F1C1C;font-weight:700;border-radius:2px}

@@ -31,10 +31,12 @@ export async function downloadWord(doc) {
   const cellP = (text, o = {}) => new Paragraph({ alignment: o.align || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(text || ''), bold: !!o.bold, font: FONT, size: o.size || 22 })] });
   const table = (t) => {
     if (t.receipt) {
+      // Word prints these cells in 12 pt (the preview uses 11 pt): give the name column a little more room so names stay on one line.
+      const nw = Math.min(5040, Math.round(t.widths[0] * 1.12)), sw = Math.round((9360 - nw) * 0.56);
+      t = { ...t, widths: [nw, sw, 9360 - nw - sw] };
       return new Table({
         columnWidths: t.widths, width: { size: t.widths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
         rows: t.rows.map((r, i) => new TableRow({
-          height: i ? { value: 820, rule: HeightRule.ATLEAST } : undefined,
           children: r.map((c, ci) => new TableCell({
             width: { size: t.widths[ci], type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER,
             children: i === 0 ? [cellP(c, { bold: true, align: AlignmentType.CENTER, size: 24 })]
