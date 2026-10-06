@@ -52,6 +52,9 @@ const tabs = (F) => {
 };
 const tabLabel = (F, x) => `${x.label} · CY ${x.yr}${x.cmp ? ' Comparative (audited)' : ''}`;
 
+// A post-closing trial balance (the heading says so, or it has no revenue or expense accounts) cannot make the statements:
+// Financial Performance needs the revenue and expenses, so the pre-closing trial balance is required.
+const postClosing = (F, x, t, s) => (t.rows || []).some((r) => !r.del) && (!s.revexp || headingCheck(t, F.ctx.lgu.name, x.yr).post);
 function tabStatus(F, x) {
   const t = F.tb[x.yr][x.fund];
   if (!t) return { pill: pill('Not yet', 'grey'), done: false };
@@ -59,6 +62,7 @@ function tabStatus(F, x) {
   const s = tbState(t, F.chart);
   if (s.fix) return { pill: pill(`${s.fix} to fix`, 'warn'), done: false, s };
   if (!s.balanced) return { pill: pill('Not balanced', 'warn'), done: false, s };
+  if (postClosing(F, x, t, s)) return { pill: pill('Post-closing · use pre-closing', 'warn'), done: false, s, post: true };
   return { pill: pill(x.cmp && fromPrior(F, x.fund) ? `✓ From CY ${F.yp} BAAR` : '✓', 'ok'), done: true, s };
 }
 export { tabs, tabLabel, tabStatus, entered };
@@ -172,6 +176,8 @@ export function afsChecks(F, doc) {
     const fs = tabs(F).map((x) => tbState(F.tb[x.yr][x.fund] && !F.tb[x.yr][x.fund].none ? F.tb[x.yr][x.fund] : null, F.chart));
     const fix = fs.reduce((n, s) => n + s.fix, 0);
     if (fix) out.push({ st: 'warn', t: `The Trial Balance tab still has ${fix} item${fix > 1 ? 's' : ''} to fix` });
+    const post = tabs(F).filter((x) => tabStatus(F, x).post).map((x) => `${x.label} CY ${x.yr}${x.cmp ? ' Comparative' : ''}`);
+    if (post.length) out.push({ st: 'warn', t: `${post.join(', ')}: post-closing trial balance; import the pre-closing one (with revenue and expenses)` });
     if (!F.confirmed) out.push({ st: 'warn', t: 'Not yet confirmed as submitted (Results tab)' });
     [[F.figY, F.y], [F.figP, F.yp]].forEach(([fig, yr]) => {
       if (!fig.any) return;
@@ -255,6 +261,7 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
     const fixed = (x) => !!(x.r.use && x.res.acct);
     const h = headingCheck(t, ctx.lgu.name, cur.yr);
     const ft = t.file && t.file.totals;
+    if (t.rows.length && postClosing(F, cur, t, s)) content += `<div class="note bad" style="display:block"><b>This looks like a post-closing trial balance</b> (${h.post ? 'the heading says Post-Closing' : 'it has no revenue or expense accounts'}). The statements need the <b>pre-closing</b> trial balance, with the revenue and expense accounts. Ask the bookkeeper for it, then Clear this one and import it. Confirm stays locked until then.</div>`;
     content += `<div class="note ${h.known && !(h.okName && h.okYear) ? 'warn' : 'ok'}" style="display:block;font-weight:400">${t.file && t.file.name ? `Imported <b>${esc(t.file.name)}</b>` : 'Pasted rows'}${h.known ? ` · ${esc(h.text)}${h.okName && h.okYear ? ' ✓' : ''}` : ''} · ${t.rows.length} accounts${t.file && t.file.byName ? ` · by ${esc(nice(t.file.byName))}, ${esc(longDate((t.file.at || '').slice(0, 10)))}` : ''}
       ${ft ? `<br><span class="hint">Grand totals in the file: debit ${esc(shown(ft.dr))} · credit ${esc(shown(ft.cr))}</span>` : ''}</div>
       <div class="sumc" style="grid-template-columns:repeat(5,1fr)"><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart === 'manual').length}</b>Manual</div><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart !== 'manual').length}</b>COA Circular 2015-009${s.rows.some((x) => x.res.m.chart === 'added') ? ' / Added' : ''}</div><div><b style="color:var(--warn-ink)">${s.rows.filter((x) => x.res.m.st === 'check' && !fixed(x)).length}</b>Check</div><div><b style="color:var(--bad-ink)">${s.rows.filter((x) => x.res.m.st === 'ver' && !fixed(x)).length}</b>For Verification</div><div><b style="color:var(--ok-ink)">${s.rows.filter(fixed).length}</b>Corrected</div></div>`;

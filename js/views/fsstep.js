@@ -57,7 +57,7 @@ async function resultsTab({ F, ctx, me, q, base, canEdit }) {
     ? `<div class="note ok" style="display:block">Confirmed as submitted by ${esc(nice(conf.byName || conf.by))}, ${esc(longDate((conf.at || '').slice(0, 10)))}. The trial balances, the budget and the statements are locked for the BAAR (Parts 06 and 07).</div>
        ${has(me, 'sa') || has(me, 'admin') ? '<div class="lr-row"><span class="hint">Only the SA or Admin can reopen them, with a reason.</span><button class="btn sm ghost" type="button" id="fs-reopen">Reopen</button></div>' : '<span class="hint">Only the SA or Admin can reopen them.</span>'}`
     : `<p class="hint" style="margin:0 0 8px">When the trial balances, the budget and the statements are final, confirm them as submitted. They are then locked for the BAAR (Parts 06 and 07). Only the SA or Admin can reopen them, with a reason.</p>
-       ${ready ? '' : '<p class="hint" style="margin:0 0 8px;color:var(--warn-ink)">Every fund and year must be entered, balanced and with nothing left to fix on the Trial Balance tab.</p>'}
+       ${ready ? '' : '<p class="hint" style="margin:0 0 8px;color:var(--warn-ink)">Every fund and year must be entered, balanced, pre-closing (with revenue and expense accounts) and with nothing left to fix on the Trial Balance tab.</p>'}
        ${canEdit ? `<button class="btn primary" type="button" id="fs-confirm" ${ready ? '' : 'disabled'}>Confirm as Submitted</button>` : ''}`;
   const body = `<div class="xcols" style="grid-template-columns:minmax(0,1fr) 310px">
       <div class="xform">${pf.body}</div>
