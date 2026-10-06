@@ -4,7 +4,6 @@ import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
 import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
-import { POOL_SEED } from '../library-seed.js';
 import { SAOR_WORDING } from '../saor-wording.js';
 import { nice, longDate } from '../format.js';
 
@@ -78,7 +77,6 @@ export async function pool(refs, params, q) {
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
       <div class="btn-row"><button class="btn ghost" disabled title="Comes in Phase 5">Import Issued AOMs (Word)</button>${canManage ? '<button class="btn primary" id="p-new">+ New Template</button>' : ''}</div></div>
     ${canManage && missingSaor.length ? `<div class="note info" style="align-items:center"><span>${missingSaor.length} template${missingSaor.length > 1 ? 's have' : ' has'} no SAOR wording yet. The approved wording is ready to load.</span><button class="btn sm primary" id="p-saor-load" style="margin-left:auto">Load the Approved SAOR Wording</button></div>` : ''}
-    ${!groups.length && canManage ? `<div class="note warn" style="align-items:center">The Library is empty. <button class="btn sm primary" id="p-seed" style="margin-left:auto">Load the ${POOL_SEED.length} Templates from Your Workbook</button></div>` : ''}
     <div class="split" style="grid-template-columns:340px minmax(0,1fr)">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>Templates · ${groups.length}</h2></div>
         <div class="panel-body" style="padding:12px 16px"><input class="input" id="p-find" placeholder="Search templates" value="${esc(q.get('find') || '')}" aria-label="Search templates"></div>
@@ -90,14 +88,6 @@ export async function pool(refs, params, q) {
     mount(root) {
       const f = $('#p-find', root);
       f.onchange = () => { location.hash = '#/library?' + (selCode ? 'code=' + encodeURIComponent(selCode) + '&' : '') + 'find=' + encodeURIComponent(f.value); };
-      const seed = $('#p-seed', root);
-      if (seed) seed.onclick = async () => {
-        for (const t of POOL_SEED) {
-          await store.save('aom_library', 'obs-' + t.code + '-v1', { ...clone(t), saor: SAOR_WORDING[t.code]?.obs || t.saor || '', saorRec: SAOR_WORDING[t.code]?.rec || '', version: 1, status: 'Active', note: 'From the Barangay Audit System workbook', approvedBy: refs.me.email, approvedAt: new Date().toISOString() }, { silent: true });
-        }
-        await store.log('loaded the AOM Library templates', POOL_SEED.length + ' templates', '', refs.me.email);
-        emitChange('local'); toast('Templates loaded.', 'ok');
-      };
       const sl = $('#p-saor-load', root);
       if (sl) sl.onclick = async () => {
         if (!(await confirmBox('Load SAOR Wording', `Add the approved SAOR wording to ${missingSaor.length} template${missingSaor.length > 1 ? 's' : ''}? Templates that already have SAOR wording are not changed.`, 'Load', 'success'))) return;
