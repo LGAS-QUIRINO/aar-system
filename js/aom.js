@@ -21,9 +21,10 @@ export function setupVars(audit, lgu, mun) {
   const f = Number(audit.periodFrom), t = Number(audit.periodTo);
   const period = f === t ? String(t) : `${f} to ${t}`;
   // PERIOD_END_YEAR: the last year the audit covers (e.g. 2025 for Audit Year 2026). AUDIT_YEAR gives the same value and stays for older templates.
-  return { PERIOD_END_YEAR: String(t), AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
+  // Years count back from the last year, so a template means the same years in a two- or three-year audit.
+  return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'BARANGAY', 'MUNICIPALITY'];
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'BARANGAY', 'MUNICIPALITY'];
 
 const money = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Same rules as the workbook macro (FormatWPVariableValue), plus a few more money words.
@@ -43,6 +44,18 @@ export function formatVar(name, raw) {
 /* ───────── The AOM's amount (title of the AOM and of BAAR Part II) ───────── */
 const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
 const isMoneyName = (n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n);
+// Values for the title and the topic sentence: amounts follow the COA figures rule (see titleAmount).
+export function topicVars(vars) {
+  const out = { ...(vars || {}) };
+  Object.keys(out).forEach((k) => {
+    if (!isMoneyName(k)) return;
+    const s = String(out[k] ?? '').trim();
+    if (!/^-?₱?\s?-?[\d,]+(\.\d+)?$/.test(s)) return;
+    const n = Number(s.replace(/[₱,\s]/g, ''));
+    if (!isNaN(n)) out[k] = titleAmount(n);
+  });
+  return out;
+}
 // The amount placeholders in an AOM's wording, in order (choices for the amount in the title).
 export function moneyPlaceholders(d) {
   const names = [];
@@ -65,11 +78,12 @@ export function aomAmount(d) {
   }
   return null;
 }
-// The amount after the title, as in Balligui: ₱30,570.72; from ₱100,000 up in millions, cut to three decimals (₱7,019,816.11 → ₱7.019 million).
+// COA rule for figures in the topic sentence and title: below ₱100,000 the whole amount (₱30,570.72);
+// from ₱100,000 up in millions, rounded to three decimals (₱5,285,690.72 → ₱5.286 million).
 export function titleAmount(n) {
   if (n === null || n === undefined || isNaN(n)) return '';
   const v = Number(n);
-  return Math.abs(v) >= 100000 ? `₱${(Math.trunc(v / 1000) / 1000).toFixed(3)} million` : '₱' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.abs(v) >= 100000 ? `₱${(Math.round(v / 1000) / 1000).toFixed(3)} million` : '₱' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 // A title that already carries an amount (typed, or a money placeholder) does not get it twice.
 export const titleHasAmount = (title) => /₱|\bP\s?\d/.test(String(title || '')) || [...String(title || '').matchAll(/\[([A-Z0-9_]+)\]/g)].some((m) => MONEY.test(m[1]) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(m[1]));
@@ -271,7 +285,8 @@ export function findingParas(aom, ctx) {
   out.push(BL());   // a blank line between the AOM No. and the finding title
   // The amount follows the title, the same as in BAAR Part II.
   const amt = titleHasAmount(aom.title) ? null : aomAmount(aom);
-  out.push(P([...fillRuns(aom.title || '', vars), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
+  const tv = topicVars(vars);
+  out.push(P([...fillRuns(aom.title || '', tv), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
   out.push(BL());
   let subIdx = -1;
   (aom.blocks || []).forEach((b, bi) => {
@@ -279,7 +294,7 @@ export function findingParas(aom, ctx) {
     const left = inSub ? SUB : BODY;
     const blockStart = out.length;
     if (b.type === 'topic') {
-      out.push(P(fillRuns(b.text, vars), { bold: true, align: 'both', ind: { left: 567, hanging: 567 }, label: ctx.num }));
+      out.push(P(fillRuns(b.text, tv), { bold: true, align: 'both', ind: { left: 567, hanging: 567 }, label: ctx.num }));
     } else if (b.type === 'criteria') {
       if (b.quoted) {
         if (b.lead && b.lead.trim()) { out.push(...textParas(b.lead, vars, { ind: { left } })); out.push(BL()); }

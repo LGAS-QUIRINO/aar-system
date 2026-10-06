@@ -5,7 +5,7 @@
 // then Management's Comment/s and, when there is one, the Auditor's Rejoinder. Times New Roman 12, Letter size.
 import { loadScript } from './wp.js';
 import { ST, findingParas, fillText, paraHTML, DOC_CSS } from './aom.js';
-import { aomAmount, titleAmount, titleHasAmount } from './aom.js';
+import { aomAmount, titleAmount, titleHasAmount, topicVars } from './aom.js';
 import { IAR_CSS } from './baar-iar.js';
 
 const P = (runs, o = {}) => ({ kind: 'p', runs: typeof runs === 'string' ? [{ t: runs }] : runs, ...o });
@@ -38,7 +38,7 @@ export function buildP2(ctx) {
       k++;
       const vars = ctx.varsFor(a);
       const amt = aomAmount(a.data);
-      const title = fillText(a.data.title || '', vars) + (amt !== null && amt !== undefined && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
+      const title = fillText(a.data.title || '', topicVars(vars)) + (amt !== null && amt !== undefined && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
       paras.push(P(title, { italic: true, keep: true }), BL());
       // The AOM's own paragraphs, without its "AOM No." and title lines, numbered as in Balligui.
       const body = findingParas(a.data, { vars, num: `${k}.` }).slice(4);   // without the AOM No., its blank line, the title and the blank line after it

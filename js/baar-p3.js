@@ -5,7 +5,7 @@
 // sit under it with no line between them. Times New Roman 12, Letter size.
 // The list comes from the prior year's Part II (Word file) the first year, and from the app itself after that.
 import { loadScript } from './wp.js';
-import { ST, fillText } from './aom.js';
+import { ST, fillText, topicVars } from './aom.js';
 import { IAR_CSS } from './baar-iar.js';
 
 export const P3_STATUS = { full: 'Fully Implemented', not: 'Not Implemented' };
@@ -95,7 +95,7 @@ export function carryOver(prev, prevB) {
     const topic = blocks.find((b) => b.type === 'topic');
     const r = blocks.find((b) => b.type === 'recommendation') || {};
     const items = (r.items || []).filter((x) => String(x || '').trim());
-    const base = { year, obsNo: i + 1, title: fillText(a.data.title || '', vars), obs: fillText(topic ? topic.text : '', vars), status: '', action: '', reason: '', src: 'app' };
+    const base = { year, obsNo: i + 1, title: fillText(a.data.title || '', topicVars(vars)), obs: fillText(topic ? topic.text : '', topicVars(vars)), status: '', action: '', reason: '', src: 'app' };
     if (items.length) items.forEach((x) => out.push({ ...base, id: uid(), lead: past(r.lead || 'We recommend that Management:'), text: fillText(x, vars) }));
     else if (String(r.text || '').trim()) out.push({ ...base, id: uid(), lead: '', text: past(fillText(r.text, vars)) });
   });

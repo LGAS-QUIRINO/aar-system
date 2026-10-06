@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -59,6 +59,7 @@ export function mountReview(host, opts) {
   const nameOf = (email) => (email === me.email ? 'You' : nice(userOf(email).name || email));
   const iniOf = (who) => (!who ? '' : who.includes('@') ? initials(userOf(who).name || who) : who);
   const fill = (t) => fillText(t || '', vars);
+  const fillT = (t) => fillText(t || '', topicVars(vars));   // title and topic sentence: COA figures rule
   const tableOf = (b) => ((data.wpData && data.wpData.tables) || {})[b.n || 1] || null;
 
   function render() {
@@ -152,7 +153,7 @@ export function mountReview(host, opts) {
 
     // Walk the document: title, then every block (removed ones stay where they were, struck through).
     const docParts = [];
-    const tBefore = fill(data.submitted ? data.submitted.title : data.title), tAfter = fill(data.title);
+    const tBefore = fillT(data.submitted ? data.submitted.title : data.title), tAfter = fillT(data.title);
     docParts.push(`<div class="aomno">${esc(opts.heading || '')}</div>`);
     if (!opts.readOnlyTitle) docParts.push(partHTML('_title', tBefore, tAfter, 'title', 'ttl', '', '', iniOf(data.editedBy?._title)));
     if (tBefore !== tAfter) correctionCard('_title', 'Finding Title', tBefore, tAfter);
@@ -175,7 +176,7 @@ export function mountReview(host, opts) {
       const keys = partsOf(b);
       if (cur && old && cur.type === 'recommendation') partsOf(old).forEach((p) => { if (!keys.some((x) => x.k === p.k)) keys.push(p); });
       let html = '';
-      keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; html += partHTML(id, fill(partVal(old, p.k)), cur ? fill(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
+      keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
       if (b.type === 'table') html += tableHTML(b, id);
       docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${b.label ? `<div class="rv-flabel">${esc(b.label)}</div>` : ''}${html}</div>`);
       const label = b.label || BLOCK_LABELS[b.type] || 'Block';

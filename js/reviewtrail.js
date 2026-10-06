@@ -2,7 +2,7 @@
 // One file per barangay (or the AOMs ticked). Printout and Word (real Word Track Changes).
 // Built to be reused by any reviewed document (AOM now, BAAR later): it needs versions[], history[] and comments[].
 import { loadScript } from './wp.js';
-import { BLOCK_LABELS, blockPlain, diffWords, fillText, ensureIds, clone, ST } from './aom.js';
+import { BLOCK_LABELS, blockPlain, diffWords, fillText, ensureIds, clone, ST, topicVars } from './aom.js';
 import { initials, nice } from './format.js';
 import { when } from './reviewpane.js';
 
@@ -15,7 +15,8 @@ const stamp = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLoc
 export function aomTrail(a, info) {
   const d = ensureIds(clone(a.data));
   const fill = (t) => fillText(t || '', info.vars);
-  const plainOf = (b) => fill(b.type === 'table' ? `[AOM Table ${b.n || 1}]${b.caption ? ' ' + b.caption : ''}` : blockPlain(b));
+  const fillT = (t) => fillText(t || '', topicVars(info.vars));   // title and topic sentence: COA figures rule
+  const plainOf = (b) => (b.type === 'topic' ? fillT : fill)(b.type === 'table' ? `[AOM Table ${b.n || 1}]${b.caption ? ' ' + b.caption : ''}` : blockPlain(b));
   const vs = (d.versions || []).slice();
   let legacy = false;
   // AOMs reviewed before versions were kept: show what is on record.
@@ -34,7 +35,7 @@ export function aomTrail(a, info) {
     const A = vs[i - 1], B = vs[i];
     const ids = [...new Set([...(B.blocks || []).map((b) => b.id), ...(A.blocks || []).map((b) => b.id)])];
     const blocks = [];
-    const tA = fill(A.title), tB = fill(B.title);
+    const tA = fillT(A.title), tB = fillT(B.title);
     if (tA !== tB) blocks.push({ label: 'Finding Title', segs: diffWords(tA, tB), who: (B.editedBy || {})._title || B.by });
     ids.forEach((id) => {
       const x = (A.blocks || []).find((b) => b.id === id), y = (B.blocks || []).find((b) => b.id === id);
@@ -53,11 +54,11 @@ export function aomTrail(a, info) {
   if (loose.length) rounds.push({ step: 'Other comments', at: '', by: '', blocks: [], comments: loose });
 
   const finalParas = [];
-  if (d.title) finalParas.push({ t: fill(d.title), i: true });
+  if (d.title) finalParas.push({ t: fillT(d.title), i: true });
   (d.blocks || []).forEach((b) => plainOf(b).split('\n').filter(Boolean).forEach((t) => finalParas.push({ t, b: b.type === 'topic' || b.type === 'recommendation' })));
   // A BAAR part names itself (info.head); its final text is the wording that can be corrected (info.finalBlocks).
   if (info.finalBlocks) { finalParas.length = 0; info.finalBlocks.forEach((b) => { if (b.label) finalParas.push({ t: b.label, b: true }); plainOf(b).split('\n').filter(Boolean).forEach((t) => finalParas.push({ t })); }); }
-  return { no: info.no, title: fill(d.title), head: info.head, finalHead: info.finalHead, status: d.status || ST.DRAFT, history: d.history || [], rounds, finalParas, legacy, nameOf: info.nameOf };
+  return { no: info.no, title: fillT(d.title), head: info.head, finalHead: info.finalHead, status: d.status || ST.DRAFT, history: d.history || [], rounds, finalParas, legacy, nameOf: info.nameOf };
 }
 
 /* ── Printout ── */

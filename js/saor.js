@@ -1,6 +1,6 @@
 // Consolidated SAOR (Barangays of one municipality, one Audit Year), built from Final AOMs and the AOM Library.
 import { loadScript } from './wp.js';
-import { ST, SECTIONS, fillText, blockPlain, letterOf } from './aom.js';
+import { ST, SECTIONS, fillText, blockPlain, letterOf, topicVars } from './aom.js';
 import { aomNo } from './format.js';
 
 import { aomAmount, peso, titleAmount, titleHasAmount } from './aom.js';
@@ -32,7 +32,7 @@ export function generalize(text) {
   t = t.replace(amt, (m, off, all) => { const lead = all.slice(0, off); const r = first && off < 90 && !/barangay/i.test(lead) ? ' of barangays' : ''; first = false; return r; });
   // Other details carrying a value: drop the comma-set-off clause or bracketed part that holds it.
   // The audit period and the municipality are the same for every barangay, so they stay.
-  const DETAIL = String.raw`\[(?!(?:PERIOD_END_YEAR|AUDIT_YEAR|AUDIT_PERIOD|AUDIT_YEARS|MUNICIPALITY)\])[A-Z0-9_]+\]`;
+  const DETAIL = String.raw`\[(?!(?:PERIOD_END_YEAR|PRIOR_YEAR|PRIOR_YEAR_2|AUDIT_YEAR|AUDIT_PERIOD|AUDIT_YEARS|MUNICIPALITY)\])[A-Z0-9_]+\]`;
   t = t.replace(new RegExp(String.raw`\s*\([^()]*${DETAIL}[^()]*\)`, 'g'), '');
   const clause = new RegExp(String.raw`,[^,;]*?${DETAIL}[^,;]*?(?=,|;|\.\s|\.$)`);
   for (let i = 0; i < 6 && clause.test(t); i++) t = t.replace(clause, '');
@@ -68,11 +68,11 @@ export function buildSaor(input) {
     const vars0 = g.items[0].au.vars(g.items[0].a);
     // Only one barangay has this finding: one row, its own AOM wording, with "Barangay X:" in front (approved Option A).
     const single = g.items.length === 1;
-    const ownObs = fillText(blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {}), vars0);
+    const ownObs = fillText(blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {}), topicVars(vars0));
     const ownRec = fillText(recText(first.blocks), vars0);
     // Two or more barangays: the AOM Library wording when the template has it; otherwise the app suggests one.
     const rawTopic = blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {});
-    const genObs = single ? ownObs : fillText(generalize(rawTopic), vars0);
+    const genObs = single ? ownObs : fillText(generalize(rawTopic), topicVars(vars0));
     const genRec = single ? ownRec : fillText(generalize(recText(tpl ? tpl.blocks : first.blocks)), vars0);
     const hasLib = !single && !!(tpl && (tpl.saor || '').trim());
     const libObs = single ? ownObs : hasLib ? tpl.saor.trim() : genObs;

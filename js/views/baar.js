@@ -11,7 +11,7 @@ import { buildCover, coverHTML, printCover, coverWord, coverPrint, coverSections
 import { buildToc, tocHTML, printToc, tocWord, tocPrint, tocSections } from '../baar-toc.js';
 import { printPages, saveDocx } from '../baar-doc.js';
 import { IAR_STANDARD, IAR_KEYS, mergeMgmt, IAR_OPINION_STANDARD, BASES_HEAD, buildIar, iarPagesHTML, paginateIar, iarPrint, iarSections } from '../baar-iar.js';
-import { fillText, blockPlain, SECTIONS } from '../aom.js';
+import { fillText, blockPlain, SECTIONS, topicVars } from '../aom.js';
 import { SMR_STANDARD, SMR_KEYS, smrSigners, buildSmr, smrPageHTML, scanPagesHTML, smrPrint, smrSections } from '../baar-smr.js';
 import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
@@ -50,10 +50,10 @@ const p01Pill = (miss) => (miss.length ? pill('In Progress', 'warn') : pill('Rea
 function basesList(ctx, I) {
   return ctx.aoms.filter((a) => a.data.status === ST.FINAL).sort((a, b) => ctx.nums[a.id].n - ctx.nums[b.id].n).map((a) => {
     const v = ctx.varsFor(a), sv = I.bases[a.id] || {};
-    const own = fillText(blockPlain((a.data.blocks || []).find((b) => b.type === 'topic') || {}), v).trim().replace(/[.;\s]+$/, '');
+    const own = fillText(blockPlain((a.data.blocks || []).find((b) => b.type === 'topic') || {}), topicVars(v)).trim().replace(/[.;\s]+$/, '');
     const amt = aomAmount(a.data);
     return { id: a.id, sec: a.data.section || 'B', no: aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo),
-      title: fillText(a.data.title || '', v), amount: amt, own, on: sv.on !== undefined ? !!sv.on : (a.data.section || 'B') === 'A', text: sv.text !== undefined ? sv.text : own };
+      title: fillText(a.data.title || '', topicVars(v)), amount: amt, own, on: sv.on !== undefined ? !!sv.on : (a.data.section || 'B') === 'A', text: sv.text !== undefined ? sv.text : own };
   });
 }
 // What Part 04 still needs before it is ready to print.
