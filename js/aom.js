@@ -90,6 +90,11 @@ export function topicVars(vars) {
   });
   return out;
 }
+// The amount placeholder "Automatic" picks: the first one in the topic sentence (or null).
+export function autoAmountVar(d) {
+  const topic = (d.blocks || []).find((b) => b.type === 'topic');
+  return [...String((topic && topic.text) || '').matchAll(/\[([A-Z0-9_]+)\]/g)].map((m) => m[1]).find(isMoneyName) || null;
+}
 // The amount placeholders in an AOM's wording, in order (choices for the amount in the title).
 export function moneyPlaceholders(d) {
   const names = [];

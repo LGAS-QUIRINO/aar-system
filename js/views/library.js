@@ -3,7 +3,7 @@ import { store, newId, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, placeholders, moneyPlaceholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
+import { clone, placeholders, moneyPlaceholders, autoAmountVar, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
 import { nice, longDate } from '../format.js';
 
 const STATUS_KIND = { Active: 'ok', Draft: 'grey', Proposed: 'warn', Superseded: 'grey', Retired: 'grey' };
@@ -19,10 +19,15 @@ export async function poolGroups() {
   }).sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }));
 }
 // Choices for "Amount in the Title": automatic, each amount placeholder in the wording, or none.
+// Automatic shows the amount it picks; the list then offers only the other amounts. A template pinned to the same
+// amount Automatic picks shows as Automatic (it prints the same).
 function tvarOptions(d) {
-  const names = moneyPlaceholders(d);
-  if (d.titleVar && d.titleVar !== 'NONE' && !names.includes(d.titleVar)) names.push(d.titleVar);
-  return `<option value="" ${d.titleVar ? '' : 'selected'}>Automatic (first amount in the topic sentence)</option>`
+  const auto = autoAmountVar(d);
+  const sel = d.titleVar && d.titleVar !== auto ? d.titleVar : '';
+  const names = moneyPlaceholders(d).filter((n) => n !== auto);
+  if (sel && sel !== 'NONE' && !names.includes(sel)) names.push(sel);
+  d = { ...d, titleVar: sel };
+  return `<option value="" ${sel ? '' : 'selected'}>Automatic: ${auto ? '[' + esc(auto) + ']' : 'none'}</option>`
     + names.map((n) => `<option value="${esc(n)}" ${d.titleVar === n ? 'selected' : ''}>[${esc(n)}]</option>`).join('')
     + `<option value="NONE" ${d.titleVar === 'NONE' ? 'selected' : ''}>No Amount</option>`;
 }
