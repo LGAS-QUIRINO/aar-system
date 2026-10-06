@@ -4,7 +4,7 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar } from '../aom.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow } from '../aom.js';
 import { money, cents, parseAmt } from '../fs.js';
 import { loadScript } from '../wp.js';
 
@@ -52,10 +52,27 @@ const amtCols = (d, n, cols) => {
   const def = ((d.wpDef && d.wpDef.tables) || []).find((x) => x.n === n);
   return cols.map((h, i) => (def && def.cols[i] ? !!def.cols[i].amt : isAmtCol(h)) ? i : -1).filter((i) => i >= 0);
 };
-// Data rows of a table (without its header and the Total row added here).
-const dataRows = (t) => { if (!t || !t.rows) return []; const r = t.rows.slice(1); return t.filled && r.length && /^total$/i.test(String(r[r.length - 1][0]).trim()) ? r.slice(0, -1) : r; };
+// Data rows of a table (without its header and the year headings, Sub-Total and Total rows added here).
+// A grouped table keeps its rows in the order typed (t.data), so the boxes do not move while typing.
+const dataRows = (t) => { if (!t || !t.rows) return []; if (t.data) return t.data; const r = t.rows.slice(1); return t.filled ? r.filter((x) => !isCalcRow(x)) : r; };
+const yearOf = (r) => { const m = /(?:19|20)\d\d/.exec(String((r || [])[0] ?? '')); return m ? m[0] : ''; };
 function withTotal(d, n, cols, rows) {
   const ac = amtCols(d, n, cols);
+  // Sub-Total per Year (set in the AOM Table block): rows grouped by the year in the first column, each group with
+  // a "CY 2024" heading and a Sub-Total, then the Total. The labels sit in the column before the first amount column.
+  const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
+  if (blk && blk.subYear && ac.length && rows.length) {
+    const lab = Math.max(0, ac[0] - 1);
+    const sumRow = (label, rs) => cols.map((_, i) => (i === lab ? label : ac.includes(i) ? money(rs.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : ''));
+    const out = [cols];
+    [...new Set(rows.map(yearOf))].sort().forEach((y) => {
+      const rs = rows.filter((r) => yearOf(r) === y);
+      if (y) out.push(cols.map((_, i) => (i === 0 ? `CY ${y}` : '')));
+      out.push(...rs, sumRow('Sub-Total', rs));
+    });
+    out.push(sumRow('Total', rows));
+    return { sheet: FILLED, filled: true, rows: out, data: rows };
+  }
   const tot = cols.map((_, i) => (i === 0 ? 'Total' : ac.includes(i) ? money(rows.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : ''));
   return { sheet: FILLED, filled: true, rows: [cols, ...rows, ...(rows.length && ac.length ? [tot] : [])] };
 }

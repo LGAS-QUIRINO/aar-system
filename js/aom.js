@@ -33,13 +33,16 @@ const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'e
 export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
 // "A", "A and B", "A, B and C"
 export const joinAnd = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+// Rows the app adds to a table it fills in: a "CY 2024" year heading, Sub-Total and Total rows.
+export const isYearHead = (r) => /^CY \d{4}$/.test(String((r || [])[0] ?? '').trim()) && (r || []).slice(1).every((c) => !String(c ?? '').trim());
+export const isCalcRow = (r) => isYearHead(r) || (r || []).some((c) => /^(sub-?total|total)$/i.test(String(c ?? '').trim()));
 // [TABLE1_ITEMS] etc.: the first-column entries of each AOM Table (without the Total row), so the wording names
 // exactly what the table shows.
 export function tableVars(d) {
   const out = {};
   const tables = (d && d.wpData && d.wpData.tables) || {};
   Object.keys(tables).forEach((n) => {
-    const rows = (tables[n].rows || []).slice(1).map((r) => String((r || [])[0] ?? '').trim()).filter((x) => x && !/^total$/i.test(x));
+    const rows = (tables[n].rows || []).slice(1).filter((r) => !isCalcRow(r)).map((r) => String((r || [])[0] ?? '').trim()).filter(Boolean);
     if (rows.length) out[`TABLE${n}_ITEMS`] = joinAnd(rows);
   });
   return out;
@@ -535,7 +538,7 @@ function tableHTML(t) {
   }
   const rows = t.rows || [];
   return `<div style="margin-left:${tw(t.left)}"><table class="aom-t">${rows.map((r, i) => {
-    const total = /total/i.test(r.join(' ')) && i > 0;
+    const total = i > 0 && (/total/i.test(r.join(' ')) || isYearHead(r));
     return `<tr class="${total ? 'tot' : ''}">${r.map((c) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${isNum(c) ? 'num' : ''}">${escH(c)}</td>`).join('')}</tr>`;
   }).join('')}</table></div>`;
 }

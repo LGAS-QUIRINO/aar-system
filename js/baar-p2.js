@@ -124,7 +124,7 @@ export async function p2Sections(doc, start) {
   };
   const cellP = (t, o = {}) => new Paragraph({ alignment: o.al || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(t || ''), bold: !!o.b, font: F, size: 22 })] });
   const table = (t) => new Table({ width: { size: 9360 - 1440 - (t.left || 0), type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
-    rows: (t.rows || []).map((r, i) => { const tot = i > 0 && /total/i.test(r.join(' ')); return new TableRow({ tableHeader: i === 0, cantSplit: true, children: r.map((c) => new TableCell({ children: [cellP(c, { b: i === 0 || tot, al: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] })) }); }) });
+    rows: (t.rows || []).map((r, i) => { const tot = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim())); return new TableRow({ tableHeader: i === 0, cantSplit: true, children: r.map((c) => new TableCell({ children: [cellP(c, { b: i === 0 || tot, al: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] })) }); }) });
   const margin = { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
   const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: F, size: 22 })] })] });

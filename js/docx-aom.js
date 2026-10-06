@@ -51,7 +51,7 @@ export async function downloadWord(doc) {
     return new Table({
       width: { size: 9360 - (t.left || 0), type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
       rows: rows.map((r, i) => {
-        const total = i > 0 && /total/i.test(r.join(' '));
+        const total = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim()));
         return new TableRow({
           tableHeader: i === 0,
           children: r.map((c) => new TableCell({ children: [cellP(c, { bold: i === 0 || total, align: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
