@@ -279,3 +279,48 @@ export async function updateFromAom(refs, aomRec, vars, label) {
   if (fresh) await store.save('aoms', aomRec.id, { ...fresh.data, libraryUpdate: { code, version: saved.version, at: saved.approvedAt, by: refs.me.email } });
   toast(`${code} Version ${saved.version} is now Active.`, 'ok');
 }
+
+// SA or Admin, from a Final AOM: save its wording as a new Variant beside the template (the template itself is not changed).
+// For wordings that are both right but fit different cases — e.g. one account in the paragraph vs. several accounts in a table.
+export async function variantFromAom(refs, aomRec, vars, label) {
+  const code0 = aomRec.data.poolCode;
+  const groups = await poolGroups();
+  const g = groups.find((x) => x.code === code0);
+  const act = g && (g.active || g.latest);
+  if (!act) { toast(`${code0} is not in the Library.`, 'bad'); return; }
+  const a = act.data;
+  const base = a.variantOf || code0;
+  const n = groups.filter((x) => x.code.startsWith(base + '-M')).length + 1;
+  const code = `${base}-M${n}`;
+  const t = toTemplate(aomRec.data, vars);
+  const same = t.title === a.title && t.blocks.length === (a.blocks || []).length && t.blocks.every((b, i) => blockPlain(b) === blockPlain(a.blocks[i]) && b.type === a.blocks[i].type);
+  const pairs = [[a.title, t.title], ...(t.blocks || []).map((b, i) => [blockPlain((a.blocks || [])[i] || {}), blockPlain(b)])];
+  let saorNew = a.saor || '', recNew = a.saorRec || '';
+  pairs.forEach(([o, nw]) => { if (o !== nw) { saorNew = carryOver(saorNew, o, nw); recNew = carryOver(recNew, o, nw); } });
+  const body = `${same ? `<div class="note warn"><span>This AOM has the same wording as ${esc(code0)}. A variant is only needed when the wording is different.</span></div>` : ''}
+    <div class="note info"><span>New template <b>${esc(code)}</b>, a Variant of ${esc(base)}, from ${esc(label)}. ${esc(code0)} stays as it is. Red = not in ${esc(code0)}'s wording, green = new in the variant.</span></div>
+    <div class="field"><label class="label" for="v-title">Title of the variant · say when to use it</label><input class="input" id="v-title" value="${esc(t.title === a.title ? t.title + ' (Variant)' : t.title)}"></div>
+    ${t.swaps.length ? `<div class="field"><span class="label">Values changed back to placeholders</span><div class="hint">${t.swaps.map(esc).join('<br>')}</div></div>` : ''}
+    ${t.leftover.length ? `<div class="note warn"><span>Still typed as numbers: <b>${t.leftover.map(esc).join(', ')}</b>. Change them to placeholders in the Library before you approve the variant.</span></div>` : ''}
+    ${same ? '' : `<div style="max-height:44vh;overflow:auto;display:flex;flex-direction:column;gap:10px">${diffHTML({ title: a.title, blocks: a.blocks }, { title: t.title, blocks: t.blocks })}</div>`}
+    <div class="grid-2" style="align-items:start;margin-top:10px">
+      <div class="field"><label class="label" for="v-saor">SAOR Wording · carried over, you can edit</label><textarea class="input be-text" id="v-saor" rows="4">${esc(saorNew)}</textarea></div>
+      <div class="field"><label class="label" for="v-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="v-saorrec" rows="4" placeholder="Blank: the SAOR uses the AOM recommendation">${esc(recNew)}</textarea></div></div>
+    <p class="hint" style="margin:8px 0 0">It is saved as a Draft and opens in the AOM Library: check the title and the placeholders (and the table columns), then Approve it. Once Active, it is offered on the Findings screen beside ${esc(base)}.</p>`;
+  let vals = null;
+  const r = await modal({ title: `Save as Variant · ${code}`, wide: true, body,
+    buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Save as Variant', cls: 'primary', value: 'ok', check: (bg) => {
+      vals = { title: $('#v-title', bg).value.trim(), saor: $('#v-saor', bg).value.trim(), saorRec: $('#v-saorrec', bg).value.trim() };
+      if (!vals.title) { toast('Type the title of the variant.', 'bad'); return false; } return true; } }] });
+  if (r !== 'ok') return;
+  const d = { ...clone(a), code, version: 1, status: 'Draft', variantOf: base, title: vals.title, blocks: t.blocks, saor: vals.saor, saorRec: vals.saorRec,
+    note: `Variant of ${base}, from ${label}`, fromAom: aomRec.id };
+  delete d.approvedAt; delete d.approvedBy; delete d.retiredAt; delete d.retiredBy;
+  await store.save('aom_library', `obs-${code}-v1`, d, { silent: true });
+  await store.log('saved an AOM as a Library variant', `${code} · Variant of ${base} · ${label}`, '', refs.me.email);
+  const fresh = await store.get('aoms', aomRec.id);
+  if (fresh) await store.save('aoms', aomRec.id, { ...fresh.data, libraryVariant: { code, at: new Date().toISOString(), by: refs.me.email } });
+  emitChange('local');
+  toast(`${code} saved as a Draft variant. Check it, then Approve.`, 'ok');
+  location.hash = `#/library?code=${encodeURIComponent(code)}`;
+}

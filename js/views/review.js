@@ -1,7 +1,7 @@
 // ATL and SA review: correct the text (changes are tracked), comment, approve or return.
 import { store, emitChange } from '../store.js';
 import { mountReview, reviewCounts, when } from '../reviewpane.js';
-import { updateFromAom } from './library.js';
+import { updateFromAom, variantFromAom } from './library.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
@@ -213,8 +213,10 @@ export async function review(refs, params, q) {
           ${pendingMine.length ? `<button class="btn primary" id="r-all">${willFinal ? 'Approve Remaining as Final' : 'Approve Remaining and Forward to SA'} →</button>` : ''}</div></section>`
           : s === ST.FINAL && iAmSA ? `<section class="panel"><div class="panel-head"><h2>Final</h2></div><div class="panel-body"><span class="hint">Locked as AOM No. ${esc(aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}.</span><button class="btn ghost" id="r-reopen">Reopen for Correction</button></div></section>` : ''}
         ${s === ST.FINAL && canManage && cur.data.poolCode ? `<section class="panel"><div class="panel-head"><h2>AOM Library</h2><span class="hint mono">${esc(cur.data.poolCode)}</span></div><div class="panel-body">
-          <div style="display:flex;align-items:center;gap:12px"><button class="btn primary" id="r-lib">Update</button><span class="hint">Apply corrections to Library</span></div>
-          ${cur.data.libraryUpdate ? `<span class="hint">Library updated to Version ${esc(cur.data.libraryUpdate.version)} · ${esc(when(cur.data.libraryUpdate.at))}</span>` : ''}</div></section>` : ''}`;
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button class="btn primary" id="r-lib">Update</button><span class="hint">Apply corrections to the template (new version, for everyone)</span></div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="r-var">Save as Variant</button><span class="hint">Keep this wording as a separate template beside it (for a different case)</span></div>
+          ${cur.data.libraryUpdate ? `<span class="hint">Library updated to Version ${esc(cur.data.libraryUpdate.version)} · ${esc(when(cur.data.libraryUpdate.at))}</span><br>` : ''}
+          ${cur.data.libraryVariant ? `<span class="hint">Saved as Variant ${esc(cur.data.libraryVariant.code)} · ${esc(when(cur.data.libraryVariant.at))}</span>` : ''}</div></section>` : ''}`;
   }
 
   return {
@@ -228,6 +230,8 @@ export async function review(refs, params, q) {
       };
       const lib = $('#r-lib', root);
       if (lib) lib.onclick = () => updateFromAom(refs, cur, ctx.varsFor(cur), 'AOM No. ' + aomNoText + ' · ' + ctx.lgu.name);
+      const vb = $('#r-var', root);
+      if (vb) vb.onclick = () => variantFromAom(refs, cur, ctx.varsFor(cur), 'AOM No. ' + aomNoText + ' · ' + ctx.lgu.name);
       let pane = null;
       if (view === 'review') {
         pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, navEl: $('#rv-nav', root),
