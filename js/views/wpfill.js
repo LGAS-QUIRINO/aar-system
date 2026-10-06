@@ -4,7 +4,7 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow } from '../aom.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable } from '../aom.js';
 import { money, cents, parseAmt } from '../fs.js';
 import { loadScript } from '../wp.js';
 
@@ -17,7 +17,7 @@ const KINDS = ['Amount', 'Number', 'Date', 'Text'];
 export function wpNeeds(d) {
   const def = d.wpDef || {};
   const ph = [...new Set([...placeholders(d).filter((n) => !SETUP_VAR_NAMES.includes(n)), ...(def.ph || []).map((p) => p.name)])];
-  const tn = [...new Set([...(d.blocks || []).filter((b) => b.type === 'table').map((b) => Number(b.n) || 1), ...(def.tables || []).map((t) => t.n)])].sort((a, b) => a - b);
+  const tn = [...new Set([...(d.blocks || []).filter((b) => b.type === 'table' && !isFixedTable(b)).map((b) => Number(b.n) || 1), ...(def.tables || []).map((t) => t.n)])].sort((a, b) => a - b);
   return { ph, tn, def };
 }
 const tbKeysOf = (d, F) => {

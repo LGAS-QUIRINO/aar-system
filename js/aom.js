@@ -36,6 +36,22 @@ export const joinAnd = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1)
 // Rows the app adds to a table it fills in: a "CY 2024" year heading, Sub-Total and Total rows.
 export const isYearHead = (r) => /^CY \d{4}$/.test(String((r || [])[0] ?? '').trim()) && (r || []).slice(1).every((c) => !String(c ?? '').trim());
 export const isCalcRow = (r) => isYearHead(r) || (r || []).some((c) => /^(sub-?total|total)$/i.test(String(c ?? '').trim()));
+// A fixed table typed in the template (same in every AOM, e.g. a circular's sample format): one row per line,
+// cells separated by a tab (pasted from Excel or Word) or by " | ".
+export function fixedRows(b) {
+  const lines = String((b && b.fixed) || '').split('\n').filter((l) => l.trim());
+  if (!lines.length) return null;
+  const rows = lines.map((l) => (l.includes('\t') ? l.split('\t') : l.split('|')).map((c) => c.trim()));
+  const w = Math.max(...rows.map((r) => r.length));
+  return rows.map((r) => [...r, ...Array(w - r.length).fill('')]);
+}
+export const isFixedTable = (b) => !!fixedRows(b);
+// The rows a table block prints: its fixed rows, or the working paper's table.
+export function tableData(aom, b) {
+  const fx = fixedRows(b);
+  if (fx) return { rows: fx, sheet: 'fixed in the template', fixed: true };
+  return ((aom && aom.wpData && aom.wpData.tables) || {})[b.n] || null;
+}
 // [TABLE1_ITEMS] etc.: the first-column entries of each AOM Table (without the Total row), so the wording names
 // exactly what the table shows.
 export function tableVars(d) {
@@ -234,7 +250,7 @@ export function checks(aom, vars, audit) {
   const yrs = [...texts.matchAll(/\b(?:CYs?|FYs?|December 31,|year-end)\s*(\d{4})(?:\s*(?:to|and|-|–)\s*(\d{4}))?/gi)].flatMap((m) => [m[1], m[2]]).filter(Boolean).map(Number);
   const off = [...new Set(yrs.filter((y) => y < from || y > to))];
   out.push(off.length ? { st: 'warn', t: `Year outside the audit period (${from === to ? to : from + '–' + to}): ${off.join(', ')}` } : { st: 'ok', t: 'Year and period match the Audit Setup' });
-  const tables = (aom.blocks || []).filter((b) => b.type === 'table');
+  const tables = (aom.blocks || []).filter((b) => b.type === 'table' && !isFixedTable(b));
   const noData = tables.filter((b) => !((aom.wpData && aom.wpData.tables) || {})[b.n]);
   if (tables.length) out.push(noData.length ? { st: 'bad', t: `Table ${noData.map((b) => b.n).join(', ')} has no data. Import the working paper.` } : { st: 'ok', t: 'Tables imported from the working paper' });
   out.push({ st: 'wait', t: 'Amount vs. trial balance: shown for reference in BAAR Part 06 · FS Input' });
@@ -353,7 +369,7 @@ export function findingParas(aom, ctx) {
         out.push(...withBlanks(textParas(t, vars, { ind: { left } })));
       }
     } else if (b.type === 'table') {
-      const tbl = ((aom.wpData && aom.wpData.tables) || {})[b.n];
+      const tbl = tableData(aom, b);
       if (b.annex) {
         const L = (ctx.annexLetters || {})[aom._id + ':' + b.n] || 'A';
         out.push(P([{ t: `(See Annex ${L}${b.caption ? ' – ' + b.caption : ''})` }], { italic: true, ind: { left } }));
@@ -475,7 +491,7 @@ export function buildLetter(info) {
   body.push({ kind: 'keepEnd' });
 
   const annexParts = annexes.map((x) => {
-    const tbl = ((x.aom.data.wpData && x.aom.data.wpData.tables) || {})[x.block.n];
+    const tbl = tableData(x.aom.data, x.block);
     return {
       letter: x.letter,
       paras: [

@@ -3,7 +3,7 @@ import { store, newId, emitChange } from '../store.js';
 import { esc, toast, setDirty, modal, confirmBox, pill, $, $$ } from '../ui.js';
 import { loadAudit, stepsBar, advanceStage } from '../auditctx.js';
 import { activeTemplates } from './library.js';
-import { fromTemplate, blankAom, clone, numberAoms, numberingCheck, placeholders, SECTIONS, SETUP_VAR_NAMES, ST, formatVar, statusPill } from '../aom.js';
+import { fromTemplate, blankAom, clone, numberAoms, numberingCheck, placeholders, SECTIONS, SETUP_VAR_NAMES, ST, formatVar, statusPill, isFixedTable } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo } from '../format.js';
 import { readWorkingPaper } from '../wp.js';
 import { loadFS } from './baarfs.js';
@@ -28,7 +28,7 @@ export async function findings(refs, params, q) {
   const nums = () => numberAoms(items.map((it, i) => ({ id: it.id, data: { ...it.data, seq: i + 1 } })));
   const wpState = (it) => {
     const d = it.data;
-    const need = (d.blocks || []).some((b) => b.type === 'table') || placeholders(d).some((n) => !SETUP_VAR_NAMES.includes(n)) || !!d.wpDef;
+    const need = (d.blocks || []).some((b) => b.type === 'table' && !isFixedTable(b)) || placeholders(d).some((n) => !SETUP_VAR_NAMES.includes(n)) || !!d.wpDef;
     if (!need && !d.wp) return { k: 'none', t: 'No WP Needed' };
     if (!d.wpData) return { k: 'missing', t: d.wp ? `Fill in ${d.wp}` : 'Fill in WP' };
     const v = ctx.varsFor({ data: d });
@@ -69,7 +69,7 @@ export async function findings(refs, params, q) {
     const v = ctx.varsFor({ data: d });
     const ph = placeholders(d);
     const missing = ph.filter((n) => v[n] === undefined);
-    const tablesNeeded = (d.blocks || []).filter((b) => b.type === 'table').map((b) => b.n);
+    const tablesNeeded = (d.blocks || []).filter((b) => b.type === 'table' && !isFixedTable(b)).map((b) => b.n);
     const importBody = `${wp && wp.file !== FILLED ? `<div class="note info">Imported: <b>${esc(wp.file)}</b> · By ${esc(nice(refs.users.find((u) => u.data.email === wp.by)?.data.name || wp.by))} · ${esc(timeAgo(wp.at))}. The file stays on your computer; only the values below are saved.</div>`
           : '<div class="note info">Choose the Excel working paper. The app reads the VARIABLE / VALUE list and the sheets named "AOM Table 1", "AOM Table 2", and so on. The file itself is not uploaded.</div>'}
         ${ed ? `<label class="btn ${wp ? 'ghost' : 'primary'}" for="wp-file" style="margin-bottom:10px">${wp && wp.file !== FILLED ? 'Re-import Revised WP' : 'Import Working Paper'}</label><input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">` : ''}

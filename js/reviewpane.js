@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -60,7 +60,7 @@ export function mountReview(host, opts) {
   const iniOf = (who) => (!who ? '' : who.includes('@') ? initials(userOf(who).name || who) : who);
   const fill = (t) => fillText(t || '', vars);
   const fillT = (t) => fillText(t || '', topicVars(vars));   // title and topic sentence: COA figures rule
-  const tableOf = (b) => ((data.wpData && data.wpData.tables) || {})[b.n || 1] || null;
+  const tableOf = (b) => tableData(data, { ...b, n: b.n || 1 });
 
   function render() {
     const base = (data.submitted && data.submitted.blocks) || null;

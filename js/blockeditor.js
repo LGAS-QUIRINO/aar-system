@@ -49,13 +49,14 @@ export function blocksHTML(aom, o = {}) {
       const t = tables[b.n];
       body = `<div class="grid-3">
           <div class="field"><label class="label">Table</label><select class="input" data-bi="${bi}" data-k="n" ${dis}>
-            ${[...new Set([...nums.map(Number), b.n || 1])].sort((x, y) => x - y).map((n) => `<option value="${n}" ${Number(b.n) === n ? 'selected' : ''}>AOM Table ${n}${tables[n] ? '' : ' (not imported)'}</option>`).join('')}</select></div>
+            ${[...new Set([...nums.map(Number), b.n || 1])].sort((x, y) => x - y).map((n) => `<option value="${n}" ${Number(b.n) === n ? 'selected' : ''}>AOM Table ${n}${tables[n] || (Number(b.n) === n && String(b.fixed || '').trim()) ? '' : ' (not imported)'}</option>`).join('')}</select></div>
           <div class="field"><label class="label">Placement</label><select class="input" data-bi="${bi}" data-k="annex" ${dis}>
             <option value="0" ${b.annex ? '' : 'selected'}>In the text</option><option value="1" ${b.annex ? 'selected' : ''}>As an annex (after the AOM)</option></select></div>
           <div class="field"><label class="label">Caption (optional)</label><input class="input" data-bi="${bi}" data-k="caption" value="${esc(b.caption || '')}" ${dis}></div></div>
         <div class="field"><label class="label">Columns (when filled in the app)</label><input class="input" data-bi="${bi}" data-k="cols" value="${esc(b.cols || '')}" placeholder="e.g. Account, [EACH_YEAR]" ${dis}><span class="hint">Separate with commas. [EACH_YEAR] gives one amount column per year of the audit period.</span></div>
+        <div class="field"><label class="label">Fixed Table (same in every AOM)</label><textarea class="input be-text" data-bi="${bi}" data-k="fixed" rows="${Math.max(2, Math.min(14, String(b.fixed || '').split('\n').length + 1))}" placeholder="Only for a table that never changes, e.g. a circular's sample format. One row per line; separate cells with | or paste from Excel." ${dis}>${esc(b.fixed || '')}</textarea></div>
         <label class="check" style="min-height:0"><input type="checkbox" data-bi="${bi}" data-k="subYear" ${b.subYear ? 'checked' : ''} ${dis}>Sub-Total per Year (grouped by the year in the first column, e.g. the date)</label>
-        ${t ? `<div class="hint">From sheet "${esc(t.sheet)}" · ${t.rows.length - 1} rows · ${t.rows[0].length} columns. Edit the numbers in the working paper, then re-import.</div>`
+        ${String(b.fixed || '').trim() ? '<div class="hint">Fixed table: prints the same in every AOM. No working paper needed.</div>' : t ? `<div class="hint">From sheet "${esc(t.sheet)}" · ${t.rows.length - 1} rows · ${t.rows[0].length} columns. Edit the numbers in the working paper, then re-import.</div>`
           : '<div class="note warn">Not imported yet. Import the working paper on the Findings screen.</div>'}`;
     } else if (b.type === 'subheading') {
       body = `<input class="input" style="font-weight:600;font-style:italic" data-bi="${bi}" data-k="text" value="${esc(b.text || '')}" placeholder="Sub-heading title" ${dis}>`;
