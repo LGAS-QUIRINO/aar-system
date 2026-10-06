@@ -41,7 +41,7 @@ export function buildP2(ctx) {
       const title = fillText(a.data.title || '', vars) + (amt !== null && amt !== undefined && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
       paras.push(P(title, { italic: true, keep: true }), BL());
       // The AOM's own paragraphs, without its "AOM No." and title lines, numbered as in Balligui.
-      const body = findingParas(a.data, { vars, num: `${k}.` }).slice(3);
+      const body = findingParas(a.data, { vars, num: `${k}.` }).slice(4);   // without the AOM No., its blank line, the title and the blank line after it
       let j = 0;
       body.forEach((p) => {
         if (p.kind !== 'p' || p.blank) { paras.push(p); return; }

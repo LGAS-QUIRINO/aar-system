@@ -245,6 +245,7 @@ export function findingParas(aom, ctx) {
   const vars = ctx.vars || {};
   const out = [];
   out.push(P([{ t: 'AOM No. ' + ctx.aomNoText }], { bold: true }));
+  out.push(BL());   // a blank line between the AOM No. and the finding title
   // The amount follows the title, the same as in BAAR Part II.
   const amt = titleHasAmount(aom.title) ? null : aomAmount(aom);
   out.push(P([...fillRuns(aom.title || '', vars), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
