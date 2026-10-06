@@ -52,6 +52,10 @@ export async function setup(refs, params) {
   const finalAom = rec ? (await store.list('aoms')).filter((a) => a.data.auditId === rec.id && a.data.status === ST.FINAL).sort((a, b) => (a.data.number || 0) - (b.data.number || 0))[0] : null;
   const periodLocked = !!finalAom;
   const canUnlock = has(refs.me, 'sa') || has(refs.me, 'admin');
+  // Once a saved audit has its Team Member, only the SA or Admin changes it (Change Auditor), and not after the audit is Final.
+  const auditFinal = !!rec && (rec.data.status === 'Final' || rec.data.stage === 'Final');
+  const locked = !!rec && !!rec.data.memberId;
+  const canChangeAuditor = canUnlock && !auditFinal;
   const pdis = periodLocked ? 'disabled' : dis;
 
   function officialsRows() {
@@ -104,10 +108,13 @@ export async function setup(refs, params) {
     const atl = team && userName(team.data.atlUserId), sa = team && userName(team.data.saUserId);
     const line = (u, fallback) => u ? `<b>${esc(nice(u.name))}</b><span class="hint">${esc([u.position, u.designation].filter(Boolean).join(' · '))}</span>` : `<span class="hint">${fallback}</span>`;
     return `<div class="grid-3">
-      <div class="field"><label class="label" for="member">Team Member</label>
-        <select class="input" id="member" ${dis}><option value="">Choose…</option>${members.map((u) => `<option value="${u.id}" ${s.memberId === u.id ? 'selected' : ''}>${esc(nice(u.data.name))}</option>`).join('')}</select></div>
+      ${locked ? `<div class="field"><span class="label">Team Member</span>${line(userName(s.memberId), 'Not assigned')}
+        ${canChangeAuditor ? '<div><button class="btn sm ghost" type="button" id="chg-aud">Change Auditor</button></div>' : ''}</div>`
+      : `<div class="field"><label class="label" for="member">Team Member</label>
+        <select class="input" id="member" ${dis}><option value="">Choose…</option>${members.map((u) => `<option value="${u.id}" ${s.memberId === u.id ? 'selected' : ''}>${esc(nice(u.data.name))}</option>`).join('')}</select></div>`}
       <div class="field"><span class="label">Audit Team Leader</span>${line(atl, 'Not assigned yet (Users & Roles)')}</div>
       <div class="field"><span class="label">Supervising Auditor</span>${line(sa, 'Not assigned yet (Users & Roles)')}</div></div>
+      ${locked ? '<div class="hint">Only the Supervising Auditor or Admin can change the auditor of an audit that is not yet Final.</div>' : ''}
       <div class="hint">Filled automatically from Users &amp; Roles${team ? ' for ' + esc(team.data.name) : ''}.${atl && sa && team.data.atlUserId === team.data.saUserId ? ' One-step review: the same person is Audit Team Leader and Supervising Auditor.' : ''}</div>`;
   }
 
@@ -202,7 +209,32 @@ export async function setup(refs, params) {
       const add = $('#add-off', root); if (add) add.onclick = () => { s.officials.push({ title: 'Mr.', name: '', pos: '', acting: false, role: 'Attention' }); redrawOfficials(); dirty(); offBox.querySelector(`[data-o="${s.officials.length - 1}"][data-k="name"]`).focus(); };
       $('#ninfo', root).addEventListener('input', (e) => { const k = e.target.dataset.ni; if (!k) return; s.notesInfo = { ...(s.notesInfo || {}), [k]: e.target.value }; dirty(); });
       $('#kagawads', root).addEventListener('input', (e) => { const i = e.target.dataset.kg; if (i === undefined) return; s.kagawads[+i].name = e.target.value; e.target.classList.toggle('changed', !!chK(+i)); dirty(); });
-      const wireMember = () => { const m = $('#member', root); if (m) m.onchange = () => { s.memberId = m.value; dirty(); }; };
+      const wireMember = () => {
+        const m = $('#member', root); if (m) m.onchange = () => { s.memberId = m.value; dirty(); };
+        const c = $('#chg-aud', root); if (c) c.onclick = changeAuditor;
+      };
+      async function changeAuditor() {
+        const team = teamOf();
+        const members = refs.users.filter((u) => (u.data.teamIds || []).includes(team?.id) && (u.data.roles || []).includes('member') && u.data.status !== 'disabled' && u.id !== s.memberId);
+        const finals = (await store.list('aoms')).filter((a) => a.data.auditId === rec.id && a.data.status === ST.FINAL).length;
+        const old = userName(s.memberId);
+        let pick = '', oo = '';
+        const r = await modal({ title: 'Change Auditor · ' + (refs.lgu[s.lguId]?.data.name || ''),
+          body: `<div class="grid-2"><div class="field"><label class="label" for="ca-new">New Team Member</label><select class="input" id="ca-new"><option value="">Choose…</option>${members.map((u) => `<option value="${u.id}">${esc(nice(u.data.name))}</option>`).join('')}</select></div>
+            <div class="field"><label class="label" for="ca-oo">Office Order No. (optional)</label><input class="input" id="ca-oo"></div></div>
+            <div class="note info" style="display:block;line-height:1.5">From now on, the new Team Member works on this audit, and their name goes on the documents not yet issued, such as the BAAR.${finals ? ` The ${finals} Final AOM${finals > 1 ? 's keep' : ' keeps'} ${esc(nice(old ? old.name : ''))}'s name.` : ''}</div>`,
+          buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Change Auditor', cls: 'primary', value: 'ok', check: (bg) => { pick = $('#ca-new', bg).value; oo = $('#ca-oo', bg).value.trim(); if (!pick) toast('Choose the new Team Member.', 'warn'); return !!pick; } }] });
+        if (r !== 'ok') return;
+        if (guard.dirty && !(await save())) return;
+        const cur = await store.get('audits', rec.id);
+        await store.save('audits', rec.id, { ...cur.data, memberId: pick }, { silent: true });
+        // Work not yet approved moves with the audit; Final AOMs keep who wrote them.
+        for (const a of (await store.list('aoms')).filter((x) => x.data.auditId === rec.id && x.data.memberId === s.memberId && [ST.DRAFT, ST.RETURNED].includes(x.data.status || ST.DRAFT))) await store.save('aoms', a.id, { ...a.data, memberId: pick }, { silent: true });
+        await store.log('changed the auditor', `${refs.lgu[s.lguId]?.data.name || ''} · ${s.auditYear} · ${nice(old ? old.name : '')} → ${nice(refs.user[pick]?.data.name || '')}${oo ? ' · Office Order No. ' + oo : ''}`, s.teamId, refs.me.email);
+        s.memberId = pick;
+        toast('Auditor changed.', 'ok');
+        $('#teampanel', root).innerHTML = teamPanel(); wireMember();
+      }
       wireMember();
 
       async function save() {
