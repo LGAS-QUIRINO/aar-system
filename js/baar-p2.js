@@ -5,19 +5,14 @@
 // then Management's Comment/s and, when there is one, the Auditor's Rejoinder. Times New Roman 12, Letter size.
 import { loadScript } from './wp.js';
 import { ST, findingParas, fillText, paraHTML, DOC_CSS } from './aom.js';
-import { aomAmount } from './saor.js';
+import { aomAmount, titleAmount, titleHasAmount } from './aom.js';
 import { IAR_CSS } from './baar-iar.js';
 
 const P = (runs, o = {}) => ({ kind: 'p', runs: typeof runs === 'string' ? [{ t: runs }] : runs, ...o });
 const BL = () => ({ kind: 'p', runs: [], blank: true });
 export const P2_SECTIONS = [['A', 'FINANCIAL AUDIT'], ['B', 'OTHER FINANCIAL RELATED ISSUES']];
 
-// The amount in the title, as in Balligui: ₱30,570.72; from ₱100,000 up in millions, cut to three decimals (₱7,019,816.11 → ₱7.019 million).
-export function titleAmount(n) {
-  if (n === null || n === undefined || isNaN(n)) return '';
-  const v = Number(n);
-  return Math.abs(v) >= 100000 ? `₱${(Math.trunc(v / 1000) / 1000).toFixed(3)} million` : '₱' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+export { titleAmount } from './aom.js';
 
 // Paragraph indents (twips): the observation number at the margin, text at 0.35"; paragraphs numbered at 0.25", text at 0.75".
 const TOPIC = { left: 504, hanging: 504 }, BODY = { left: 1080, hanging: 576 }, SUBB = { left: 1440, hanging: 576 };
@@ -43,7 +38,7 @@ export function buildP2(ctx) {
       k++;
       const vars = ctx.varsFor(a);
       const amt = aomAmount(a.data);
-      const title = fillText(a.data.title || '', vars) + (amt !== null && amt !== undefined ? ` - ${titleAmount(amt)}` : '');
+      const title = fillText(a.data.title || '', vars) + (amt !== null && amt !== undefined && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
       paras.push(P(title, { italic: true, keep: true }), BL());
       // The AOM's own paragraphs, without its "AOM No." and title lines, numbered as in Balligui.
       const body = findingParas(a.data, { vars, num: `${k}.` }).slice(3);

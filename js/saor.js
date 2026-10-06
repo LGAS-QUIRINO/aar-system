@@ -3,21 +3,8 @@ import { loadScript } from './wp.js';
 import { ST, SECTIONS, fillText, blockPlain, letterOf } from './aom.js';
 import { aomNo } from './format.js';
 
-const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
-const peso = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// The AOM's amount: the first money placeholder in its topic sentence, read from the working paper.
-export function aomAmount(d) {
-  const topic = (d.blocks || []).find((b) => b.type === 'topic');
-  const vars = (d.wpData && d.wpData.vars) || {};
-  const names = [...String((topic && topic.text) || '').matchAll(/\[([A-Z0-9_]+)\]/g)].map((m) => m[1]).filter((n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n));
-  for (const n of names) {
-    const raw = vars[n] && vars[n].raw;
-    const num = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/[₱,\s]/g, ''));
-    if (raw !== undefined && raw !== '' && !isNaN(num)) return num;
-  }
-  return null;
-}
+import { aomAmount, peso, titleAmount, titleHasAmount } from './aom.js';
+export { aomAmount, titleAmount, titleHasAmount };
 export { peso };
 
 // The rejoinder as printed: the text, "None" when "No Rejoinder" was ticked, or blank when not decided yet.

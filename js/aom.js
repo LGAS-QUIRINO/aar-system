@@ -40,6 +40,30 @@ export function formatVar(name, raw) {
   return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/* ───────── The AOM's amount (title of the AOM and of BAAR Part II) ───────── */
+const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
+export const peso = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+// The first money placeholder in the topic sentence, read from the working paper.
+export function aomAmount(d) {
+  const topic = (d.blocks || []).find((b) => b.type === 'topic');
+  const vars = (d.wpData && d.wpData.vars) || {};
+  const names = [...String((topic && topic.text) || '').matchAll(/\[([A-Z0-9_]+)\]/g)].map((m) => m[1]).filter((n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n));
+  for (const n of names) {
+    const raw = vars[n] && vars[n].raw;
+    const num = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/[₱,\s]/g, ''));
+    if (raw !== undefined && raw !== '' && !isNaN(num)) return num;
+  }
+  return null;
+}
+// The amount after the title, as in Balligui: ₱30,570.72; from ₱100,000 up in millions, cut to three decimals (₱7,019,816.11 → ₱7.019 million).
+export function titleAmount(n) {
+  if (n === null || n === undefined || isNaN(n)) return '';
+  const v = Number(n);
+  return Math.abs(v) >= 100000 ? `₱${(Math.trunc(v / 1000) / 1000).toFixed(3)} million` : '₱' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+// A title that already carries an amount (typed, or a money placeholder) does not get it twice.
+export const titleHasAmount = (title) => /₱|\bP\s?\d/.test(String(title || '')) || [...String(title || '').matchAll(/\[([A-Z0-9_]+)\]/g)].some((m) => MONEY.test(m[1]) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(m[1]));
+
 // Split text into runs: plain text, filled placeholders and missing placeholders.
 export function fillRuns(text, vars) {
   const out = [];
@@ -221,7 +245,9 @@ export function findingParas(aom, ctx) {
   const vars = ctx.vars || {};
   const out = [];
   out.push(P([{ t: 'AOM No. ' + ctx.aomNoText }], { bold: true }));
-  out.push(P(fillRuns(aom.title || '', vars), { italic: true }));
+  // The amount follows the title, the same as in BAAR Part II.
+  const amt = titleHasAmount(aom.title) ? null : aomAmount(aom);
+  out.push(P([...fillRuns(aom.title || '', vars), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
   out.push(BL());
   let subIdx = -1;
   (aom.blocks || []).forEach((b, bi) => {
