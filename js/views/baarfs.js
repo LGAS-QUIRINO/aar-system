@@ -6,7 +6,7 @@ import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { nice, longDate, aomNo } from '../format.js';
 import { normTitle, rowKey, loadChart, CHART_NAME } from '../coa.js';
-import { interChoice, isCombined, keyCode, zeroRow, fundsOf, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
+import { interChoice, isCombined, keyCode, zeroRow, fundsOf, ALL_FUNDS, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
   posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb,
   money, shown, rawText, parseAmt, cents } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
@@ -23,14 +23,21 @@ export async function loadFS(ctx) {
   const { audit, lgu } = ctx;
   const lguId = audit.lguId, y = Number(audit.periodTo), yp = y - 1;
   const chart = await loadChart();
-  const funds = fundsOf(lgu);
+  // Trial Balance Used (Setup): per fund, or one consolidated trial balance for all funds.
+  const consolidated = audit.tbMode === 'consolidated';
+  const perFund = fundsOf(lgu);
+  const funds = consolidated ? [ALL_FUNDS] : perFund;
   const tb = { [y]: {}, [yp]: {} };
-  for (const f of funds) for (const yr of [y, yp]) tb[yr][f.k] = await loadTb(lguId, f.k, yr);
-  return compute({ ctx, lguId, y, yp, chart, funds, tb, rec: await loadFsRec(lguId, y), recP: await loadFsRec(lguId, yp) });
+  for (const f of [...perFund, ALL_FUNDS]) for (const yr of [y, yp]) tb[yr][f.k] = await loadTb(lguId, f.k, yr);
+  // The comparative year follows how it was kept: last year's per-fund trial balances stay per fund (added together in the
+  // statements), and a consolidated one stays consolidated.
+  const hasPer = perFund.some((f) => entered(tb[yp][f.k])), hasAll = entered(tb[yp].ALL);
+  const fundsP = consolidated ? (hasAll || !hasPer ? [ALL_FUNDS] : perFund) : (hasPer || !hasAll ? perFund : [ALL_FUNDS]);
+  return compute({ ctx, lguId, y, yp, chart, funds, fundsP, consolidated, tb, rec: await loadFsRec(lguId, y), recP: await loadFsRec(lguId, yp) });
 }
 function compute(F) {
   F.figY = yearFigures(F.tb[F.y], F.funds, F.chart);
-  F.figP = yearFigures(F.tb[F.yp], F.funds, F.chart);
+  F.figP = yearFigures(F.tb[F.yp], F.fundsP || F.funds, F.chart);
   F.confirmed = !!(F.rec && F.rec.confirmed);
   return F;
 }
@@ -38,7 +45,11 @@ const entered = (t) => !!t && (t.none || (t.rows || []).length > 0);
 // The comparative year came from an earlier BAAR of this barangay (its current year there): you only check it.
 const fromPrior = (F, fund) => { const t = F.tb[F.yp][fund]; return !!(t && t.kind === 'current' && t.auditId !== F.ctx.rec.id); };
 const scfPriorLocked = (F) => !!(F.recP && F.recP.confirmed && F.recP.auditId !== F.ctx.rec.id);
-const tabs = (F) => F.funds.flatMap((f) => [F.y, F.yp].map((yr) => ({ fund: f.k, label: f.label, yr, key: `${f.k}-${yr}`, cmp: yr === F.yp })));
+const tabs = (F) => {
+  const fp = F.fundsP || F.funds, same = fp.length === F.funds.length && fp.every((f, i) => f.k === F.funds[i].k);
+  const t = (f, yr) => ({ fund: f.k, label: f.label, yr, key: `${f.k}-${yr}`, cmp: yr === F.yp });
+  return same ? F.funds.flatMap((f) => [t(f, F.y), t(f, F.yp)]) : [...F.funds.map((f) => t(f, F.y)), ...fp.map((f) => t(f, F.yp))];
+};
 const tabLabel = (F, x) => `${x.label} · CY ${x.yr}${x.cmp ? ' Comparative (audited)' : ''}`;
 
 function tabStatus(F, x) {
@@ -93,8 +104,9 @@ function interCheck(fig, F) {
   return out;
 }
 // The unutilized 5% BDRRMF and Trust Liabilities – BDRRMF in the books.
-export function bdrrmfCheck(fig) {
+export function bdrrmfCheck(fig, F) {
   const b = fig.bdrrmf;
+  if (!b && F && F.consolidated) return [{ st: 'wait', t: 'Unutilized 5% BDRRMF: not possible, the trial balance is consolidated (check the BDRRMF records)' }];
   if (!b) return [{ st: 'wait', t: 'Unutilized 5% BDRRMF: runs when the 5% BDRRMF trial balance is entered' }];
   if (b.unutilized <= 0) return [{ st: 'ok', t: 'No unutilized 5% BDRRMF balance at year-end' }];
   if (!b.recorded) return [{ st: 'warn', t: `Unutilized 5% BDRRMF ₱${money(b.unutilized)} is not recorded as Trust Liabilities – BDRRMF`, flag: 'bdrrmf' }];
@@ -110,7 +122,8 @@ export function chartUsage(F) {
 export function tbResultsHTML(F) {
   const u = chartUsage(F);
   const usage = u.manual + u.c2015 + u.added + u.check + u.ver ? `<div style="font-weight:700;color:var(--navy)">Chart of accounts used by management (CY ${F.y})</div><div>Manual ${u.manual} · COA Circular 2015-009 ${u.c2015}${u.added ? ` · Added ${u.added}` : ''} · Check ${u.check} · For verification ${u.ver}</div>` : '';
-  const comb = F.funds.length > 1 ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Combined Funds</div>${checkHTML([...interCheck(F.figY, F), ...bdrrmfCheck(F.figY)])}` : '';
+  const comb = F.funds.length > 1 ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Combined Funds</div>${checkHTML([...interCheck(F.figY, F), ...bdrrmfCheck(F.figY, F)])}`
+    : F.consolidated ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Consolidated (All Funds)</div>${checkHTML(bdrrmfCheck(F.figY, F))}` : '';
   const checks = inputChecks(F).filter((c) => !/Combined funds|Subsidy|Due to\/from/.test(c.t));
   return `${usage}${comb}${checks.length ? `<div style="font-weight:700;color:var(--navy);margin-top:6px">Trial balances</div>${checkHTML(checks)}` : ''}` || '<span class="hint">Runs once a trial balance is entered.</span>';
 }
@@ -187,7 +200,7 @@ export function afsChecks(F, doc) {
     if (!typed) { out.push({ st: 'wait', t: 'Budget and Actual: enter the budget' }); stat.scbaa = 'grey'; }
     else out.push({ st: 'ok', t: `Budget and Actual: ${doc.scbaa.rows.filter((r) => !r.h).length} rows with amounts` });
     if (F.funds.length > 1) out.push(...interCheck(F.figY, F));
-    const waitFunds = F.funds.filter((f) => !entered(F.tb[F.y][f.k]) || !entered(F.tb[F.yp][f.k])).map((f) => f.label);
+    const waitFunds = [...new Set(tabs(F).filter((x) => !entered(F.tb[x.yr][x.fund])).map((x) => x.label))];
     if (waitFunds.length) out.push({ st: 'wait', t: `${waitFunds.join(' and ')}: waiting for the trial balance` });
   }
   const base = !F.figY.any ? 'grey' : !F.confirmed ? 'warn' : 'ok';
@@ -293,10 +306,10 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
   }
   const status = all.map((x) => ({ x, ...tabStatus(F, x) }));
   const statusHTML = `<table class="coat"><colgroup><col style="width:30%"><col><col></colgroup><thead><tr><th>Trial Balance</th><th>CY ${F.y}</th><th>CY ${F.yp} Comparative</th></tr></thead><tbody>
-    ${F.funds.map((f) => `<tr><td>${esc(f.label)}</td>${[F.y, F.yp].map((yr) => `<td>${status.find((z) => z.x.fund === f.k && z.x.yr === yr).pill}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    ${[...new Map(all.map((x) => [x.fund, x.label])).entries()].map(([k, label]) => `<tr><td>${esc(label)}</td>${[F.y, F.yp].map((yr) => { const z = status.find((q) => q.x.fund === k && q.x.yr === yr); return `<td>${z ? z.pill : '<span class="hint">–</span>'}</td>`; }).join('')}</tr>`).join('')}</tbody></table>
     <p class="hint" style="margin:8px 0 0">This year, enter the CY ${F.yp} audited figures once: import last year's audited trial balance or paste them per account. From next year, the comparative fills in by itself from this BAAR (final audited figures); you only check it.</p>`;
-  const noneBox = cur.fund !== 'GF' && editable && (!t || t.none) ? `<label class="check" style="min-height:0"><input type="checkbox" id="tb-none" ${t && t.none ? 'checked' : ''}>No separate trial balance for this fund</label>` : '';
-  const body = `<div class="topnote">Import each fund's trial balance from the bookkeeper's Excel file, or paste it. Accounts are matched to the Manual first, then to COA Circular 2015-009; check the rows marked Check or For Verification.</div>
+  const noneBox = cur.fund !== 'GF' && cur.fund !== 'ALL' && editable && (!t || t.none) ? `<label class="check" style="min-height:0"><input type="checkbox" id="tb-none" ${t && t.none ? 'checked' : ''}>No separate trial balance for this fund</label>` : '';
+  const body = `<div class="topnote">${F.consolidated ? 'Import the consolidated trial balance (all funds) from the bookkeeper\'s Excel file, or paste it.' : 'Import each fund\'s trial balance from the bookkeeper\'s Excel file, or paste it.'} Accounts are matched to the Manual first, then to COA Circular 2015-009; check the rows marked Check or For Verification.</div>
     <div class="xcols" style="grid-template-columns:minmax(0,1fr) 300px">
       <section class="panel"><div class="panel-head"><h2>Trial Balance</h2></div><div class="panel-body">
         <div class="lr-row" style="align-items:flex-start"><div class="tabs2">${tabsHTML}</div>
@@ -412,7 +425,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   const pLock = !canEdit || scfPriorLocked(F);
   const dis = canEdit ? '' : 'disabled';
   const doc0 = fsDoc(F, start, work);
-  const missingFunds = [F.y, F.yp].flatMap((yr) => F.funds.filter((f) => !entered(F.tb[yr] && F.tb[yr][f.k])).map((f) => `${f.label} CY ${yr}${yr === F.yp ? ' Comparative' : ''}`));
+  const missingFunds = tabs(F).filter((x) => !entered(F.tb[x.yr] && F.tb[x.yr][x.fund])).map((x) => `${x.label} CY ${x.yr}${x.cmp ? ' Comparative' : ''}`);
   const fsMode = mode === 'fs', noTb = fsMode && !F.figY.any, showCash = !fsMode || sel === 'scf';
   const fundsLine = F.funds.map((f) => { const t = F.tb[F.y][f.k]; return !entered(t) ? pill(`${f.label} · not yet entered`, 'grey') : t.none ? pill(`${f.label} · no separate trial balance`, 'grey') : pill(`✓ ${f.label}`, 'ok'); }).join(' ');
   // Budget and Actual entry

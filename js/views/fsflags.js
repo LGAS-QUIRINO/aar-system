@@ -86,7 +86,7 @@ export function computeFlags(F) {
     if (big.length) add('change', `Big changes from CY ${F.yp}`, big, null, { d: big.map((x) => `${x.a.title} ₱${money(x.p, { dash: '0.00' })} → ₱${money(x.v, { dash: '0.00' })}`).join(' · ') });
   }
   // BDRRMF
-  bdrrmfCheck(Y).filter((c) => c.flag).forEach((c) => out.push({ id: 'bdrrmf', rule: 'bdrrmf', t: c.t, d: '', amt: Y.bdrrmf ? Y.bdrrmf.unutilized : null }));
+  bdrrmfCheck(Y, F).filter((c) => c.flag).forEach((c) => out.push({ id: 'bdrrmf', rule: 'bdrrmf', t: c.t, d: '', amt: Y.bdrrmf ? Y.bdrrmf.unutilized : null }));
   // budget
   budgetFlags(F).forEach((f) => out.push({ ...f, d: f.d || '' }));
   return out;

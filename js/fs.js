@@ -8,6 +8,8 @@ export const tbId = (lguId, fund, year) => `tb-${lguId}-${fund}-${year}`;
 export const fsId = (lguId, year) => `fs-${lguId}-${year}`;
 
 // The funds of a barangay (LGU Master List), General Fund first.
+// One trial balance for all funds (Setup › Trial Balance Used › Consolidated).
+export const ALL_FUNDS = { k: 'ALL', label: 'All Funds' };
 export function fundsOf(lgu) {
   const codes = (lgu.funds && lgu.funds.length ? lgu.funds : ['GF', 'BDRRMF']);
   const custom = Object.fromEntries((lgu.customFunds || []).map((f) => [f.code, f.name]));

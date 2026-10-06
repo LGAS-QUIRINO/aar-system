@@ -770,3 +770,5 @@ body.ro-staff :is(button, a)[id$="print"], body.ro-staff :is(button, a)[id$="wor
 .pgap{display:block;height:.75em}
 /* New version ready */
 .upd-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:9999;display:flex;align-items:center;gap:12px;background:var(--navy);color:#fff;padding:10px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(20,40,63,.3);font-size:14px;max-width:calc(100vw - 32px);flex-wrap:wrap}
+/* Setup: Trial Balance Used (label at the left, choices at the right) */
+.tbm-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line-2);padding-top:14px;margin-top:14px}

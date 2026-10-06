@@ -25,7 +25,7 @@ const ntaRow = SCBAA.find((r) => r.t === 'Share from Internal Revenue Collection
 // The subsidy the General Fund gave: Combined (to the 5% BDRRMF) and Transfer (to the 10% SK Fund).
 function subsidies(F) {
   const out = { bdrrmf: null, sk: null };
-  const s = F.figY.st && F.figY.st.GF; if (!s) return out;
+  const s = F.figY.st && (F.figY.st.GF || F.figY.st.ALL); if (!s) return out;
   s.rows.forEach(({ r, acct: a, c }) => {
     if (!a || !LINE[a.line] || a.line !== 'tr_to' || !interChoice(r, a)) return;
     const v = c.dr - c.cr, k = isCombined(r, a) ? 'bdrrmf' : 'sk';

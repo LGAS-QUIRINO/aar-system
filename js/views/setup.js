@@ -1,7 +1,7 @@
 // Screen 2 · Audit Setup
 import { store, newId } from '../store.js';
 import { N1_WORKFORCE } from '../baar-notes.js';
-import { esc, toast, setDirty, guard, modal, pill, $, $$ } from '../ui.js';
+import { esc, toast, setDirty, guard, modal, confirmBox, pill, $, $$ } from '../ui.js';
 import { ST } from '../aom.js';
 import { has, myTeamIds, canEditSetup } from '../refs.js';
 import { aomRange, aomNo, periodYears, longDate, fullName, upper, nice } from '../format.js';
@@ -137,7 +137,7 @@ export async function setup(refs, params) {
           <div class="field"><label class="label" for="pt">Period Covered To</label><select class="input" id="pt" ${pdis}>${yearOpts(s.periodTo, year - 8, year)}</select></div>
           <div class="field"><label class="label" for="ad">AOM Date</label><input type="date" class="input" id="ad" value="${esc(s.aomDate)}" ${dis}></div>
         </div>${periodLocked ? `<div id="p-lock"><div class="note warn" style="margin:0;display:block">Locked because AOM No. ${esc(aomNo(s.auditYear, finalAom.data.number || 1, s.periodFrom, s.periodTo))} is Final, so the Audit Year and the period are locked. Only the SA or Admin can unlock them.</div>
-          ${canUnlock && editable ? '<div class="lr-row" style="margin-top:8px"><span></span><button class="btn sm" type="button" id="p-unlock">Unlock</button></div>' : ''}</div>` : ''}<div id="facts">${facts()}</div></div></section>
+          ${canUnlock && editable ? '<div class="lr-row" style="margin-top:8px"><span></span><button class="btn sm" type="button" id="p-unlock">Unlock</button></div>' : ''}</div>` : ''}<div class="tbm-row"><span class="label">Trial Balance Used</span><div class="seg" role="group" aria-label="Trial Balance Used">${[['fund', 'Per Fund'], ['consolidated', 'Consolidated (All Funds)']].map(([k, l]) => `<button type="button" data-tbm="${k}" class="${(s.tbMode || 'fund') === k ? 'on' : ''}" ${dis}>${l}</button>`).join('')}</div></div><div id="facts">${facts()}</div></div></section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">3</span><h2>Officials for the AOM</h2></div><span class="hint" id="carry"></span></div>
         <div class="t-head off-row"><span style="grid-area:title">Title</span><span style="grid-area:name">Full Name · Position</span><span style="grid-area:role">AOM Role</span></div>
         <div id="officials">${officialsRows()}</div>
@@ -236,6 +236,19 @@ export async function setup(refs, params) {
         $('#teampanel', root).innerHTML = teamPanel(); wireMember();
       }
       wireMember();
+      // Trial Balance Used: per fund, or one consolidated trial balance for all funds. Parts 06 and 07 use the consolidated amounts either way.
+      $$('[data-tbm]', root).forEach((b) => { b.onclick = async () => {
+        const k = b.dataset.tbm;
+        if ((s.tbMode || 'fund') === k) return;
+        if (rec) {
+          const yr = Number(s.periodTo);
+          const has = (await store.list('letters')).some((l) => l.data.type === 'tb' && l.data.lguId === s.lguId && Number(l.data.year) === yr && (l.data.rows || []).length);
+          if (has && !(await confirmBox('Change Trial Balance Used', `A trial balance for CY ${yr} is already entered ${(s.tbMode || 'fund') === 'fund' ? 'per fund' : 'as consolidated'}. It stays saved but is not used while this is set to ${k === 'fund' ? 'Per Fund' : 'Consolidated (All Funds)'}. Change it?`, 'Change'))) return;
+        }
+        s.tbMode = k;
+        $$('[data-tbm]', root).forEach((x) => x.classList.toggle('on', x === b));
+        dirty();
+      }; });
 
       async function save() {
         if (!s.lguId) { toast('Choose a Barangay first.', 'bad'); return false; }
