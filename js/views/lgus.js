@@ -44,12 +44,14 @@ export async function lgus(refs, params, q) {
         ${isAdmin ? '<div class="btn-row"><button class="btn primary" id="m-save">Save</button></div>' : ''}</div></section>` : ''}
       ${sel ? `<section class="panel"><div class="panel-head"><h2>Barangay ${esc(sel.data.name)}</h2></div><div class="panel-body">
         <div class="field"><label class="label" for="b-name">Official Name</label><input class="input strong" id="b-name" value="${esc(sel.data.name)}" ${dis}></div>
+        <div class="field"><label class="label" for="b-psa">PSA Name</label><input class="input" id="b-psa" value="${esc(sel.data.psaName || '')}" ${dis}><span class="hint">Only when the PSA list still uses an old name.</span></div>
         <div class="grid-2"><div class="field"><span class="label">Municipality</span><div class="input" style="display:flex;align-items:center">${esc(mun.data.name)}</div></div>
         <div class="field"><label class="label" for="b-team">Audit Team</label><select class="input" id="b-team" ${dis}>${refs.teams.map((t) => `<option value="${t.id}" ${t.id === sel.data.teamId ? 'selected' : ''}>${esc(t.data.name)}</option>`).join('')}</select></div></div>
         <fieldset class="field" style="border:0;padding:0;margin:0"><legend class="label">Funds</legend>
           <div id="b-funds">${fundList(sel.data).map((f) => `<label class="check"><input type="checkbox" name="fund" value="${esc(f.code)}" ${(sel.data.funds || []).includes(f.code) ? 'checked' : ''} ${dis}>${esc(f.name)}${f.code !== 'GF' && f.code !== 'BDRRMF' ? ` <span class="hint">(${esc(f.code)})</span>` : ''}</label>`).join('')}</div>
           ${isAdmin ? '<div><button type="button" class="btn sm dashed" id="b-addfund">+ Add Fund</button></div><span class="hint">Untick a fund the Barangay no longer uses. Funds are never deleted, so past audits keep them.</span>' : ''}</fieldset>
         <label class="check"><input type="checkbox" id="b-active" ${sel.data.active ? 'checked' : ''} ${dis}>Active (inactive Barangays are hidden from New Audit)</label>
+        ${isAdmin && brgys.length > 1 ? '<div class="sv-foot"><span class="hint">Added as a new barangay but it is an existing one under its old name?</span><button type="button" class="btn sm ghost" id="b-same">Same Barangay As…</button></div>' : ''}
         <div class="field"><span class="label">Audit History</span>${audits.filter((a) => a.data.lguId === sel.id).sort((a, b) => b.data.auditYear - a.data.auditYear)
           .map((a) => `<small>${esc(a.data.auditYear)} · ${esc(periodPhrase(a.data.periodFrom, a.data.periodTo))} · ${esc(a.data.imported ? 'Earlier Record' : a.data.status || 'In Progress')}</small>`).join('') || '<small class="hint">Earlier audits appear here once entered</small>'}</div>
         ${isAdmin ? '<div class="btn-row"><span class="save-state saved"><span class="d"></span>All Changes Saved</span><button class="btn primary" id="b-save" style="margin-left:auto">Save</button></div>' : ''}
@@ -91,7 +93,7 @@ export async function lgus(refs, params, q) {
         // Barangays saved under an older spelling are renamed to the PSA name, not added again.
         const old = OLD_NAMES[munId] || {};
         const renames = brgys.filter((b) => old[b.data.name] && !brgys.some((x) => x.data.name === old[b.data.name]));
-        const have = new Set([...brgys.map((b) => b.data.name.toLowerCase()), ...renames.map((b) => old[b.data.name].toLowerCase())]);
+        const have = new Set([...brgys.map((b) => b.data.name.toLowerCase()), ...brgys.filter((b) => b.data.psaName).map((b) => b.data.psaName.toLowerCase()), ...renames.map((b) => old[b.data.name].toLowerCase())]);
         const missing = list.filter((n) => !have.has(n.toLowerCase()));
         if (!missing.length && !renames.length) { toast(`All ${list.length} Barangays of ${mun.data.name} are already in the list.`, 'ok'); return; }
         const parts = [];
@@ -105,10 +107,44 @@ export async function lgus(refs, params, q) {
       $('#add-brgy', root).onclick = async () => {
         const r = await modal({
           title: 'Add Barangay · ' + mun.data.name,
-          body: '<div class="field"><label class="label" for="nb">Official Name</label><input class="input" id="nb" placeholder="e.g. San Pedro"></div>',
+          body: '<div class="field"><label class="label" for="nb">Official Name</label><input class="input" id="nb"></div>',
           buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Add', cls: 'primary', value: 'add', check: (bg) => { const v = $('#nb', bg).value.trim(); if (!v) return false; if (brgys.some((b) => b.data.name.toLowerCase() === v.toLowerCase())) { toast('That Barangay is already listed.', 'bad'); return false; } lgus.nb = v; return true; } }]
         });
         if (r === 'add') await addMany([lgus.nb]);
+      };
+      // A barangay added again under its new name: join it to the original, which keeps its ID and history and takes the new name.
+      const same = $('#b-same', root);
+      if (same) same.onclick = async () => {
+        const others = brgys.filter((b) => b.id !== sel.id).sort((a, b) => (a.data.active === b.data.active ? 0 : a.data.active ? 1 : -1) || a.data.name.localeCompare(b.data.name));
+        let tgtId = '';
+        const r = await modal({ title: `Same Barangay As · ${sel.data.name}`,
+          body: `<div class="field"><label class="label" for="sb-t">Barangay ${esc(sel.data.name)} is the same barangay as</label><select class="input" id="sb-t"><option value="">Choose…</option>${others.map((b) => `<option value="${b.id}">${esc(b.data.code || '')} · ${esc(b.data.name)}${b.data.active ? '' : ' (Inactive)'}</option>`).join('')}</select></div>
+            <p style="margin:0;line-height:1.5" id="sb-what">The barangay you choose keeps its ID and audit history and takes the name ${esc(sel.data.name)}. ${esc(sel.data.code || '')} is removed from the list, and anything entered under it moves to the barangay you choose.</p>`,
+          buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Join', cls: 'primary', value: 'ok', check: (bg) => { tgtId = $('#sb-t', bg).value; if (!tgtId) toast('Choose the barangay.', 'warn'); return !!tgtId; } }] });
+        if (r !== 'ok') return;
+        const src = sel, tgt = refs.lgu[tgtId];
+        const oldName = tgt.data.name;
+        // Everything entered under the duplicate moves to the original.
+        let moved = 0;
+        for (const a of (await store.list('audits')).filter((x) => x.data.lguId === src.id)) { await store.save('audits', a.id, { ...a.data, lguId: tgt.id }, { silent: true }); moved++; }
+        for (const a of (await store.list('aoms')).filter((x) => x.data.lguId === src.id)) await store.save('aoms', a.id, { ...a.data, lguId: tgt.id }, { silent: true });
+        for (const l of (await store.list('letters')).filter((x) => x.data.lguId === src.id || x.id.includes(src.id))) {
+          const nid = l.id.split(src.id).join(tgt.id);
+          const data = { ...l.data, ...(l.data.lguId === src.id ? { lguId: tgt.id } : {}) };
+          if (nid === l.id) { await store.save('letters', l.id, data, { silent: true }); continue; }
+          const there = await store.get('letters', nid);
+          if (!there || there.deleted) await store.save('letters', nid, data, { silent: true });
+          await store.save('letters', l.id, l.data, { deleted: true, silent: true });
+        }
+        const funds = [...new Set([...(tgt.data.funds || []), ...(src.data.funds || [])])];
+        const cf = [...(tgt.data.customFunds || [])]; (src.data.customFunds || []).forEach((f) => { if (!cf.some((x) => x.code === f.code)) cf.push(f); });
+        await store.save('lgus', tgt.id, { ...tgt.data, name: src.data.name, psaName: tgt.data.psaName || (oldName.toLowerCase() !== src.data.name.toLowerCase() ? oldName : ''), active: true, funds, customFunds: cf, lastOfficials: tgt.data.lastOfficials || src.data.lastOfficials || null }, { silent: true });
+        await store.save('lgus', src.id, src.data, { deleted: true, silent: true });
+        await store.log('joined a barangay added twice', `${src.data.code || ''} ${src.data.name} → ${tgt.data.code || ''} (formerly ${oldName}) · ${mun.data.name}${moved ? ` · ${moved} audit${moved > 1 ? 's' : ''} moved` : ''}`, '', refs.me.email);
+        toast(`Joined. Barangay ${src.data.name} is now ${tgt.data.code || ''}.`, 'ok');
+        setDirty(false);
+        location.hash = go(munId, tgt.id);
+        emitChange('local');
       };
       const sv = $('#b-save', root);
       if (sv) {
@@ -116,7 +152,8 @@ export async function lgus(refs, params, q) {
           const name = $('#b-name', root).value.trim();
           if (!name) { toast('Enter the official name.', 'bad'); return false; }
           const funds = $$('input[name=fund]:checked', root).map((x) => x.value);
-          await store.save('lgus', sel.id, { ...sel.data, customFunds: lgus.customFunds || sel.data.customFunds || [], name, teamId: $('#b-team', root).value, funds, active: $('#b-active', root).checked });
+          const psaName = $('#b-psa', root).value.trim();
+          await store.save('lgus', sel.id, { ...sel.data, customFunds: lgus.customFunds || sel.data.customFunds || [], name, psaName: psaName && psaName.toLowerCase() !== name.toLowerCase() ? psaName : '', teamId: $('#b-team', root).value, funds, active: $('#b-active', root).checked });
           lgus.customFunds = null;
           await store.log('edited a barangay', name, '', refs.me.email);
           setDirty(false); toast('Saved.', 'ok'); return true;
