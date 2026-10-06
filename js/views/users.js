@@ -132,7 +132,7 @@ export async function users(refs) {
 
 /* ── Clear Test Data (Admin) ── */
 // Audit work only; reference lists, the AOM Library and saved standards stay. Marked deleted, so every device drops them on sync.
-const AUDIT_LETTERS = ['baar', 'baar-review-part', 'fs', 'tb', 'saor', 'exit', 'raomap'];
+const AUDIT_LETTERS = ['baar', 'baar-review-part', 'fs', 'tb', 'saor', 'saor-review', 'exit', 'raomap'];
 async function clearTestData(refs) {
   if (!(CONFIG.PRACTICE || DEMO)) return;   // never on the live copy
   const audits = await store.list('audits'), aoms = await store.list('aoms');

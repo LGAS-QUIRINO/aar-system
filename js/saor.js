@@ -30,6 +30,34 @@ export function recText(blocks) {
   return (r.items || []).length ? [r.lead || 'We recommend that Management:', ...r.items.map((it, i) => `${letterOf(i)}. ${it}`)].join('\n') : (r.text || '');
 }
 
+/* ── Suggested general wording ── */
+// Turns one barangay's AOM sentence into the general wording for the SAOR, by fixed rules:
+// amounts and other barangay details come out, and "the barangay" / "the Punong Barangay" become plural.
+// It is a first draft for the team to check, edit and save.
+const NUM = String.raw`(?:₱\s*)?(?:\[[A-Z0-9_]+\]|\d[\d,]*(?:\.\d+)?)`;
+export function generalize(text) {
+  let t = String(text || '');
+  // "Barangay [BARANGAY]" / "of Barangay [BARANGAY]" → barangays
+  t = t.replace(/\b(?:of|in|by)\s+(?:the\s+)?Barangay\s+\[BARANGAY\]/g, 'of barangays').replace(/\bBarangay\s+\[BARANGAY\]/g, 'barangays').replace(/\[BARANGAY\]/g, 'barangays');
+  // Amount phrases right after the subject: "Collections amounting to [X]" → "Collections of barangays"
+  let first = true;
+  const amt = new RegExp(String.raw`\s*,?\s*\b(?:amounting\s+to|in\s+the\s+(?:total\s+)?amount\s+of|with\s+a\s+total\s+(?:amount\s+)?of|totall?ing|aggregating|worth)\s+${NUM}(?:\s*\([^)]*\))?`, 'gi');
+  t = t.replace(amt, (m, off, all) => { const lead = all.slice(0, off); const r = first && off < 90 && !/barangay/i.test(lead) ? ' of barangays' : ''; first = false; return r; });
+  // Other details carrying a value: drop the comma-set-off clause or bracketed part that holds it.
+  // The audit period and the municipality are the same for every barangay, so they stay.
+  const DETAIL = String.raw`\[(?!(?:AUDIT_YEAR|AUDIT_PERIOD|AUDIT_YEARS|MUNICIPALITY)\])[A-Z0-9_]+\]`;
+  t = t.replace(new RegExp(String.raw`\s*\([^()]*${DETAIL}[^()]*\)`, 'g'), '');
+  const clause = new RegExp(String.raw`,[^,;]*?${DETAIL}[^,;]*?(?=,|;|\.\s|\.$)`);
+  for (let i = 0; i < 6 && clause.test(t); i++) t = t.replace(clause, '');
+  // Singular barangay to plural, with the verb that follows.
+  const verb = { has: 'have', is: 'are', was: 'were', does: 'do' };
+  t = t.replace(/\b([Tt])he\s+barangay\b(?!\s+[A-Z])(\s+(has|is|was|does)\b)?/g, (m, T, sp, v) => (T === 'T' ? 'Barangays' : 'barangays') + (v ? ' ' + verb[v] : ''));
+  t = t.replace(/\b([Tt])he\s+Barangay\b(?=\s+[a-z]|[.,;:]|$)(\s+(has|is|was|does)\b)?/g, (m, T, sp, v) => (T === 'T' ? 'Barangays' : 'barangays') + (v ? ' ' + verb[v] : ''));
+  t = t.replace(/\b(Punong Barangay|Barangay Treasurer|Barangay Bookkeeper|Barangay Accountant|Barangay Captain)(?!s)\b/g, '$1s').replace(/\bBarangay Secretary\b/g, 'Barangay Secretaries');
+  // Tidy up.
+  return t.replace(/\s+([,.;:])/g, '$1').replace(/,\s*,/g, ',').replace(/[ \t]{2,}/g, ' ').replace(/^\s+|\s+$/g, '');
+}
+
 /**
  * Build the SAOR.
  * input: { audits [{ rec, lgu (name), vars(aom) }], aoms (records), templates { code: activeTemplateData }, overrides { key: { obs, rec } } }
@@ -55,10 +83,17 @@ export function buildSaor(input) {
     const single = g.items.length === 1;
     const ownObs = fillText(blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {}), vars0);
     const ownRec = fillText(recText(first.blocks), vars0);
-    const libObs = single ? ownObs : tpl && (tpl.saor || '').trim() ? tpl.saor.trim() : ownObs;
-    const libRec = single ? ownRec : tpl ? ((tpl.saorRec || '').trim() || recText(tpl.blocks)) : ownRec;
+    // Two or more barangays: the AOM Library wording when the template has it; otherwise the app suggests one.
+    const rawTopic = blockPlain((first.blocks || []).find((b) => b.type === 'topic') || {});
+    const genObs = single ? ownObs : fillText(generalize(rawTopic), vars0);
+    const genRec = single ? ownRec : fillText(generalize(recText(tpl ? tpl.blocks : first.blocks)), vars0);
+    const hasLib = !single && !!(tpl && (tpl.saor || '').trim());
+    const libObs = single ? ownObs : hasLib ? tpl.saor.trim() : genObs;
+    const libRec = single ? ownRec : hasLib && (tpl.saorRec || '').trim() ? tpl.saorRec.trim() : genRec;
     const key = g.key + (single ? '#1' : '');
     const ov = overrides[key] || {};
+    // Where the wording stands: own (one barangay), library, suggested (not saved yet) or saved.
+    const source = single ? 'own' : ov.obs !== undefined || ov.rec !== undefined ? 'saved' : hasLib ? 'library' : 'suggested';
     const lines = g.items.map(({ a, au }) => {
       const amt = aomAmount(a.data);
       const m = a.data.mgmt || null;
@@ -68,7 +103,7 @@ export function buildSaor(input) {
     const money = lines.some((l) => l.amount !== null);
     const total = money ? lines.reduce((s, l) => s + (l.amount || 0), 0) : null;
     return { key, single, code: g.code, section, order: g.code ? codeNum(g.code) : 10000, title: (tpl && tpl.title) || first.title,
-      obs: ov.obs !== undefined ? ov.obs : libObs, rec: ov.rec !== undefined ? ov.rec : libRec, libObs, libRec, edited: ov.obs !== undefined || ov.rec !== undefined, lines, money, total };
+      obs: ov.obs !== undefined ? ov.obs : libObs, rec: ov.rec !== undefined ? ov.rec : libRec, libObs, libRec, genObs, genRec, hasLib, source, edited: ov.obs !== undefined || ov.rec !== undefined, lines, money, total };
   }).sort((x, y) => x.section.localeCompare(y.section) || x.order - y.order || x.title.localeCompare(y.title));
   let n = 0;
   list.forEach((o) => { o.n = ++n; });
@@ -79,6 +114,9 @@ export function buildSaor(input) {
 }
 
 /* ── Print View and printout ── */
+// Until the SA's final approval, every page says it is a draft for review, not for the exit conference.
+export const DRAFT_MARK = 'DRAFT – For Review Only';
+const DRAFT_FOOT = 'DRAFT – For Review Only · Not for use at the exit conference';
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const br = (s) => escH(s).replace(/\n/g, '<br>');
 export const SAOR_CSS = `
@@ -106,6 +144,8 @@ export const SAOR_CSS = `
 .saor-t tr.tot td{font-weight:700}
 .saor-t .amt{float:right;padding-left:6pt}
 .saor-t tr.tot .amt{border-top:1px solid #000;border-bottom:3px double #000;line-height:1.3}
+.saor-draft{position:absolute;top:0;right:0;font:700 9.5pt Arial,sans-serif;color:#9F1C1C;border:1.5pt solid #9F1C1C;border-radius:3px;padding:1pt 6pt;z-index:2}
+.saor-draft-foot{margin-top:8pt !important;text-align:center;font:9pt Arial,sans-serif;color:#9F1C1C}
 .saor-wm{position:absolute;top:38%;left:0;right:0;text-align:center;font:700 90pt Arial,sans-serif;color:rgba(0,0,0,.06);transform:rotate(-20deg);pointer-events:none}
 `;
 // Cell text: paragraphs with a small space between them; a./b./c. items get a hanging indent.
@@ -126,7 +166,7 @@ export function saorHTML(m, head) {
     <tr class="o1 multi"><td class="no">${o.n}.</td><td></td><td class="j">${paras(o.obs)}</td><td class="j rec" rowspan="${1 + o.lines.length + (o.money ? 1 : 0)}">${paras(o.rec)}</td><td></td><td></td></tr>
     ${o.lines.map((l, i) => `<tr class="in"><td></td><td class="ref">${refHTML(l.ref)}</td><td>${escH(l.brgy)}${l.amount !== null ? `<span class="amt">${escH(amtTxt(l.amount, firstAmt(o) === i))}</span>` : ''}</td><td class="j">${paras(l.comment)}</td><td class="j">${paras(l.rejoinder)}</td></tr>`).join('')}
     ${o.money ? `<tr class="tot in"><td></td><td></td><td>Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}<span class="amt">${escH(peso(o.total))}</span></td><td></td><td></td></tr>` : ''}`).join('')).join('');
-  return `<div class="saor-doc"><div class="saor-wm">CONFIDENTIAL</div>
+  return `<div class="saor-doc">${head.draft ? `<div class="saor-draft">${DRAFT_MARK}</div>` : ''}<div class="saor-wm">CONFIDENTIAL</div>
     <div class="lh2"><img class="seal" src="img/lh-seal.jpg" alt="Commission on Audit seal"><img class="name" src="img/lh-name.jpg" alt="Republic of the Philippines, Commission on Audit" style="width:3in;height:.434in"></div>
     <p class="c b">REGIONAL OFFICE NO. II</p><p class="c">PROVINCE OF QUIRINO</p><p class="c">PROVINCIAL SATELLITE AUDITING OFFICE</p><p class="c" style="font-size:9pt">Capitol Hills, Cabarroguis, Quirino</p>
     <p class="c b rule">Office of the Auditor – Audit Team ${escH(head.officeCode || '')}</p>
@@ -134,13 +174,13 @@ export function saorHTML(m, head) {
     <p class="c" style="font-style:italic">Barangays of ${escH(head.mun)}, Quirino</p><p class="c" style="font-style:italic">For Audit Year ${escH(head.year)}</p>
     <table class="saor-t"><colgroup><col style="width:4%"><col style="width:13%"><col style="width:27%"><col style="width:22.6%"><col style="width:17.8%"><col style="width:15.6%"></colgroup>
       <thead><tr><th>No.</th><th>Reference No.</th><th>Observations</th><th>Recommendations</th><th>Management Comments</th><th>Auditor's Rejoinder</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:16pt">No Final AOMs yet.</td></tr>'}</tbody></table></div>`;
+      <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:16pt">No Final AOMs yet.</td></tr>'}</tbody></table>${head.draft ? `<p class="saor-draft-foot">${DRAFT_FOOT}</p>` : ''}</div>`;
 }
 export function printSaor(m, head) {
   const css = `${SAOR_CSS}
-    @page{size:13in 8.5in;margin:.75in .75in .8in .75in;@bottom-right{content:"Page " counter(page) " of " counter(pages);font:9pt 'Times New Roman'}}
-    body{margin:0}.saor-wm{position:fixed;top:40%}`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>SAOR · ${escH(head.mun)} · Audit Year ${escH(head.year)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${saorHTML(m, head)}</body></html>`;
+    @page{size:13in 8.5in;margin:.75in .75in .8in .75in;@bottom-right{content:"Page " counter(page) " of " counter(pages);font:9pt 'Times New Roman'}${head.draft ? `@top-right{content:"${DRAFT_MARK}";font:700 10pt Arial,sans-serif;color:#9F1C1C}@bottom-center{content:"${DRAFT_FOOT}";font:9pt Arial,sans-serif;color:#9F1C1C}` : ''}}
+    body{margin:0}.saor-wm{position:fixed;top:40%}${head.draft ? '.saor-draft,.saor-draft-foot{display:none}' : ''}`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>SAOR · ${escH(head.mun)} · Audit Year ${escH(head.year)}${head.draft ? ' · Draft' : ''}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${saorHTML(m, head)}</body></html>`;
   const f = document.createElement('iframe');
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(f);
@@ -201,12 +241,16 @@ export async function saorWord(m, head) {
     new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, margins: { top: 80, bottom: 80, left: 115, right: 115 }, rows })];
   const doc = new Document({ creator: 'Annual Audit Report System', title: 'SAOR', styles: { default: { document: { run: { font: FONT, size: 21 } } } },
     sections: [{ properties: { page: { size: { width: 12240, height: 18720, orientation: PageOrientation.LANDSCAPE }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080, header: 500, footer: 500 } } },
-      headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: 'CONFIDENTIAL', bold: true, color: 'A0A0A0', font: FONT, size: 20 })] })] }) },
-      footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font: FONT, size: 18 })] })] }) },
+      headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [
+        ...(head.draft ? [new TextRun({ text: DRAFT_MARK, bold: true, color: '9F1C1C', font: 'Arial', size: 20 }), new TextRun({ text: '     ', font: FONT, size: 20 })] : []),
+        new TextRun({ text: 'CONFIDENTIAL', bold: true, color: 'A0A0A0', font: FONT, size: 20 })] })] }) },
+      footers: { default: new Footer({ children: [
+        ...(head.draft ? [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: DRAFT_FOOT, color: '9F1C1C', font: 'Arial', size: 18 })] })] : []),
+        new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font: FONT, size: 18 })] })] }) },
       children }] });
   const blob = await Packer.toBlob(doc);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `${String(head.mun).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_SAOR_Audit_Year_${head.year}.docx`;
+  a.href = URL.createObjectURL(blob); a.download = `${String(head.mun).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_SAOR_Audit_Year_${head.year}${head.draft ? '_DRAFT' : ''}.docx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }

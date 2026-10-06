@@ -4,7 +4,6 @@ import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
 import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
-import { SAOR_WORDING } from '../saor-wording.js';
 import { nice, longDate } from '../format.js';
 
 const STATUS_KIND = { Active: 'ok', Draft: 'grey', Proposed: 'warn', Superseded: 'grey', Retired: 'grey' };
@@ -36,7 +35,6 @@ export async function pool(refs, params, q) {
   const editable = canManage && rec && ['Draft', 'Proposed', 'Active'].includes(rec.data.status) && rec.id === g.latest.id;
   const go = (code, v) => `#/library?code=${encodeURIComponent(code)}${v ? '&v=' + encodeURIComponent(v) : ''}`;
   const q0 = (q.get('find') || '').toLowerCase();
-  const missingSaor = groups.filter((x) => SAOR_WORDING[x.code] && x.versions.some((v) => ['Active', 'Draft', 'Proposed'].includes(v.data.status) && !(v.data.saor || '').trim()));
 
   const listHTML = groups.filter((x) => !q0 || (x.code + ' ' + x.latest.data.title + ' ' + (x.latest.data.area || '')).toLowerCase().includes(q0)).map((x) => {
     const d = x.latest.data; const st = x.active && x.latest !== x.active ? 'Proposed' : d.status;
@@ -76,7 +74,6 @@ export async function pool(refs, params, q) {
 
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
       <div class="btn-row"><button class="btn ghost" disabled title="Comes in Phase 5">Import Issued AOMs (Word)</button>${canManage ? '<button class="btn primary" id="p-new">+ New Template</button>' : ''}</div></div>
-    ${canManage && missingSaor.length ? `<div class="note info" style="align-items:center"><span>${missingSaor.length} template${missingSaor.length > 1 ? 's have' : ' has'} no SAOR wording yet. The approved wording is ready to load.</span><button class="btn sm primary" id="p-saor-load" style="margin-left:auto">Load the Approved SAOR Wording</button></div>` : ''}
     <div class="split" style="grid-template-columns:340px minmax(0,1fr)">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>Templates · ${groups.length}</h2></div>
         <div class="panel-body" style="padding:12px 16px"><input class="input" id="p-find" placeholder="Search templates" value="${esc(q.get('find') || '')}" aria-label="Search templates"></div>
@@ -88,16 +85,6 @@ export async function pool(refs, params, q) {
     mount(root) {
       const f = $('#p-find', root);
       f.onchange = () => { location.hash = '#/library?' + (selCode ? 'code=' + encodeURIComponent(selCode) + '&' : '') + 'find=' + encodeURIComponent(f.value); };
-      const sl = $('#p-saor-load', root);
-      if (sl) sl.onclick = async () => {
-        if (!(await confirmBox('Load SAOR Wording', `Add the approved SAOR wording to ${missingSaor.length} template${missingSaor.length > 1 ? 's' : ''}? Templates that already have SAOR wording are not changed.`, 'Load', 'success'))) return;
-        for (const g2 of missingSaor) for (const v of g2.versions) {
-          if (!['Active', 'Draft', 'Proposed'].includes(v.data.status) || (v.data.saor || '').trim()) continue;
-          await store.save('aom_library', v.id, { ...v.data, saor: SAOR_WORDING[g2.code].obs, saorRec: v.data.saorRec || SAOR_WORDING[g2.code].rec || '' }, { silent: true });
-        }
-        await store.log('loaded the approved SAOR wording', `${missingSaor.length} templates`, '', refs.me.email);
-        emitChange('local'); toast('SAOR wording loaded.', 'ok');
-      };
       const nw = $('#p-new', root);
       if (nw) nw.onclick = async () => {
         const nums = groups.map((x) => Number((/^(?:OBS|FND|POOL)-(\d+)$/.exec(x.code) || [])[1] || 0));
@@ -174,7 +161,7 @@ async function makeVariant(rec, groups, refs) {
 }
 
 // Save d as the next version of group g and make it the only Active one.
-async function saveActiveVersion(g, d, refs) {
+export async function saveActiveVersion(g, d, refs) {
   const top = Math.max(...g.versions.map((v) => v.data.version));
   const now = new Date().toISOString();
   const rec = { ...d, code: g.code, version: top + 1, status: 'Active', approvedBy: refs.me.email, approvedAt: now };

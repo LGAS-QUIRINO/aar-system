@@ -723,3 +723,19 @@ details.acc>summary h2{margin-right:auto;min-width:0}
 .brv-chip.on{background:var(--primary);border-color:var(--primary);color:#fff;font-weight:600}
 .rv-flabel{font:600 11.5px var(--sans);letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin:10px 0 2px}
 .rv-block.t-text p{margin:0 0 6px}
+
+/* SAOR: suggested wording, review steps, draft mark */
+.sv-steps{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px}
+.sv-step{display:inline-flex;align-items:center;gap:8px;color:var(--muted-2)}
+.sv-step i{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-style:normal;font-size:12px;font-weight:700;border:1.5px solid #C9D3DD;background:#fff;color:var(--muted-2)}
+.sv-step.done i{background:var(--ok-btn);border-color:var(--ok-btn);color:#fff}
+.sv-step.now{color:var(--ink);font-weight:600}.sv-step.now i{border-color:var(--primary);background:var(--primary);color:#fff}
+.sv-arrow{color:#B5C1CD}
+.topnote.final{border-left-color:var(--ok-btn)}
+textarea.input.sv-sug{border-color:var(--warn-line);background:#FFFBF3}
+.sv-brgys{display:flex;flex-wrap:wrap;gap:6px}
+.sv-brgys span{font-size:12px;background:var(--soft);border:1px solid var(--line-2);border-radius:6px;padding:2px 8px;color:var(--ink-2)}
+.sv-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.sv-foot .hint{margin-right:auto}
+.saor-draft{position:absolute;top:0;right:0;font:700 9.5pt Arial,sans-serif;color:#9F1C1C;border:1.5pt solid #9F1C1C;border-radius:3px;padding:1pt 6pt;z-index:2}
+.saor-draft-foot{margin-top:8pt !important;text-align:center;font:9pt Arial,sans-serif;color:#9F1C1C}

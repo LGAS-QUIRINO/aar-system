@@ -21,6 +21,7 @@ import { pool } from './views/library.js';
 import { drafts } from './views/drafts.js';
 import { exitconf } from './views/exitconf.js';
 import { saorview } from './views/saorview.js';
+import { saorReview, saorQueue } from './views/saorreview.js';
 import { comments } from './views/comments.js';
 import { baar, baarList } from './views/baar.js';
 import { coaView } from './views/coa.js';
@@ -50,6 +51,7 @@ function route(hash) {
   if (p[0] === 'drafts') return [drafts, {}, q];
   if (p[0] === 'exit') return [exitconf, {}, q];
   if (p[0] === 'saor') return [saorview, {}, q];
+  if (p[0] === 'saor-review') return [saorReview, {}, q];
   if (p[0] === 'baar' && p[1]) return [baar, { id: p[1] }, q];
   if (p[0] === 'baar') return [baarList, {}, q];
   if (p[0] === 'audits' && p[1] && p[2] === 'comments') return [comments, { id: p[1] }, q];
@@ -84,7 +86,8 @@ async function navCounts(refs) {
   const mine = all.filter((a) => (a.data.memberId === refs.me.id) && [ST.DRAFT, ST.RETURNED].includes(a.data.status || ST.DRAFT));
   const q = await reviewQueue(refs);
   const bq = await baarQueue(refs).catch(() => []);
-  return { drafts: mine.length, review: q.reduce((n, x) => n + x.list.length, 0) + bq.length };
+  const sq = await saorQueue(refs).catch(() => []);
+  return { drafts: mine.length, review: q.reduce((n, x) => n + x.list.length, 0) + bq.length + sq.length };
 }
 function clickGo(e) {
   const t = e.target.closest('[data-go]');
