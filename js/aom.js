@@ -200,7 +200,7 @@ export function numberingCheck(nums) {
 
 export function fromTemplate(tpl) {
   const blocks = clone(tpl.blocks || []).map((b) => ({ ...b, id: bid() }));
-  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', ...(tpl.titleVar ? { titleVar: tpl.titleVar } : {}), blocks };
+  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', ...(tpl.titleVar ? { titleVar: tpl.titleVar } : {}), ...(tpl.titleShow === false ? { titleShow: false } : {}), blocks };
 }
 export function blankAom() {
   return {
@@ -323,7 +323,7 @@ export function findingParas(aom, ctx) {
   out.push(P([{ t: 'AOM No. ' + ctx.aomNoText }], { bold: true }));
   out.push(BL());   // a blank line between the AOM No. and the finding title
   // The amount follows the title, the same as in BAAR Part II.
-  const amt = titleHasAmount(aom.title) ? null : aomAmount(aom);
+  const amt = aom.titleShow === false || titleHasAmount(aom.title) ? null : aomAmount(aom);
   const tv = topicVars(vars);
   out.push(P([...fillRuns(aom.title || '', tv), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
   out.push(BL());

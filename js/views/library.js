@@ -69,7 +69,8 @@ export async function pool(refs, params, q) {
           <div class="field"><label class="label" for="p-area">Audit Area</label><input class="input" id="p-area" value="${esc(rec.data.area || '')}" ${editable ? '' : 'disabled'}></div>
           <div class="field"><label class="label" for="p-sec">Default Part II Section</label><select class="input" id="p-sec" ${editable ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${rec.data.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
           <div class="field"><label class="label" for="p-wp">Working Paper</label><input class="input" id="p-wp" value="${esc(rec.data.wp || '')}" placeholder="e.g. WP-CA01, or blank if none" ${editable ? '' : 'disabled'}></div>
-          <div class="field"><label class="label" for="p-tvar">Amount in the Title</label><select class="input" id="p-tvar" ${editable ? '' : 'disabled'}>${tvarOptions(state.aom)}</select><span class="hint">The amount printed after the Finding Title in the AOM and in BAAR Part II.</span></div>
+          <div class="field"><label class="label" for="p-tvar">AOM Amount</label><select class="input" id="p-tvar" ${editable ? '' : 'disabled'}>${tvarOptions(state.aom)}</select><span class="hint">Used in the SAOR and BAAR.</span></div>
+          <div class="field" id="p-tshow-f"><div class="lr-row"><span class="label">Show in the Title</span><div class="seg" role="group" aria-label="Show the AOM Amount after the Finding Title" id="p-tshow">${['Yes', 'No'].map((x) => `<button type="button" data-tshow="${x}" class="${(rec.data.titleShow !== false) === (x === 'Yes') ? 'on' : ''}" ${editable ? '' : 'disabled'}>${x}</button>`).join('')}</div></div></div>
         </div>
         <div class="field"><label class="label" for="p-saor">SAOR Wording (General)</label><textarea class="input be-text" id="p-saor" rows="3" ${editable ? '' : 'disabled'} placeholder="The observation as written in the consolidated SAOR, for any number of barangays">${esc(rec.data.saor || '')}</textarea></div>
         <div class="field"><label class="label" for="p-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="p-saorrec" rows="3" ${editable ? '' : 'disabled'} placeholder="Leave blank to use the AOM recommendation">${esc(rec.data.saorRec || '')}</textarea><span class="hint">Leave blank to use the AOM recommendation in the SAOR.</span></div>
@@ -111,7 +112,10 @@ export async function pool(refs, params, q) {
         location.hash = go(code);
       };
       if (!rec) return;
-      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${/^TABLE\d+_ITEMS$/.test(n) ? 'from the table' : SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
+      let tshow = rec.data.titleShow !== false;
+      // Show in the Title applies only when the AOM has an amount.
+      const tshowVis = () => { const tv = $('#p-tvar', root), f = $('#p-tshow-f', root); if (!tv || !f) return; const none = tv.value === 'NONE' || (tv.value === '' && /none$/.test(tv.options[tv.selectedIndex]?.text || '')); f.style.display = none ? 'none' : ''; };
+      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } tshowVis(); const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${/^TABLE\d+_ITEMS$/.test(n) ? 'from the table' : SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
       ph();
       const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
       if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);
@@ -132,9 +136,11 @@ export async function pool(refs, params, q) {
       if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
       ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-tvar', '#p-saor', '#p-saorrec'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
+      $('#p-tvar', root).addEventListener('change', tshowVis);
+      $$('[data-tshow]', root).forEach((b) => { b.onclick = () => { tshow = b.dataset.tshow === 'Yes'; $$('[data-tshow]', root).forEach((x) => x.classList.toggle('on', x === b)); dirty(); }; });
       const host = $('#p-blocks', root);
       wireBlocks(host, state, (redraw) => { if (redraw) host.innerHTML = blocksHTML(state.aom, { editable }); ph(); dirty(); });
-      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim(), titleVar: $('#p-tvar', root).value });
+      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim(), titleVar: $('#p-tvar', root).value, titleShow: tshow });
       async function save(approve) {
         const d = collect();
         if (!d.title) { toast('Enter the finding title.', 'bad'); return false; }

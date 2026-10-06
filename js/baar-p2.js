@@ -38,7 +38,7 @@ export function buildP2(ctx) {
       k++;
       const vars = ctx.varsFor(a);
       const amt = aomAmount(a.data);
-      const title = fillText(a.data.title || '', topicVars(vars)) + (amt !== null && amt !== undefined && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
+      const title = fillText(a.data.title || '', topicVars(vars)) + (amt !== null && amt !== undefined && a.data.titleShow !== false && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
       paras.push(P(title, { italic: true, keep: true }), BL());
       // The AOM's own paragraphs, without its "AOM No." and title lines, numbered as in Balligui.
       const body = findingParas(a.data, { vars, num: `${k}.` }).slice(4);   // without the AOM No., its blank line, the title and the blank line after it
