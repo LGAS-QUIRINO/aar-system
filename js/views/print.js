@@ -4,6 +4,7 @@ import { esc, toast, pill, $, $$ } from '../ui.js';
 import { loadAudit, stepsBar } from '../auditctx.js';
 import { buildLetter, letterHTML, DOC_CSS, ST, statusPill, fillText } from '../aom.js';
 import { downloadWord } from '../docx-aom.js';
+import { aomPages, PAGE_CSS } from '../aompages.js';
 import { aomNo } from '../format.js';
 
 export async function print(refs, params, q) {
@@ -32,19 +33,21 @@ export async function print(refs, params, q) {
   return {
     active: '#/drafts', crumbs: `<a href="#/audits">My Audit</a> / <a href="#/audits/${ctx.rec.id}/aoms">${esc(ctx.title)}</a> / <b>Print</b>`, body,
     mount(root) {
-      const draw = () => {
-        const d = doc();
-        // The footer, as printed at the bottom right of every page (the page number is added when printed).
-        const foot = `<div class="pv-foot"><div class="pv-pg">Page # of #</div>${d.footer.map((t) => `<div>${esc(t)}</div>`).join('')}</div>`;
-        $('#pr-prev', root).innerHTML = `<div class="sheet">${letterHTML(d, false)}${foot}</div><div class="hint" style="text-align:right;margin-top:6px">The footer prints at the bottom right of every page, with the page number.</div>`;
+      let seq = 0;
+      const draw = async () => {
+        const d = doc(), my = ++seq;
         $('#pr-mode', root).innerHTML = d.draft ? '<div class="note warn">Prints as <b>DRAFT</b> with a watermark.</div>' : '<div class="note ok">All chosen AOMs are Final. Prints without a watermark.</div>';
         $('#pr-print', root).disabled = $('#pr-word', root).disabled = chosen.size === 0;
+        // Page by page, as printed: the footer at the bottom of every page with "Page 1 of 2".
+        const { pages } = await aomPages(d);
+        if (my !== seq) return;
+        $('#pr-prev', root).innerHTML = pages.map((h) => `<div class="sheet pv-page">${h}</div>`).join('');
       };
       $$('[data-pick]', root).forEach((c) => { c.onchange = () => { c.checked ? chosen.add(c.dataset.pick) : chosen.delete(c.dataset.pick); draw(); }; });
       draw();
       $('#pr-print', root).onclick = async () => {
         const d = doc();
-        printDoc(d);
+        await printDoc(d);
         await store.log(d.draft ? 'printed a draft AOM' : 'printed the final AOM', `${ctx.lgu.name} · AOM No. ${d.rangeText}`, ctx.teamId, refs.me.email);
       };
       $('#pr-word', root).onclick = async () => {
@@ -56,14 +59,12 @@ export async function print(refs, params, q) {
   };
 }
 
-export function printDoc(d) {
-  const cssStr = (t) => String(t).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  const foot = `"Page " counter(page) " of " counter(pages) "${d.footer.map((t) => '\\A ' + cssStr(t)).join('')}"`;
-  const css = `${DOC_CSS}
-    @page { size: 8.5in 13in; margin: 1in 1in 1.34in 1in;
-      @bottom-right { content: ${foot}; white-space: pre; font: 10pt 'Times New Roman', serif; text-align: right; vertical-align: top; } }
-    body { margin: 0; } .wm { display: ${d.draft ? 'block' : 'none'}; }`;
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>AOM No. ${esc(d.rangeText)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${letterHTML(d, false)}</body></html>`;
+export async function printDoc(d) {
+  const { pages } = await aomPages(d);
+  const css = `${DOC_CSS}${PAGE_CSS}
+    @page { size: 8.5in 13in; margin: 0; }
+    body { margin: 0; } .pg { page-break-after: always; break-after: page; } .pg:last-child { page-break-after: auto; break-after: auto; }`;
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>AOM No. ${esc(d.rangeText)}</title><base href="${location.href.split('#')[0]}"><style>${css}</style></head><body>${pages.join('')}</body></html>`;
   const f = document.createElement('iframe');
   f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
   document.body.appendChild(f);

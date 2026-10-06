@@ -367,16 +367,17 @@ export function buildLetter(info) {
   body.push(P('May we have your comments on the foregoing audit observation within five (5) calendar days upon receipt hereof.', { align: 'both', ind: { firstLine: 567 } }));
   const sig = (u, boldAll) => {
     if (!u) return;
-    body.push(BL()); body.push(BL()); body.push(BL());
-    body.push(P(upper(u.name), { bold: true, ind: { left: 4770 } }));
-    body.push(P(u.position || '', { bold: boldAll, ind: { left: 4770 } }));
+    // A signature block (the space for signing, name, position, designation) is never split across pages.
+    body.push(BL()); body.push({ ...BL(), keep: true }); body.push({ ...BL(), keep: true });
+    body.push(P(upper(u.name), { bold: true, ind: { left: 4770 }, keep: true }));
+    body.push(P(u.position || '', { bold: boldAll, ind: { left: 4770 }, keep: !!u.designation }));
     if (u.designation) body.push(P(u.designation, { bold: boldAll, ind: { left: 4770 } }));
   };
   const oneStep = atl && sa && atl.id === sa.id;
   if (!oneStep) sig(atl, false);   // only the name is bold
   sig(sa, false);
   body.push(BL()); body.push(BL());
-  body.push(P('Proof of Receipt of AOM:', { bold: true }));
+  body.push(P('Proof of Receipt of AOM:', { bold: true, keep: true }));
   const rec = officials.filter((o) => o.role === 'For' || o.role === 'Attention');
   // The name column fits the longest name or position; Signature and Date share the rest of the 6.5" width.
   const rrows = rec.map((o) => [fullName(o), pos(o)]);
@@ -426,13 +427,14 @@ export function paraHTML(p, mark = true) {
   if (p.kind === 'image') return `<div class="lh"><img src="${p.src}" alt="Commission on Audit letterhead" style="width:${p.w}in;height:${p.h}in"></div>`;
   if (p.kind === 'letterhead') return `<div class="lh2"><img class="seal" src="${p.seal.src}" alt="Commission on Audit seal" style="width:${p.seal.w}in;height:${p.seal.h}in;left:${p.seal.left}in;top:${p.seal.top}in"><img class="name" src="${p.name.src}" alt="Republic of the Philippines, Commission on Audit" style="width:${p.name.w}in;height:${p.name.h}in"></div>`;
   if (p.kind === 'table') return tableHTML(p);
-  if (p.blank) return '<p class="bl">&nbsp;</p>';
+  if (p.blank) return `<p class="bl"${p.keep ? ' style="break-after:avoid;page-break-after:avoid"' : ''}>&nbsp;</p>`;
   const ind = p.ind || {};
   const st = [`margin-left:${tw(ind.left)}`, `margin-right:${tw(ind.right)}`];
   if (ind.firstLine) st.push(`text-indent:${tw(ind.firstLine)}`);
   if (ind.hanging) st.push(`text-indent:-${tw(ind.hanging)}`);
   if (p.align) st.push(`text-align:${p.align === 'both' ? 'justify' : p.align}`);
   if (p.size) st.push(`font-size:${p.size / 2}pt`);
+  if (p.keep) st.push('break-after:avoid;page-break-after:avoid');   // stays on the same page as the next paragraph
   const cls = [p.bold ? 'b' : '', p.italic ? 'i' : '', p.ruleBelow ? 'rule-below' : ''].join(' ');
   let runs = p.runs, labelText = p.label;
   const tab = runs.findIndex((r) => r.t === '\t');

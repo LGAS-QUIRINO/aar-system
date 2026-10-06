@@ -764,3 +764,5 @@ body.ro-staff :is(button, a)[id$="print"], body.ro-staff :is(button, a)[id$="wor
 /* AOM print preview: the footer as printed */
 .sheet .pv-foot{margin-top:36px;text-align:right;font:10pt 'Times New Roman',Tinos,serif;color:#000;line-height:1.25}
 .sheet .pv-foot .pv-pg{color:#666}
+/* AOM print preview: one sheet per page */
+.paper-wrap .sheet.pv-page{padding:0;width:8.5in;margin:0 auto 16px}

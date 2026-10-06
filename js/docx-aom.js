@@ -16,13 +16,13 @@ export async function downloadWord(doc) {
   const EMU = 914400;
 
   const para = (p) => {
-    if (p.blank) return new Paragraph({ children: [new TextRun({ text: '', font: FONT, size: 24 })] });
+    if (p.blank) return new Paragraph({ keepNext: !!p.keep, children: [new TextRun({ text: '', font: FONT, size: 24 })] });
     const kids = [];
     if (p.label) kids.push(new TextRun({ text: p.label, bold: !!p.bold, italics: !!p.italic, font: FONT, size: p.size || 24 }), new TextRun({ children: [new Tab()], font: FONT }));
     (p.runs || []).forEach((r) => kids.push(r.t === '\t' ? new TextRun({ children: [new Tab()], font: FONT }) : run(r, p)));
     const ind = p.ind || {};
     return new Paragraph({
-      children: kids, alignment: align(p.align),
+      keepNext: !!p.keep, children: kids, alignment: align(p.align),
       indent: { left: ind.left || 0, right: ind.right || 0, hanging: ind.hanging || undefined, firstLine: ind.firstLine || undefined },
       spacing: { after: 0, line: 240 },
       border: p.ruleBelow ? { bottom: { style: BorderStyle.THICK_THIN_SMALL_GAP, size: 24, color: '000000', space: 4 } } : undefined
@@ -79,7 +79,7 @@ export async function downloadWord(doc) {
   const foot = new Footer({
     children: [
       new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ children: ['Page ', PageNumber.CURRENT, ' of ', PageNumber.TOTAL_PAGES], font: FONT, size: 20 })] }),
-      ...doc.footer.map((t) => new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: t, font: FONT, size: 20 })] }))
+      ...doc.footer.map((t) => new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: t, font: FONT, size: 20, italics: true })] }))
     ]
   });
   const sections = [{ properties: { page }, headers: doc.draft ? { default: draftHeader() } : undefined, footers: { default: foot }, children: toChildren(doc.body) }];
