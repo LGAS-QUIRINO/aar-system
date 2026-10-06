@@ -1,5 +1,5 @@
 // Keeps the app working offline. Bump VERSION on every release so devices pick up the new files.
-const RELEASE = 'v2.22.6';
+const RELEASE = 'v2.23.0';
 const VERSION = 'aar|' + self.registration.scope + '|' + RELEASE;   // each copy of the app has its own cache
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/coa-logo.png', 'img/icon-192.png', 'img/icon-512.png', 'data-coa.json', 'data-coa-2015.json',
   'js/app.js', 'js/config.js', 'js/db.js', 'js/store.js', 'js/sync.js', 'js/api.js', 'js/auth.js', 'js/demo-server.js', 'js/seed.js', 'js/ui.js', 'js/format.js', 'js/refs.js',
@@ -8,7 +8,8 @@ const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'css/app.css', 'img/c
   'js/views/findings.js', 'js/views/aoms.js', 'js/views/print.js', 'js/views/review.js', 'js/views/library.js', 'js/views/drafts.js',
   'img/letterhead.jpg', 'img/lh-seal.jpg', 'img/lh-name.jpg', 'img/cover-seal.png', 'img/cover-name.png', 'img/lh-central.png', 'lib/xlsx.full.min.js', 'lib/docx.min.js', 'lib/pdf.min.js', 'lib/pdf.worker.min.js'];
 
-self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
+// A new release downloads every file fresh from the website (not from the browser's own short-term copies).
+self.addEventListener('install', (e) => { e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== VERSION && (k.startsWith('aar|' + self.registration.scope + '|') || k.startsWith('aar-v'))).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });

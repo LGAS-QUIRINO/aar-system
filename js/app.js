@@ -263,8 +263,33 @@ async function boot() {
 
 window.addEventListener('save-blocked', (e) => toast(e.detail, 'bad'));
 window.addEventListener('unhandledrejection', (e) => { if (e.reason && /can (encode|view and print) only|Team Staff can|OSA Staff can/.test(String(e.reason.message || ''))) e.preventDefault(); });
+// New versions: when a new release is published, the device switches to it by itself. If something is being typed,
+// it waits and shows a bar to save and reload, so nothing is lost and nobody keeps running an old version.
+function watchUpdates() {
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  const showBar = () => {
+    if (document.getElementById('upd-bar')) return;
+    const bar = document.createElement('div');
+    bar.id = 'upd-bar'; bar.className = 'upd-bar';
+    bar.innerHTML = '<span>A new version is ready. Save your work, then click Reload.</span><button class="btn sm primary" type="button">Reload</button>';
+    bar.querySelector('button').onclick = () => { if (guard.dirty && guard.save) guard.save(); setTimeout(() => location.reload(), 600); };
+    document.body.appendChild(bar);
+  };
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloading) return;            // the very first visit: nothing to switch from
+    if (guard.dirty) { showBar(); return; }
+    reloading = true; location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').then((reg) => {
+    // Look for a new version when the app is opened again and every few minutes while it is open.
+    const check = () => reg.update().catch(() => {});
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') check(); });
+    setInterval(check, 5 * 60 * 1000);
+  }).catch(() => {});
+}
 (async function main() {
-  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') watchUpdates();
   const s = await auth.restore();
   if (s && s.email) boot(); else showLogin();
 })().catch((e) => { app.innerHTML = `<div class="page"><div class="note bad">The app could not start: ${esc(e.message)}</div></div>`; });
