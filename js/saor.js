@@ -45,7 +45,7 @@ export function generalize(text) {
   t = t.replace(amt, (m, off, all) => { const lead = all.slice(0, off); const r = first && off < 90 && !/barangay/i.test(lead) ? ' of barangays' : ''; first = false; return r; });
   // Other details carrying a value: drop the comma-set-off clause or bracketed part that holds it.
   // The audit period and the municipality are the same for every barangay, so they stay.
-  const DETAIL = String.raw`\[(?!(?:AUDIT_YEAR|AUDIT_PERIOD|AUDIT_YEARS|MUNICIPALITY)\])[A-Z0-9_]+\]`;
+  const DETAIL = String.raw`\[(?!(?:PERIOD_END_YEAR|AUDIT_YEAR|AUDIT_PERIOD|AUDIT_YEARS|MUNICIPALITY)\])[A-Z0-9_]+\]`;
   t = t.replace(new RegExp(String.raw`\s*\([^()]*${DETAIL}[^()]*\)`, 'g'), '');
   const clause = new RegExp(String.raw`,[^,;]*?${DETAIL}[^,;]*?(?=,|;|\.\s|\.$)`);
   for (let i = 0; i < 6 && clause.test(t); i++) t = t.replace(clause, '');

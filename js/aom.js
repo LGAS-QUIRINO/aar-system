@@ -20,9 +20,10 @@ export const SECTIONS = { A: 'A · Financial Audit', B: 'B · Other Financial Re
 export function setupVars(audit, lgu, mun) {
   const f = Number(audit.periodFrom), t = Number(audit.periodTo);
   const period = f === t ? String(t) : `${f} to ${t}`;
-  return { AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
+  // PERIOD_END_YEAR: the last year the audit covers (e.g. 2025 for Audit Year 2026). AUDIT_YEAR gives the same value and stays for older templates.
+  return { PERIOD_END_YEAR: String(t), AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
-export const SETUP_VAR_NAMES = ['AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'BARANGAY', 'MUNICIPALITY'];
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'BARANGAY', 'MUNICIPALITY'];
 
 const money = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // Same rules as the workbook macro (FormatWPVariableValue), plus a few more money words.
