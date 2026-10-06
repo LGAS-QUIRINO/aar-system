@@ -62,6 +62,23 @@ async function doSync() {
       changed = true;
     }
   }
+  // Once a day: drop records this device still has but the server no longer has (rows deleted directly in the
+  // Google Sheet never reach a device as a change, so without this they would stay on screen).
+  const lastFull = await db.get('meta', 'lastFullCheck');
+  if (!last) await db.put('meta', new Date().toISOString(), 'lastFullCheck');   // this sync already downloaded everything
+  else if (!lastFull || Date.now() - new Date(lastFull).getTime() > 24 * 3600e3) {
+    const all = await call('pull', { since: '' });
+    const pend = new Set((await db.all('outbox')).map((o) => o.table + '|' + o.id));
+    for (const [table, recs] of Object.entries(all.records)) {
+      const onServer = new Set(recs.map((r) => r.id));
+      for (const local of await db.all('records', table)) {
+        if (onServer.has(local.id) || local.pending || pend.has(table + '|' + local.id)) continue;
+        await db.del('records', [table, local.id]);
+        changed = true;
+      }
+    }
+    await db.put('meta', new Date().toISOString(), 'lastFullCheck');
+  }
   // Step back a few seconds so a save landing during this pull is not missed.
   const since = new Date(new Date(res.serverTime).getTime() - 5000).toISOString();
   await db.put('meta', since, 'lastSync');
