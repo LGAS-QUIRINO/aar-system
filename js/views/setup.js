@@ -154,7 +154,7 @@ export async function setup(refs, params) {
       ${editable ? `<div class="panel" style="padding:14px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;position:sticky;bottom:12px;z-index:5">
         <span class="save-state saved"><span class="d"></span>All Changes Saved</span>
         <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="save">Save</button>
-        <button class="btn ghost" id="save-go">Save and Continue to Findings →</button></div></div>` : ''}
+        <button class="btn ghost" id="save-go">Save and Continue to Financial Statements →</button></div></div>` : ''}
     </div>
     <aside class="sticky" style="display:flex;flex-direction:column;gap:10px;align-self:start"><h2 style="font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Live Preview · AOM Header</h2><div id="preview">${preview()}</div></aside></div>`;
 
@@ -260,7 +260,7 @@ export async function setup(refs, params) {
         const isNewAudit = !rec;
         if (!(await save())) return;
         const id = isNewAudit ? location.hash.split('/')[2] : rec.id;
-        guard.dirty = false; location.hash = `#/audits/${id}/findings`;
+        guard.dirty = false; location.hash = `#/audits/${id}/fs`;   // the next step after Setup
       };
       const ul = $('#p-unlock', root);
       if (ul) ul.onclick = async () => {
