@@ -262,6 +262,7 @@ export function findingParas(aom, ctx) {
         if (b.lead && b.lead.trim()) { out.push(...textParas(b.lead, vars, { ind: { left } })); out.push(BL()); }
         const lines = String(b.text || '').split('\n').filter((l) => l.trim());
         lines.forEach((l, i) => {
+          if (i > 0) out.push(BL());   // a blank line between quoted paragraphs, as in the other parts
           const runs = fillRuns(l.trim(), vars);
           if (i === 0) runs.unshift({ t: '“' });
           if (i === lines.length - 1) runs.push({ t: '”' });
