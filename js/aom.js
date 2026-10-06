@@ -42,12 +42,22 @@ export function formatVar(name, raw) {
 
 /* ───────── The AOM's amount (title of the AOM and of BAAR Part II) ───────── */
 const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
+const isMoneyName = (n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n);
+// The amount placeholders in an AOM's wording, in order (choices for the amount in the title).
+export function moneyPlaceholders(d) {
+  const names = [];
+  const scan = (t) => { for (const m of String(t || '').matchAll(/\[([A-Z0-9_]+)\]/g)) if (isMoneyName(m[1]) && !names.includes(m[1])) names.push(m[1]); };
+  (d.blocks || []).forEach((b) => { scan(b.lead); scan(b.text); (b.items || []).forEach(scan); });
+  return names;
+}
 export const peso = (n) => '₱' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 // The first money placeholder in the topic sentence, read from the working paper.
+// The template can name the placeholder whose amount goes after the title (titleVar); 'NONE' = no amount in the title.
 export function aomAmount(d) {
+  if (d.titleVar === 'NONE') return null;
   const topic = (d.blocks || []).find((b) => b.type === 'topic');
   const vars = (d.wpData && d.wpData.vars) || {};
-  const names = [...String((topic && topic.text) || '').matchAll(/\[([A-Z0-9_]+)\]/g)].map((m) => m[1]).filter((n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n));
+  const names = d.titleVar ? [d.titleVar] : [...String((topic && topic.text) || '').matchAll(/\[([A-Z0-9_]+)\]/g)].map((m) => m[1]).filter(isMoneyName);
   for (const n of names) {
     const raw = vars[n] && vars[n].raw;
     const num = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(/[₱,\s]/g, ''));
@@ -81,6 +91,19 @@ export function fillRuns(text, vars) {
     last = re.lastIndex;
   }
   if (last < src.length) out.push({ t: src.slice(last) });
+  return boldMarks(out, src);
+}
+// Words typed between ** marks print in bold, e.g. **draw journal vouchers** (works within one paragraph).
+// A lone ** with no closing mark stays as typed. Plain-text uses (titles, SAOR, Part III) simply drop the marks.
+function boldMarks(runs, src) {
+  const n = (src.match(/\*\*/g) || []).length;
+  if (!n || n % 2) return runs;
+  const out = [];
+  let on = false;
+  runs.forEach((r) => {
+    if (r.filled || r.missing) { out.push(on ? { ...r, b: true } : r); return; }
+    String(r.t).split('**').forEach((piece, i) => { if (i) on = !on; if (piece) out.push(on ? { ...r, t: piece, b: true } : { ...r, t: piece }); });
+  });
   return out;
 }
 export const fillText = (text, vars) => fillRuns(text, vars).map((r) => r.t).join('');
@@ -124,7 +147,7 @@ export function numberingCheck(nums) {
 
 export function fromTemplate(tpl) {
   const blocks = clone(tpl.blocks || []).map((b) => ({ ...b, id: bid() }));
-  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', blocks };
+  return { poolCode: tpl.code, poolVersion: tpl.version || 1, mode: 'Standard', title: tpl.title, section: tpl.section || 'B', area: tpl.area || '', wp: tpl.wp || '', ...(tpl.titleVar ? { titleVar: tpl.titleVar } : {}), blocks };
 }
 export function blankAom() {
   return {

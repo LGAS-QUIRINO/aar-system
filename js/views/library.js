@@ -3,7 +3,7 @@ import { store, newId, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, placeholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
+import { clone, placeholders, moneyPlaceholders, SECTIONS, SETUP_VAR_NAMES, blockPlain, diffWords } from '../aom.js';
 import { nice, longDate } from '../format.js';
 
 const STATUS_KIND = { Active: 'ok', Draft: 'grey', Proposed: 'warn', Superseded: 'grey', Retired: 'grey' };
@@ -17,6 +17,14 @@ export async function poolGroups() {
     versions.sort((a, b) => b.data.version - a.data.version);
     return { code, versions, active: versions.find((v) => v.data.status === 'Active'), latest: versions[0] };
   }).sort((a, b) => a.code.localeCompare(b.code, 'en', { numeric: true }));
+}
+// Choices for "Amount in the Title": automatic, each amount placeholder in the wording, or none.
+function tvarOptions(d) {
+  const names = moneyPlaceholders(d);
+  if (d.titleVar && d.titleVar !== 'NONE' && !names.includes(d.titleVar)) names.push(d.titleVar);
+  return `<option value="" ${d.titleVar ? '' : 'selected'}>Automatic (first amount in the topic sentence)</option>`
+    + names.map((n) => `<option value="${esc(n)}" ${d.titleVar === n ? 'selected' : ''}>[${esc(n)}]</option>`).join('')
+    + `<option value="NONE" ${d.titleVar === 'NONE' ? 'selected' : ''}>No Amount</option>`;
 }
 export async function activeTemplates(entity = 'barangay') {
   return (await poolGroups()).filter((g) => g.active && (g.active.data.entityTypes || ['barangay']).includes(entity)).map((g) => ({ id: g.active.id, ...g.active.data }));
@@ -56,12 +64,13 @@ export async function pool(refs, params, q) {
           <div class="field"><label class="label" for="p-area">Audit Area</label><input class="input" id="p-area" value="${esc(rec.data.area || '')}" ${editable ? '' : 'disabled'}></div>
           <div class="field"><label class="label" for="p-sec">Default Part II Section</label><select class="input" id="p-sec" ${editable ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${rec.data.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
           <div class="field"><label class="label" for="p-wp">Working Paper</label><input class="input" id="p-wp" value="${esc(rec.data.wp || '')}" placeholder="e.g. WP-CA01, or blank if none" ${editable ? '' : 'disabled'}></div>
+          <div class="field"><label class="label" for="p-tvar">Amount in the Title</label><select class="input" id="p-tvar" ${editable ? '' : 'disabled'}>${tvarOptions(state.aom)}</select><span class="hint">The amount printed after the Finding Title in the AOM and in BAAR Part II.</span></div>
         </div>
         <div class="field"><label class="label" for="p-saor">SAOR Wording (General)</label><textarea class="input be-text" id="p-saor" rows="3" ${editable ? '' : 'disabled'} placeholder="The observation as written in the consolidated SAOR, for any number of barangays">${esc(rec.data.saor || '')}</textarea></div>
         <div class="field"><label class="label" for="p-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="p-saorrec" rows="3" ${editable ? '' : 'disabled'} placeholder="Leave blank to use the AOM recommendation">${esc(rec.data.saorRec || '')}</textarea><span class="hint">Leave blank to use the AOM recommendation in the SAOR.</span></div>
         <div class="field"><span class="label">Placeholders Found</span><div id="p-ph" class="hint"></div></div>
       </div></section>
-    <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable })}</div></section>
+    <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft. Put ** before and after words to print them in bold, e.g. **draw journal vouchers**.</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable })}</div></section>
     ${editable ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
       <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="p-save">Save Draft</button><button class="btn success" id="p-approve">Approve and Make Active</button></div></div>` : ''}
     <section class="panel"><div class="panel-head"><h2>Version History</h2>${canManage && rec.data.status === 'Active' && !editable ? '' : ''}</div>
@@ -97,7 +106,7 @@ export async function pool(refs, params, q) {
         location.hash = go(code);
       };
       if (!rec) return;
-      const ph = () => { const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
+      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
       ph();
       const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
       if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);
@@ -117,10 +126,10 @@ export async function pool(refs, params, q) {
       };
       if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
-      ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-saor', '#p-saorrec'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
+      ['#p-title', '#p-area', '#p-sec', '#p-wp', '#p-tvar', '#p-saor', '#p-saorrec'].forEach((s) => { $(s, root).addEventListener('input', dirty); $(s, root).addEventListener('change', dirty); });
       const host = $('#p-blocks', root);
       wireBlocks(host, state, (redraw) => { if (redraw) host.innerHTML = blocksHTML(state.aom, { editable }); ph(); dirty(); });
-      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim() });
+      const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim(), titleVar: $('#p-tvar', root).value });
       async function save(approve) {
         const d = collect();
         if (!d.title) { toast('Enter the finding title.', 'bad'); return false; }
