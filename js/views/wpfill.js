@@ -10,7 +10,7 @@ import { loadScript } from '../wp.js';
 
 const FILLED = '(filled in the app)';
 const WP_COLS = { 'WP-CA01': ['Name of Accountable Officer', 'Date Granted', 'Amount'], 'WP-REC001': ['Name of Debtor', 'Date', 'Amount'], 'WP-TAX01': ['Particulars', 'Month', 'Amount'] };
-const isAmtCol = (h) => /amount|total|balance|₱/i.test(h || '') || /^(19|20)\d\d$/.test(String(h || '').trim());   // a year heading is an amount column
+const isAmtCol = (h) => /amount|total|balance|appropriation|disburs|utiliz|cost|₱/i.test(h || '') || /^(19|20)\d\d$/.test(String(h || '').trim());   // a year heading is an amount column
 const KINDS = ['Amount', 'Number', 'Date', 'Text'];
 
 /* ── What a finding's working paper needs ── */
@@ -40,6 +40,7 @@ function tbFor(d, p, F) {
 // v: the finding's values (Setup years), for columns planned in the AOM Table block.
 const colsFor = (d, n, v) => {
   const t = d.wpData && d.wpData.tables && d.wpData.tables[n];
+  if (t && t.cols) return t.cols;   // a grouped table keeps its typed columns (the printed one may hide the Year column)
   if (t && t.rows && t.rows.length) return t.rows[0];
   const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
   const planned = plannedCols(blk, v);
@@ -62,21 +63,24 @@ function withTotal(d, n, cols, rows) {
   // a "CY 2024" heading and a Sub-Total, then the Total. The labels sit in the column before the first amount column.
   const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
   if (blk && blk.subYear && ac.length && rows.length) {
-    const lab = Math.max(0, ac[0] - 1);
+    // A first column headed "Year" only groups the rows; the printout leaves it out (the CY headings show the year).
+    const dropYear = /^year$/i.test(String(cols[0] || '').trim()) && cols.length > 2;
+    const hc = dropYear ? 1 : 0;
+    const lab = Math.max(hc, ac[0] - 1);
     const sumRow = (label, rs) => cols.map((_, i) => (i === lab ? label : ac.includes(i) ? money(rs.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : ''));
     const out = [cols];
     [...new Set(rows.map(yearOf))].sort().forEach((y) => {
       const rs = rows.filter((r) => yearOf(r) === y);
-      if (y) out.push(cols.map((_, i) => (i === 0 ? `CY ${y}` : '')));
+      if (y) out.push(cols.map((_, i) => (i === hc ? `CY ${y}` : '')));
       out.push(...rs, sumRow('Sub-Total', rs));
     });
     out.push(sumRow('Total', rows));
-    return { sheet: FILLED, filled: true, rows: out, data: rows };
+    return { sheet: FILLED, filled: true, rows: dropYear ? out.map((r) => r.slice(1)) : out, data: rows, cols };
   }
   const tot = cols.map((_, i) => (i === 0 ? 'Total' : ac.includes(i) ? money(rows.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : ''));
   return { sheet: FILLED, filled: true, rows: [cols, ...rows, ...(rows.length && ac.length ? [tot] : [])] };
 }
-const tableTotal = (d, n) => { const t = d.wpData && d.wpData.tables && d.wpData.tables[n]; if (!t) return null; const cols = t.rows[0] || []; const ac = amtCols(d, n, cols); if (!ac.length) return null; return dataRows(t).reduce((s, r) => s + cents(parseAmt(r[ac[ac.length - 1]]) || 0), 0); };
+const tableTotal = (d, n) => { const t = d.wpData && d.wpData.tables && d.wpData.tables[n]; if (!t) return null; const cols = t.cols || t.rows[0] || []; const ac = amtCols(d, n, cols); if (!ac.length) return null; return dataRows(t).reduce((s, r) => s + cents(parseAmt(r[ac[ac.length - 1]]) || 0), 0); };
 
 /* ── Fill in Here ── */
 export function fillHTML(d, F, ctx, editable) {

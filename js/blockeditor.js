@@ -23,6 +23,8 @@ export function blocksHTML(aom, o = {}) {
         <button class="x sm" data-act="del" data-bi="${bi}" aria-label="Delete block" title="Delete">✕</button></span>` : '';
     const subToggle = editable && sub >= 0 && b.type !== 'subheading' && b.type !== 'topic'
       ? `<label class="check be-sub"><input type="checkbox" data-bi="${bi}" data-k="sub" ${b.sub ? 'checked' : ''}>Inside sub-heading ${letterOf(sub)})</label>` : '';
+    const yearToggle = editable && ['paragraph', 'condition', 'effect', 'cause'].includes(b.type)
+      ? `<label class="check be-sub" title="Prints once per year of AOM Table 1 (a., b., c.). Use [YEAR], [ROW_COUNT], [COUNT_IMPLEMENTED] (a Remarks word), [SUM_APPROPRIATION] (a column name)."><input type="checkbox" data-bi="${bi}" data-k="perYear" ${b.perYear ? 'checked' : ''}>Repeat for each year of AOM Table 1</label>` : (b.perYear ? '<span class="pill grey">Repeats for each year of AOM Table 1</span>' : '');
     const who = initials[bi] ? `<span class="pill violet" title="Edited during review">${esc(initials[bi])}</span>` : '';
     let body = '';
     if (b.type === 'criteria') {
@@ -64,7 +66,7 @@ export function blocksHTML(aom, o = {}) {
       body = area(bi, 'text', b.text, autoRows(b.text, b.type === 'topic' ? 3 : 2), dis + (b.type === 'topic' ? ' style="font-weight:600"' : ''));
     }
     return `<div class="be-block ${inSub ? 'in-sub' : ''} t-${b.type}" data-block-wrap="${bi}">
-        <div class="be-head"><span class="be-label">${label}</span>${who}${subToggle}${tools}</div>${body}</div>`;
+        <div class="be-head"><span class="be-label">${label}</span>${who}${subToggle}${yearToggle}${tools}</div>${body}</div>`;
   }).join('')}
   ${editable ? `<div class="be-add"><label class="label" for="be-add-type">+ Add Block</label>
      <select class="input" id="be-add-type" style="max-width:240px"><option value="">Choose…</option>${ADDABLE.map((t) => `<option value="${t}">${BLOCK_LABELS[t]}</option>`).join('')}</select>
@@ -87,6 +89,7 @@ export function wireBlocks(root, state, onChange) {
     const b = aom().blocks[+bi];
     if (el.dataset.k === 'sub') b.sub = el.checked;
     else if (el.dataset.k === 'subYear') b.subYear = el.checked;
+    else if (el.dataset.k === 'perYear') b.perYear = el.checked;
     else if (el.dataset.k === 'n') b.n = Number(el.value);
     else if (el.dataset.k === 'annex') b.annex = el.value === '1';
     else return;

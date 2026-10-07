@@ -52,6 +52,38 @@ export function tableData(aom, b) {
   if (fx) return { rows: fx, sheet: 'fixed in the template', fixed: true };
   return ((aom && aom.wpData && aom.wpData.tables) || {})[b.n] || null;
 }
+// "Repeat for each year of AOM Table 1": a paragraph printed once per year group of the table (a., b., c.),
+// with values worked out from that year's rows: [YEAR], [ROW_COUNT], [COUNT_<REMARK>] and [SUM_<COLUMN>].
+export const isYearVar = (n) => /^(YEAR|ROW_COUNT|COUNT_[A-Z0-9_]+|SUM_[A-Z0-9_]+)$/.test(n);
+const keyOf = (s) => String(s || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+const amtOf = (c) => { const s = String(c ?? '').replace(/[₱,\s]/g, ''); const neg = /^\(.*\)$/.test(s); const v = Number(s.replace(/[()]/g, '')); return isNaN(v) || s === '' ? null : (neg ? -v : v); };
+export function yearGroups(aom, n = 1) {
+  const t = tableData(aom, { type: 'table', n });
+  if (!t) return [];
+  const cols = t.cols || (t.rows || [])[0] || [];
+  let rows;
+  if (t.data) rows = t.data.map((r) => ({ r, y: (/(?:19|20)\d\d/.exec(String(r[0] ?? '')) || [])[0] || '' }));
+  else {   // a table read from Excel: years from its "CY 2024" headings or from its first column
+    let cur = '';
+    rows = [];
+    (t.rows || []).slice(1).forEach((r) => {
+      if (isYearHead(r)) { cur = /\d{4}/.exec(r[0])[0]; return; }
+      if (isCalcRow(r)) return;
+      rows.push({ r, y: (/(?:19|20)\d\d/.exec(String(r[0] ?? '')) || [])[0] || cur });
+    });
+  }
+  const amtIdx = cols.map((h, i) => (/amount|total|balance|appropriation|disburs|utiliz|cost|₱/i.test(h) ? i : -1)).filter((i) => i >= 0);
+  const remIdx = (() => { const i = cols.findIndex((h) => /remark|status/i.test(h)); return i >= 0 ? i : cols.length - 1; })();
+  const remKeys = [...new Set(rows.map(({ r }) => keyOf(r[remIdx])).filter(Boolean))];
+  const years = [...new Set(rows.map((x) => x.y))].filter(Boolean).sort();
+  return years.map((y) => {
+    const rs = rows.filter((x) => x.y === y).map((x) => x.r);
+    const v = { YEAR: y, ROW_COUNT: countWords(rs.length) };
+    remKeys.forEach((k) => { v['COUNT_' + k] = countWords(rs.filter((r) => keyOf(r[remIdx]) === k).length); });
+    amtIdx.forEach((i) => { v['SUM_' + keyOf(cols[i])] = peso(rs.reduce((s, r) => s + (amtOf(r[i]) || 0), 0)); });
+    return v;
+  });
+}
 // [TABLE1_ITEMS] etc.: the first-column entries of each AOM Table (without the Total row), so the wording names
 // exactly what the table shows.
 export function tableVars(d) {
@@ -183,7 +215,10 @@ export function placeholders(aom) {
   const names = new Set();
   const scan = (t) => String(t || '').replace(/\[([A-Z0-9_]+)\]/g, (_, n) => { names.add(n); return ''; });
   scan(aom.title);
-  (aom.blocks || []).forEach((b) => { scan(b.text); scan(b.lead); (b.items || []).forEach(scan); });
+  (aom.blocks || []).forEach((b) => {
+    if (b.perYear) { String(b.text || '').replace(/\[([A-Z0-9_]+)\]/g, (_, n) => { if (!isYearVar(n)) names.add(n); return ''; }); return; }
+    scan(b.text); scan(b.lead); (b.items || []).forEach(scan);
+  });
   return [...names];
 }
 
@@ -390,6 +425,14 @@ export function findingParas(aom, ctx) {
       } else {
         out.push(...withBlanks(textParas(b.text, vars, { bold: true, ind: { left } })));
       }
+    } else if (b.perYear) {
+      // Printed once per year of AOM Table 1, lettered a., b., c., with that year's values.
+      const groups = yearGroups(aom, Number(b.perYearTable) || 1);
+      if (!groups.length) out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
+      groups.forEach((g, gi) => {
+        if (gi) out.push(BL());
+        out.push(P(fillRuns(String(b.text || '').replace(/\s*\n\s*/g, ' ').trim(), { ...vars, ...g }), { align: 'both', ind: { left: left + 360, hanging: 360 }, label: letterOf(gi) + '.' }));
+      });
     } else {
       out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
     }
