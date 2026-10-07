@@ -6,7 +6,7 @@ import { esc, toast, modal, confirmBox, pill, $, $$ } from '../ui.js';
 import { fsId, loadFsRec, scbaaNotSubmitted, SCBAA, scbaaLine, money, cents, parseAmt, shown, amtText, interChoice, isCombined } from '../fs.js';
 import { LINE } from '../coa.js';
 import { readRao, readBudget, defaultCol, raoFlags, placeOf, autoLayer, memKey, statRowOf, raoMapId } from '../rao.js';
-import { afsScreen, checkHTML } from './baarfs.js';
+import { afsScreen, checkHTML, accPanel } from './baarfs.js';
 
 export async function loadMem(lguId) { const r = await store.get('letters', raoMapId(lguId)); return r && !r.deleted ? (r.data.map || {}) : {}; }
 const scbOf = (F) => (F.rec && F.rec.scbaa) || { rows: {} };
@@ -105,7 +105,7 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
   const srcs = [];
   if (rao) rao.sheets.filter((s) => s.ok && !statRowOf(s.name)).forEach((s) => srcs.push({ id: 'rao:' + s.name, label: s.name, src: 'rao', sheet: s.name, items: s.items.map((x) => ({ label: x.label, group: x.group, a: cents(x.ap) + cents(x.cro), b: cents(x.exp) })) }));
   ['ab', 'sb'].forEach((k) => { if (scb[k]) srcs.push({ id: k, label: SRC_NAME[k], src: k, sheet: scb[k].sheet, items: scb[k].rows.map((x) => ({ label: x.label, a: cents(x.amt) })) }); });
-  let matchHTML = '';
+  let matchHTML = '', matchOpen = !!q.get('m');
   const cur = srcs.find((x) => x.id === q.get('m')) || srcs[0];
   if (cur) {
     const opts = (sel) => {
@@ -118,6 +118,7 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
     };
     const rows = cur.items.map((x, i) => ({ ...x, i, p: placeOf(scb, mem, cur.src, cur.sheet, x.label) }));
     const placed = rows.filter((x) => x.p.k && x.p.how !== 'suggested').length, sugg = rows.filter((x) => x.p.how === 'suggested').length;
+    if (placed < rows.length) matchOpen = true;
     const how = (p) => !p.k ? pill('Choose', 'grey') : p.how === 'suggested' ? pill('Suggested', 'warn') : p.k === 'skip' ? pill('Left out', 'grey') : pill(p.how === 'chosen' ? '✓ Chosen' : p.how === 'remembered' ? '✓ Remembered' : '✓ By name', 'ok');
     // Accordion: items to place first (open), then one group per section of the statement, then the items left out.
     const secOf = {}; let h = '';
@@ -150,7 +151,7 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
   const sideHTML = `<section class="panel"><div class="panel-head"><h2>From the Budget · Possible Findings</h2></div><div class="panel-body ck">${checkHTML(budgetFlags(F).map((f) => ({ st: 'warn', t: f.t })))
     || '<span class="hint">Nothing so far. Flags show here when the RAO or the allocations need a look.</span>'}<p class="hint" style="margin:6px 0 0">They go to Possible Findings on the Results tab.</p></div></section>`;
   void flags;
-  const v = afsScreen({ F, ctx, me, q, base, canEdit: can0, mode: 'budget', extra: { top: srcHTML + raoHTML + matchHTML, mid: statHTML, side: sideHTML } });
+  const v = afsScreen({ F, ctx, me, q, base, canEdit: can0, mode: 'budget', extra: { top: accPanel(srcHTML, 'src', false) + accPanel(raoHTML, 'rao', false) + accPanel(matchHTML, 'match', matchOpen), mid: accPanel(statHTML, 'stat', true), side: sideHTML } });
   return {
     body: v.body,
     mount(root) {

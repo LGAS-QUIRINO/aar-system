@@ -282,7 +282,7 @@ function watchUpdates() {
     if (document.getElementById('upd-bar')) return;
     const bar = document.createElement('div');
     bar.id = 'upd-bar'; bar.className = 'upd-bar';
-    bar.innerHTML = '<span>A new version is ready. Save your work, then click Reload.</span><button class="btn sm primary" type="button">Reload</button>';
+    bar.innerHTML = '<span title="Save your work first; Reload saves it for you">New version ready</span><button class="btn sm primary" type="button">Reload</button>';
     bar.querySelector('button').onclick = () => { if (guard.dirty && guard.save) guard.save(); setTimeout(() => location.reload(), 600); };
     document.body.appendChild(bar);
   };

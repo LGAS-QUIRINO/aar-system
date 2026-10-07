@@ -769,7 +769,9 @@ body.ro-staff :is(button, a)[id$="print"], body.ro-staff :is(button, a)[id$="wor
 /* Review View: blank line between paragraphs of one part */
 .pgap{display:block;height:.75em}
 /* New version ready */
-.upd-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:9999;display:flex;align-items:center;gap:12px;background:var(--navy);color:#fff;padding:10px 14px;border-radius:10px;box-shadow:0 6px 20px rgba(20,40,63,.3);font-size:14px;max-width:calc(100vw - 32px);flex-wrap:wrap}
+.upd-bar{position:fixed;top:auto;right:16px;left:auto;transform:none;margin:0;border:0;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:9999;display:flex;align-items:center;gap:10px;background:var(--navy);color:#fff;padding:7px 8px 7px 12px;border-radius:8px;box-shadow:0 6px 20px rgba(20,40,63,.3);font-size:13px;max-width:calc(100vw - 32px);animation:updIn .2s ease-out}
+.upd-bar .btn{margin-left:0;min-height:0;padding:4px 10px;font-size:12px}
+@keyframes updIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 /* Setup: Trial Balance Used (label at the left, choices at the right) */
 .tbm-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line-2);padding-top:14px;margin-top:14px}
 /* Match the items (Budget tab): one box per section of the statement */

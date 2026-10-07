@@ -418,6 +418,34 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
   };
 }
 
+/* ── Budget tab accordion ── */
+// The panels left open or closed, kept while moving around the app.
+const BUD_OPEN = new Map();
+// Turns one <section class="panel"> (head + body) into a panel that opens and closes by its title.
+// force: open it now (e.g. just after a file is imported).
+export function accPanel(html, key, defOpen, force = false) {
+  if (!html) return html;
+  if (force) BUD_OPEN.set(key, true);
+  const open = BUD_OPEN.has(key) ? BUD_OPEN.get(key) : defOpen;
+  return html.replace('<section class="panel"', `<details class="panel acc" data-acc="${key}"${open ? ' open' : ''}`)
+    .replace('<div class="panel-head">', '<summary class="panel-head">')
+    .replace(/<\/div>(\s*)<div class="panel-body/, '</summary>$1<div class="panel-body')
+    .replace(/<\/section>\s*$/, '</details>');
+}
+// Remembers open/closed; buttons and links in a title work without opening or closing the panel.
+export function wireAcc(root) {
+  root.querySelectorAll('details.acc[data-acc]').forEach((d) => {
+    d.addEventListener('toggle', () => BUD_OPEN.set(d.dataset.acc, d.open));
+    const sm = d.querySelector(':scope > summary');
+    if (sm) sm.addEventListener('click', (e) => {
+      const el = e.target.closest('a,button,input,select,label,.seg');
+      if (!el || el === sm) return;
+      e.preventDefault();
+      const a = e.target.closest('a[href]'); if (a) location.hash = a.getAttribute('href').replace(/^#/, '');
+    });
+  });
+}
+
 /* ── Audited Financial Statements ── */
 // mode: 'baar' (Part 06: the confirmed statements, read-only), 'fs' (Statements tab: cash flows entry and the preview),
 // 'budget' (Budget tab: where the amounts come from, the RAO, the Budget and Actual entry and the statutory allocations).
@@ -471,24 +499,24 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
     return `<td><input class="amt" data-c="${yrKey}" data-k="beg" value="${esc(amtText(s.beg ?? ''))}" ${locked ? 'disabled' : ''} aria-label="Cash at the beginning ${yrKey === 'Y' ? F.y : F.yp}"></td>`;
   };
   const cashCell = (fig) => (fig.any ? money(fig.lines.cash || 0, { dash: '0.00' }) : 'not yet entered');
-  const body = `<style>${FS_CSS}</style>
+  const body0 = `<style>${FS_CSS}</style>
     ${mode === 'baar' ? `<div class="topnote">The audited financial statements, from the trial balances confirmed in the Financial Statements step. Nothing is typed here.</div>${F.confirmed ? '' : `<div class="note warn" style="display:block">The financial statements are not yet confirmed. <a href="#/audits/${ctx.rec.id}/fs?v=1&s=results">Go to Financial Statements</a></div>`}`
       : mode === 'budget' ? '<div class="topnote">Enter the budget from the Annual Budget, the RAO, or both. Import the Excel file or type the amounts; the files stay on your computer.</div>'
       : `<div class="topnote">The statements are built from the trial balances, all funds combined. Only the cash flow lines are typed here.</div>${missingFunds.length ? `<div class="note warn" style="display:block">Not yet entered: ${esc(missingFunds.join(', '))}. <a href="${base}&s=input">Go to the Trial Balance</a></div>` : ''}`}
     ${extra && extra.top ? extra.top : ''}
     <div class="xcols" style="grid-template-columns:${fsMode ? 'minmax(0,1fr)' : 'minmax(0,1fr) 300px'}">
       <div class="xform">
-        <section class="panel"><div class="panel-head"><h2>Statements</h2><span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="f-print">Print</button><button class="btn sm primary" type="button" id="f-word">Word</button></span></div><div class="panel-body">
+        ${mode === 'budget' && scbaaNotSubmitted(F.rec) ? '<div class="note" style="display:block;font-weight:400">Budget and Actual was not submitted. It is left out of the audited financial statements (see Possible Findings).</div>' : `${mode === 'budget' ? '<!--acc:prev-->' : ''}<section class="panel"><div class="panel-head"><h2>${mode === 'budget' ? 'Print View' : 'Statements'}</h2><span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="f-print">Print</button><button class="btn sm primary" type="button" id="f-word">Word</button></span></div><div class="panel-body">
           ${mode === 'budget' ? '' : `<div class="tabs2" id="f-tabs">${KEYS.map(([k, t]) => `<a class="t ${k === sel ? 'on' : ''}" href="${base}&s=${tabKey}&t=${k}${showAll ? '&b=all' : ''}">${esc(t)} ${noTb ? '' : `<span data-sp="${k}"></span>`}</a>`).join('')}</div>`}
           ${fsMode ? '' : `<div class="lr-row" style="justify-content:flex-start;gap:8px"><span class="hint">Funds combined:</span>${fundsLine}<span class="hint" style="flex-basis:100%">The ${F.yp} column comes from the CY ${F.yp} Comparative trial balance (entered once this year; from next year, taken from last year's BAAR).</span></div>
           <div class="lr-row"><b style="color:var(--navy)">Print View</b><span class="hint" id="f-pg"></span></div>`}
-          <div class="paper-wrap big" id="f-paper"></div></div></section>
-        ${mode === 'budget' ? `<section class="panel"><div class="panel-head"><h2>Comparison of Budget and Actual Amounts</h2><span class="btn-row" style="margin-left:auto;align-items:center"><span class="hint">Show:</span>
+          <div class="paper-wrap big" id="f-paper"></div></div></section><!--/acc-->`}
+        ${mode === 'budget' ? `<!--acc:cmp--><section class="panel"><div class="panel-head"><h2>Comparison of Budget and Actual Amounts</h2><span class="btn-row" style="margin-left:auto;align-items:center"><span class="hint">Show:</span>
           <div class="seg" role="group" aria-label="Rows shown"><a class="${showAll ? '' : 'on'}" href="${base}&s=${tabKey}&t=${sel}">Accounts in the trial balance</a><a class="${showAll ? 'on' : ''}" href="${base}&s=${tabKey}&t=${sel}&b=all">All rows</a></div>
           ${canEdit ? '<button class="btn sm ghost" type="button" id="b-paste">Paste from Excel</button>' : ''}</span></div><div class="panel-body">
           <table class="ent bud"><colgroup><col style="width:30%"><col><col><col><col><col></colgroup><thead><tr><th>Item</th><th>Original Budget</th><th>Adjustments</th><th>Final Budget</th><th>Actual on comparable basis</th><th>Performance Difference</th></tr></thead><tbody>${bHTML}</tbody></table>
           <label class="check" style="min-height:0"><input type="checkbox" id="b-all" ${work.scbaa.printAll ? '' : 'checked'} ${dis}>Print only the rows with amounts</label>
-          <span class="hint">Original Budget: current-year plus continuing appropriations; Adjustments: supplemental budgets; Actual: obligations. Typed amounts take the place of amounts from the RAO. Final Budget and the Difference are computed.</span></div></section>` : ''}
+          <span class="hint">Original Budget: current-year plus continuing appropriations; Adjustments: supplemental budgets; Actual: obligations. Typed amounts take the place of amounts from the RAO. Final Budget and the Difference are computed.</span></div></section><!--/acc-->` : ''}
         ${extra && extra.mid ? extra.mid : ''}
         ${fsMode && showCash ? `<section class="panel"><div class="panel-head"><h2>Cash Flows</h2><span class="hint" style="margin-left:8px">all funds combined</span></div><div class="panel-body">
           <table class="ent"><thead><tr><th>Line</th><th>${F.y}</th><th>${F.yp}</th></tr></thead><tbody>${cRows}
@@ -506,6 +534,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
         ${extra && extra.side ? extra.side : ''}
         <section class="panel"><div class="panel-head"><h2>Statement Results</h2></div><div class="panel-body ck" id="f-checks"></div></section>
       </div>`}</div>`;
+  const body = mode !== 'budget' ? body0 : body0.replace(/<!--acc:(\w+)-->([\s\S]*?)<!--\/acc-->/g, (m, k, h) => accPanel(h, k, k === 'cmp'));
 
   return {
     body,
@@ -519,7 +548,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
         const idx = { sfperf: 0, sfpos: 1, scne: 2, scf: 3 };
         const html = sel === 'scbaa' && d.noScbaa ? ['<div class="empty" style="padding:40px 20px">Not submitted by management. The Statement of Comparison of Budget and Actual Amounts is left out of the audited financial statements.</div>']
           : sel === 'scbaa' ? scbaaHTML({ ...d.scbaa, y: F.y, lgu, mun, start: pages.scbaa }) : [stmtHTML(d.stmts[idx[sel]], { lgu, mun, page: pages[sel] })];
-        $('#f-paper', root).innerHTML = html.map((x) => `<div class="sheet fsheet">${x}</div>`).join('');
+        const paper = $('#f-paper', root); if (paper) paper.innerHTML = html.map((x) => `<div class="sheet fsheet">${x}</div>`).join('');
         const pgEl = $('#f-pg', root); if (pgEl) pgEl.textContent = !pages[sel] ? '' : sel === 'scbaa' && html.length > 1 ? `Pages ${pages.scbaa}–${pages.scbaa + html.length - 1}` : `Page ${pages[sel]}`;
         const c = afsChecks(F, d);
         const ckEl = $('#f-checks', root); if (ckEl) ckEl.innerHTML = checkHTML(c.out);
@@ -582,14 +611,15 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
       };
       const sv = $('#f-save', root); if (sv) sv.onclick = save;
       const docNow = () => fsDoc(F, start, work);
-      $('#f-print', root).onclick = async () => {
+      if ($('#f-print', root)) $('#f-print', root).onclick = async () => {
         const p = fsPrint(docNow()); printPages(p.css, p.html, `BAAR ${audit.auditYear} · ${lgu.name} · 06 Audited Financial Statements`);
         await store.log('printed the audited financial statements', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
       };
-      $('#f-word', root).onclick = async () => {
+      if ($('#f-word', root)) $('#f-word', root).onclick = async () => {
         try { toast('Preparing the Word file…'); await saveDocx(await fsSections(docNow()), fsFileName(audit, lgu, mun), 'BAAR Audited Financial Statements'); } catch (e) { toast('Word file failed: ' + e.message, 'bad'); return; }
         await store.log('downloaded the audited financial statements (Word)', `${lgu.name} · ${audit.auditYear}`, ctx.teamId, me.email);
       };
+      if (mode === 'budget') wireAcc(root);
       draw(); setDirty(false, save);
     }
   };
