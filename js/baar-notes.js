@@ -298,47 +298,76 @@ export const NOTES_CSS = `${FS_CSS}
 .ppe tr.b td{font-weight:700}
 .paper-wrap .sheet.fsheet.land{width:11in;height:8.5in}
 `;
-// Lines a block takes, to lay out pages (about 48 lines a page).
-const CAP = 43, W = 92;
-const lines = (b) => {
+// Lines a block takes, to lay out pages. In the browser each block is measured as it will print (11 pt Times,
+// 6.25" wide, 9.3" of text a page); elsewhere it is estimated from its length.
+const LINE_PX = 11 * 1.3 * 96 / 72, PAGE_LINES = 9.3 * 96 / LINE_PX - 0.6;
+const CAP_EST = 43, W = 92;
+const estLines = (b) => {
   if (b.k === 'list') return b.rows.length + 0.5;
   if (b.k === 'head') return 4.5;
   if (b.k === 'table') return 1.6 + b.rows.reduce((s, r) => s + Math.max(1, Math.ceil(r.t.length / 52)) * 1.1, 0);
   const n = Math.max(1, Math.ceil(String(b.t).length / W));
   return n + (b.k === 'h' || b.k === 'h3' ? 1.2 : b.k === 'h2' ? 0.8 : 0.5);
 };
+// Measures every block (and every table row) in a hidden copy of the page. Returns null outside a browser.
+function measure(blocks) {
+  if (typeof document === 'undefined' || !document.body) return null;
+  const box = document.createElement('div');
+  box.style.cssText = 'position:absolute;left:-99999px;top:0;visibility:hidden;width:6.25in';
+  box.innerHTML = `<style>${NOTES_CSS}</style><div class="nts" style="position:relative">${blocks.map((b) => blockHTML(b)).join('')}<div></div></div>`;
+  document.body.appendChild(box);
+  const kids = [...box.querySelector('.nts').children];
+  const m = blocks.map((b, i) => {
+    const el = kids[i], h = (kids[i + 1].offsetTop - el.offsetTop) / LINE_PX;
+    if (b.k !== 'table') return { h };
+    const rows = [...el.querySelectorAll('tbody tr')].map((tr) => tr.offsetHeight / LINE_PX);
+    return { h, rows, head: h - rows.reduce((a, x) => a + x, 0) };
+  });
+  box.remove();
+  return m;
+}
 // Splits the blocks into pages; a heading stays with what follows; a long table is split by rows.
 export function notesPages(blocks) {
+  const M = measure(blocks);
+  const CAP = M ? PAGE_LINES : CAP_EST;
+  const L = (i) => (M ? M[i].h : estLines(blocks[i]));
+  const headL = (i) => (M ? M[i].head : 1.6);
+  const rowL = (i, r) => (M ? M[i].rows[r] : 1.1);
   const pages = []; let cur = [], used = 0;
   const flush = () => { if (cur.length) pages.push(cur); cur = []; used = 0; };
   for (let i = 0; i < blocks.length; i++) {
-    let b = blocks[i];
+    const b = blocks[i];
     if (b.k === 'table') {
-      let rows = b.rows;
-      while (rows.length) {
-        const room = Math.floor((CAP - used - 1.6) / 1.1);
-        if ((room < Math.min(3, rows.length) || (b.rows.length <= 8 && rows === b.rows && room < rows.length)) && cur.length) { flush(); continue; }
-        let n = Math.max(room, 3);
-        if (rows.length > n && rows.length - n < 2) n = rows.length - 2;   // never leave only one or two rows (or just the Total) for the next page
-        const take = rows.slice(0, n);
-        cur.push({ ...b, rows: take, cont: rows !== b.rows }); used += lines({ ...b, rows: take });
-        rows = rows.slice(take.length);
-        if (rows.length) flush();
+      let r0 = 0;
+      const n = b.rows.length;
+      const sum = (a, z) => { let t = 0; for (let r = a; r < z; r++) t += rowL(i, r); return t; };
+      while (r0 < n) {
+        // how many rows fit in the room left
+        let fit = 0, h = headL(i);
+        while (r0 + fit < n && used + h + rowL(i, r0 + fit) <= CAP) { h += rowL(i, r0 + fit); fit++; }
+        const left = n - r0;
+        if ((fit < Math.min(3, left) || (n <= 8 && r0 === 0 && fit < left)) && cur.length) { flush(); continue; }
+        let take = Math.max(fit, Math.min(3, left));
+        if (left > take && left - take < 2) take = Math.max(1, left - 2);   // never leave only one or two rows (or just the Total) for the next page
+        const rows = b.rows.slice(r0, r0 + take);
+        cur.push({ ...b, rows, cont: r0 > 0 }); used += headL(i) + sum(r0, r0 + take);
+        r0 += take;
+        if (r0 < n) flush();
       }
       continue;
     }
-    // keep a heading with the next block
     // a heading (and a note's text) stays with what follows: the whole chain of kept blocks plus the start of the next one
     let need = 0, j = i;
     while (blocks[j]) {
       const x = blocks[j];
-      need += x.k === 'table' ? 1.6 + (x.rows.length <= 8 ? x.rows.length : 3) * 1.1 : lines(x);
+      need += x.k === 'table' ? headL(j) + sum3(j) : L(j);
       if (!x.keep || x.k === 'table') break;
       j++;
     }
     if (used + need > CAP && cur.length) flush();
-    cur.push(b); used += lines(b);
+    cur.push(b); used += L(i);
   }
+  function sum3(j) { const rs = blocks[j].rows.length; let t = 0; for (let r = 0; r < Math.min(rs <= 8 ? rs : 3, rs); r++) t += rowL(j, r); return t; }
   flush();
   return pages.length ? pages : [[]];
 }
