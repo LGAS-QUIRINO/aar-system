@@ -17,6 +17,7 @@ import { uploadPdf, getPdf, renderPdf, removeFile, openPdf } from '../files.js';
 import { aomNo } from '../format.js';
 import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
 import { fsPrint, fsSections } from '../baar-fs.js';
+import { amtText } from '../fs.js';
 import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_CSS, p2List } from '../baar-p2.js';
 import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
@@ -819,7 +820,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
   const pbN = punongBarangay(audit), sgN = sanggunian(audit), niN = audit.notesInfo || {};
   const ppeCols = ppeSchedule(F, N.ppe);
   const v = (o, k) => esc((o || {})[k] ?? '');
-  const amtIn = (path, val, label) => `<input class="input amt-in" data-n="${path}" value="${esc(val ?? '')}" aria-label="${esc(label)}" ${dis}>`;
+  const amtIn = (path, val, label) => `<input class="input amt-in" data-n="${path}" value="${esc(amtText(val ?? ''))}" aria-label="${esc(label)}" ${dis}>`;
   const kmRows = KM.map(([k, label]) => `<tr><td>${esc(label)}</td><td>${amtIn(`km.${k}.cy`, (N.km[k] || {}).cy, `${label} CY ${y}`)}</td><td>${amtIn(`km.${k}.py`, (N.km[k] || {}).py, `${label} CY ${yp}`)}</td></tr>`).join('');
   const ppeTable = (yr, fields) => `<table class="pgt nt-ppe"><thead><tr><th>CY ${yr}</th>${fields.map(([, t]) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
       ${ppeCols.map((c) => `<tr><td>${esc(c.label)}</td>${fields.map(([f, t]) => `<td>${amtIn(`ppe.${c.k}.${f}`, (N.ppe[c.k] || {})[f], `${c.label} ${t} ${yr}`)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;

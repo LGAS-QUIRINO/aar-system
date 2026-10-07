@@ -128,7 +128,7 @@ export function formatVar(name, raw) {
 
 /* ───────── The AOM's amount (title of the AOM and of BAAR Part II) ───────── */
 const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
-const isMoneyName = (n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n);
+export const isMoneyName = (n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n);
 // Values for the title and the topic sentence: amounts follow the COA figures rule (see titleAmount).
 export function topicVars(vars) {
   const out = { ...(vars || {}) };

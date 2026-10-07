@@ -3,7 +3,7 @@
 // the statutory allocations, and the entry grid. Files are read on this device; only the values are kept.
 import { store, emitChange } from '../store.js';
 import { esc, toast, modal, confirmBox, pill, $, $$ } from '../ui.js';
-import { fsId, loadFsRec, scbaaNotSubmitted, SCBAA, scbaaLine, money, cents, parseAmt, shown, interChoice, isCombined } from '../fs.js';
+import { fsId, loadFsRec, scbaaNotSubmitted, SCBAA, scbaaLine, money, cents, parseAmt, shown, amtText, interChoice, isCombined } from '../fs.js';
 import { LINE } from '../coa.js';
 import { readRao, readBudget, defaultCol, raoFlags, placeOf, autoLayer, memKey, statRowOf, raoMapId } from '../rao.js';
 import { afsScreen, checkHTML } from './baarfs.js';
@@ -141,7 +141,7 @@ export async function budgetTab({ F, ctx, me, q, base, canEdit: can0 }) {
   const sr = statRows(F, scb);
   const st = scb.stat || {};
   const statHTML = `<section class="panel" data-transient><div class="panel-head"><h2>Statutory Allocations</h2></div><div class="panel-body">
-    <div class="grid-2">${['reg', 'nta'].map((k) => `<div class="field"><label class="label" for="st-${k}">${esc(BASE_NAME[k])}</label><input class="input amt" id="st-${k}" data-stbase="${k}" value="${esc(st[k] ?? '')}" ${k === 'nta' && ntaRow && scbaaLine(ntaRow, scb).ob ? `placeholder="${esc(shown(scbaaLine(ntaRow, scb).ob / 100))} (from the budget)"` : 'placeholder="type the base"'} ${dis}></div>`).join('')}</div>
+    <div class="grid-2">${['reg', 'nta'].map((k) => `<div class="field"><label class="label" for="st-${k}">${esc(BASE_NAME[k])}</label><input class="input amt" id="st-${k}" data-stbase="${k}" value="${esc(amtText(st[k] ?? ''))}" ${k === 'nta' && ntaRow && scbaaLine(ntaRow, scb).ob ? `placeholder="${esc(shown(scbaaLine(ntaRow, scb).ob / 100))} (from the budget)"` : 'placeholder="type the base"'} ${dis}></div>`).join('')}</div>
     <table class="pf"><thead><tr><th>Allocation</th><th>Base</th><th class="n">Required</th><th class="n">In the books</th><th></th></tr></thead><tbody>
     ${sr.map((x) => `<tr><td><b>${esc(x.t)}</b></td><td><select class="sel" data-stuse="${x.k}" ${dis}>${['reg', 'nta'].map((k) => `<option value="${k}" ${x.kind === k ? 'selected' : ''}>${k === 'reg' ? 'Regular income' : 'NTA share'}</option>`).join('')}</select></td>
       <td class="n">${x.req === null ? '<span class="hint">needs the base</span>' : money(x.req)}</td><td class="n">${x.book === null ? '<span class="hint">not found</span>' : money(x.book, { dash: '0.00' })}${x.from ? `<div class="hint">${esc(x.from)}</div>` : ''}</td>

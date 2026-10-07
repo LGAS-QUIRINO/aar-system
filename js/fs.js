@@ -42,6 +42,14 @@ export function money(c, { dash = '-', paren = true } = {}) {
   return c < 0 ? (paren ? `(${s})` : '-' + s) : s;
 }
 export const shown = (v) => (v === null || v === undefined ? '' : (cents(v) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+// What an amount box shows: 4500 → "4,500.00", "(1234.5)" → "(1,234.50)"; keeps extra decimals; text that is not a number stays as typed.
+export function amtText(v) {
+  if (v === null || v === undefined || v === '') return '';
+  const n = parseAmt(v);
+  if (n === null || isNaN(n)) return String(v);
+  const s = Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+  return n < 0 ? `(${s})` : s;
+}
 export const rawText = (v) => (v === null || v === undefined ? '' : Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }));
 
 /* ── Loading ── */

@@ -4,8 +4,8 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable } from '../aom.js';
-import { money, cents, parseAmt } from '../fs.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable, isMoneyName } from '../aom.js';
+import { money, cents, parseAmt, amtText } from '../fs.js';
 import { loadScript } from '../wp.js';
 
 const FILLED = '(filled in the app)';
@@ -92,7 +92,7 @@ export function fillHTML(d, F, ctx, editable) {
   const phRows = ph.map((p) => {
     const tb = tbFor(d, p, F), raw = w.vars && w.vars[p] ? w.vars[p].raw : '';
     const typed = tb && raw !== '' && cents(raw) !== tb.amt, empty = raw === '';
-    return `<tr><td class="mono">${esc(p)}</td><td><input class="input" style="height:32px" data-wpv="${esc(p)}" value="${esc(raw)}" ${tb && empty ? `placeholder="${esc(money(tb.amt, { dash: '0.00' }))}"` : ''} aria-label="${esc(p)}" ${dis}></td>
+    return `<tr><td class="mono">${esc(p)}</td><td><input class="input" style="height:32px" data-wpv="${esc(p)}"${isMoneyName(p) ? ' data-amt' : ''} value="${esc(isMoneyName(p) && typeof raw === 'number' ? amtText(raw) : raw)}" ${tb && empty ? `placeholder="${esc(money(tb.amt, { dash: '0.00' }))}"` : ''} aria-label="${esc(p)}" ${dis}></td>
       <td>${tb ? `${typed ? 'Typed' : empty ? 'Trial balance (not yet used)' : 'Trial balance'} · <span class="hint">${esc(tb.label)}${typed ? ` ₱${money(tb.amt, { dash: '0.00' })}` : ''}</span>${(typed || empty) && editable ? ` <button class="reset" type="button" data-wptb="${esc(p)}">Use trial balance</button>` : ''}${!typed && !empty ? ' <span class="hint">· type instead in the box</span>' : ''}` : '<span class="hint">Typed</span>'}</td></tr>`;
   }).join('');
   const tables = tn.map((n) => {
@@ -101,7 +101,7 @@ export function fillHTML(d, F, ctx, editable) {
     const tot = ac.length ? cols.map((_, i) => ac.includes(i) ? money(rows.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : '') : null;
     return `<div style="margin-top:12px"><div class="lr-row"><b style="color:var(--navy)">AOM Table ${n}</b>${editable ? `<span class="btn-row"><button class="btn sm ghost" type="button" data-wppaste="${n}">Paste from Excel</button><button class="btn sm ghost" type="button" data-wpaddrow="${n}">+ Add Row</button><button class="btn sm ghost" type="button" data-wpaddcol="${n}">+ Column</button></span>` : ''}</div>
       <table class="pf wpt"><thead><tr>${cols.map((h, i) => `<th${ac.includes(i) ? ' class="n"' : ''}>${editable ? `<input class="input" data-wph="${n}:${i}" value="${esc(h)}" aria-label="Column ${i + 1}">` : esc(h)}</th>`).join('')}<th style="width:30px"></th></tr></thead><tbody>
-      ${rows.map((r, ri) => `<tr>${cols.map((_, i) => `<td><input class="input${ac.includes(i) ? ' amt' : ''}" data-wpc="${n}:${ri}:${i}" value="${esc(r[i] ?? '')}" aria-label="${esc(cols[i])} row ${ri + 1}" ${dis}></td>`).join('')}<td>${editable ? `<button class="x sm" type="button" data-wprm="${n}:${ri}" aria-label="Remove row">✕</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="${cols.length + 1}" class="hint">No rows yet.</td></tr>`}
+      ${rows.map((r, ri) => `<tr>${cols.map((_, i) => `<td><input class="input${ac.includes(i) ? ' amt' : ''}" data-wpc="${n}:${ri}:${i}" value="${esc(ac.includes(i) ? amtText(r[i] ?? '') : r[i] ?? '')}" aria-label="${esc(cols[i])} row ${ri + 1}" ${dis}></td>`).join('')}<td>${editable ? `<button class="x sm" type="button" data-wprm="${n}:${ri}" aria-label="Remove row">✕</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="${cols.length + 1}" class="hint">No rows yet.</td></tr>`}
       ${tot && rows.length ? `<tr style="font-weight:700">${tot.map((x, i) => `<td class="${ac.includes(i) ? 'n' : ''}">${i === 0 ? 'Total' : esc(x)}</td>`).join('')}<td></td></tr>` : ''}</tbody></table></div>`;
   }).join('');
   return `<div class="label">Placeholders · ${filled} of ${ph.length} Filled</div>

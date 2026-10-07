@@ -29,6 +29,7 @@ import { coaView } from './views/coa.js';
 import { fsStep } from './views/fsstep.js';
 import { flagRulesView } from './views/fsflags.js';
 import { ST } from './aom.js';
+import { amtText } from './fs.js';
 
 const app = document.getElementById('app');
 let lastRoute = '';
@@ -128,6 +129,15 @@ function markTouched(e) {
 }
 app.addEventListener('input', markTouched, true);
 app.addEventListener('change', markTouched, true);
+
+/* ── Amount boxes: on leaving the box, 4500 becomes 4,500.00 (every screen) ── */
+// Runs before the screen's own change handler, so that handler reads and saves the tidied amount.
+document.addEventListener('change', (e) => {
+  const el = e.target;
+  if (!el || !el.matches || !el.matches('input.amt, input.amt-in, input.fixin, input[data-amt]') || el.disabled || el.readOnly) return;
+  const t = amtText(el.value.trim());
+  if (t !== el.value) { el.value = t; el.dispatchEvent(new Event('input', { bubbles: true })); }
+}, true);
 
 // Busy = redrawing now would wipe or interrupt something.
 function isBusy() {

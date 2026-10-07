@@ -8,7 +8,7 @@ import { nice, longDate, aomNo } from '../format.js';
 import { normTitle, rowKey, loadChart, CHART_NAME } from '../coa.js';
 import { interChoice, isCombined, keyCode, zeroRow, fundsOf, ALL_FUNDS, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
   posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb, scbaaNotSubmitted,
-  money, shown, rawText, parseAmt, cents } from '../fs.js';
+  money, shown, rawText, parseAmt, cents, amtText } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
 import { FS_CSS, stmtHTML, scbaaHTML, scbaaPages, fsPrint, fsSections, fsFileName } from '../baar-fs.js';
 import { printPages, saveDocx } from '../baar-doc.js';
@@ -442,7 +442,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   // Budget and Actual entry
   const bRows = doc0.allRows;
   const bShow = (r) => r.h || showAll || inTb(r, F.figY.accts) || r.always || scbaaLine(r, work.scbaa).typed;
-  const num = (r, f) => { const v = (work.scbaa.rows[r.k] || {})[f]; return v === undefined || v === null ? '' : esc(v); };
+  const num = (r, f) => { const v = (work.scbaa.rows[r.k] || {})[f]; return v === undefined || v === null ? '' : esc(amtText(v)); };
   const ph = (r, f) => { const a = ((work.scbaa.auto || {})[r.k] || {})[f]; return a === undefined || a === null ? '' : ` placeholder="${esc(shown(a))}"`; };
   const vis = bRows.filter(bShow).filter((r, i, arr) => !r.h || arr.slice(i + 1).findIndex((x) => x.h && (r.sub || !x.sub)) !== 0 && arr.slice(i + 1).some((x) => !x.h));
   const bHTML = vis.map((r) => r.h ? `<tr class="${r.sub ? 'h2' : 'h'}"><td colspan="6">${esc(r.h)}</td></tr>`
@@ -456,7 +456,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   const scfIn = (yrKey, k, locked) => {
     const s = yrKey === 'Y' ? work.scfY : work.scfP, fig = yrKey === 'Y' ? F.figY : F.figP;
     const typed = s[k] !== undefined && s[k] !== null && s[k] !== '';
-    const val = typed ? s[k] : scfFromTb(s, k) && fig.any ? shown(scfVal(s, k, fig) / 100) : '';
+    const val = typed ? amtText(s[k]) : scfFromTb(s, k) && fig.any ? shown(scfVal(s, k, fig) / 100) : '';
     return `<input class="amt" data-c="${yrKey}" data-k="${k}" value="${esc(val)}" ${locked ? 'disabled' : ''} aria-label="${k} ${yrKey === 'Y' ? F.y : F.yp}">`;
   };
   const cRows = SCF.map((d) => {
@@ -468,7 +468,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
   const begCell = (yrKey) => {
     if (yrKey === 'Y' && F.figP.any) return `<td class="n">${money(F.figP.lines.cash || 0, { dash: '0.00' })} <span class="chip">CY ${F.yp} Financial Position</span></td>`;
     const s = yrKey === 'Y' ? work.scfY : work.scfP, locked = yrKey === 'Y' ? !canEdit : pLock;
-    return `<td><input class="amt" data-c="${yrKey}" data-k="beg" value="${esc(s.beg ?? '')}" ${locked ? 'disabled' : ''} aria-label="Cash at the beginning ${yrKey === 'Y' ? F.y : F.yp}"></td>`;
+    return `<td><input class="amt" data-c="${yrKey}" data-k="beg" value="${esc(amtText(s.beg ?? ''))}" ${locked ? 'disabled' : ''} aria-label="Cash at the beginning ${yrKey === 'Y' ? F.y : F.yp}"></td>`;
   };
   const cashCell = (fig) => (fig.any ? money(fig.lines.cash || 0, { dash: '0.00' }) : 'not yet entered');
   const body = `<style>${FS_CSS}</style>
