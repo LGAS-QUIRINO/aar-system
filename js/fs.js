@@ -257,11 +257,11 @@ export function buildScne(fy, fp, y) {
 /* ── Cash flows (Balligui lines). in: true for inflows. from: the line a starting figure comes from. ── */
 export const SCF = [
   { h: 'Cash Flows from Operating Activities' }, { h2: 'Cash Inflows' },
-  { k: 'op_tax', t: 'Collection from taxpayers', in: true }, { k: 'op_ira', t: 'Share from Internal Revenue Allotment', in: true, from: 'rev_ira' },
+  { k: 'op_tax', t: 'Collection from taxpayers', in: true }, { k: 'op_ira', t: 'Share from National Tax Allotment', in: true, from: 'rev_ira' },
   { k: 'op_svc', t: 'Receipts from business/service income', in: true }, { k: 'op_oth', t: 'Other Receipts', in: true },
   { tot: 'opIn', t: 'Total Cash Inflows' }, { h2: 'Cash Outflows' },
   { k: 'op_exp', t: 'Payment of expenses' }, { k: 'op_sup', t: 'Payments to suppliers and creditors' },
-  { k: 'op_emp', t: 'Payments to employees', from: 'exp_ps' }, { k: 'op_othx', t: 'Other Expenses', from: 'exp_mooe' },
+  { k: 'op_emp', t: 'Payments to employees', from: 'exp_ps' }, { k: 'op_othx', t: 'Other Expenses', from: 'exp_mooe' }, { k: 'op_oxo', t: 'Other Outflows' },
   { tot: 'opOut', t: 'Total Cash Outflows' }, { net: 'op', t: 'Net Cash Flows from Operating Activities' },
   { h: 'Cash Flows from Investing Activities' }, { h2: 'Cash Inflows' },
   { k: 'in_ppe', t: 'Proceeds from Sale/Disposal of Property, Plant and Equipment', in: true }, { tot: 'inIn', t: 'Total Cash Inflows' },
@@ -273,7 +273,7 @@ export const SCF = [
   { k: 'fi_amort', t: 'Payment of Loan Amortization' }, { k: 'fi_oth', t: 'Other Outflows' },
   { tot: 'fiOut', t: 'Total Cash Outflows' }, { net: 'fi', t: 'Net Cash Flows from Financing Activities' }
 ];
-const SEC = { op: ['op_tax', 'op_ira', 'op_svc', 'op_oth'], opOut: ['op_exp', 'op_sup', 'op_emp', 'op_othx'], in: ['in_ppe'], inOut: ['in_buy', 'in_oth'], fi: ['fi_loan'], fiOut: ['fi_debt', 'fi_lt', 'fi_amort', 'fi_oth'] };
+const SEC = { op: ['op_tax', 'op_ira', 'op_svc', 'op_oth'], opOut: ['op_exp', 'op_sup', 'op_emp', 'op_othx', 'op_oxo'], in: ['in_ppe'], inOut: ['in_buy', 'in_oth'], fi: ['fi_loan'], fiOut: ['fi_debt', 'fi_lt', 'fi_amort', 'fi_oth'] };
 // The amount of a cash flow line: typed, or the starting figure from the trial balance.
 export function scfVal(scf, k, fig) {
   const typed = scf && scf[k];
