@@ -115,7 +115,7 @@ export async function pool(refs, params, q) {
       let tshow = rec.data.titleShow !== false;
       // Show in the Title applies only when the AOM has an amount.
       const tshowVis = () => { const tv = $('#p-tvar', root), f = $('#p-tshow-f', root); if (!tv || !f) return; const none = tv.value === 'NONE' || (tv.value === '' && /none$/.test(tv.options[tv.selectedIndex]?.text || '')); f.style.display = none ? 'none' : ''; };
-      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } tshowVis(); const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${/^TABLE\d+_ITEMS$/.test(n) ? 'from the table' : SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
+      const ph = () => { const tv = $('#p-tvar', root); if (tv && editable) { const cur = tv.value; tv.innerHTML = tvarOptions({ ...state.aom, titleVar: cur }); } tshowVis(); const p = placeholders(state.aom); $('#p-ph', root).innerHTML = p.length ? p.map((n) => `<span class="pill ${SETUP_VAR_NAMES.includes(n) ? 'ok' : 'grey'}">${esc(n)} · ${/^TABLE\d+_(ITEMS|COUNT)$/.test(n) ? 'from the table' : SETUP_VAR_NAMES.includes(n) ? 'from Setup' : 'from WP'}</span>`).join(' ') : 'None'; };
       ph();
       const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
       if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);

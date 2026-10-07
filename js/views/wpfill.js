@@ -115,7 +115,7 @@ export function wpResults(d, F, ctx) {
   tn.forEach((n) => {
     const t = tableTotal(d, n);
     if (!(w.tables && w.tables[n])) { out.push({ st: 'warn', t: `AOM Table ${n} has no rows yet` }); return; }
-    if (t !== null && amtPh && w.vars && w.vars[amtPh]) out.push(t === cents(w.vars[amtPh].raw) ? { st: 'ok', t: `AOM Table ${n} total ₱${money(t)} agrees with ${amtPh}` } : { st: 'warn', t: `AOM Table ${n} total ₱${money(t, { dash: '0.00' })} differs from ${amtPh} ₱${money(cents(w.vars[amtPh].raw), { dash: '0.00' })}` });
+    if (t !== null && amtPh && w.vars && w.vars[amtPh]) out.push(Math.abs(t) === Math.abs(cents(w.vars[amtPh].raw)) ? { st: 'ok', t: `AOM Table ${n} total ₱${money(t)} agrees with ${amtPh}` } : { st: 'warn', t: `AOM Table ${n} total ₱${money(t, { dash: '0.00' })} differs from ${amtPh} ₱${money(cents(w.vars[amtPh].raw), { dash: '0.00' })}` });
   });
   ph.forEach((p) => { const tb = tbFor(d, p, F); if (tb && w.vars && w.vars[p]) out.push(cents(w.vars[p].raw) === tb.amt ? { st: 'ok', t: `${p} agrees with the trial balance (${tb.label}, all funds)` } : { st: 'warn', t: `${p} ₱${money(cents(w.vars[p].raw), { dash: '0.00' })} differs from the trial balance ₱${money(tb.amt, { dash: '0.00' })} (${tb.label})` }); });
   const miss = ph.filter((p) => v[p] === undefined);

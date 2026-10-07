@@ -26,8 +26,8 @@ export function setupVars(audit, lgu, mun) {
   return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`, AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
 // Filled in by the app (not typed in the working paper): from Audit Setup, and TABLEn_ITEMS from the AOM Tables.
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS'];
-export const isTableVar = (n) => /^TABLE\d+_ITEMS$/.test(n);
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT'];
+export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT)$/.test(n);
 // COA style for small numbers: 0 to 9 in words with the numeral, e.g. "two (2)"; 10 and up in numerals.
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
@@ -91,7 +91,7 @@ export function tableVars(d) {
   const tables = (d && d.wpData && d.wpData.tables) || {};
   Object.keys(tables).forEach((n) => {
     const rows = (tables[n].rows || []).slice(1).filter((r) => !isCalcRow(r)).map((r) => String((r || [])[0] ?? '').trim()).filter(Boolean);
-    if (rows.length) out[`TABLE${n}_ITEMS`] = joinAnd(rows);
+    if (rows.length) { out[`TABLE${n}_ITEMS`] = joinAnd(rows); out[`TABLE${n}_COUNT`] = countWords(rows.length); }   // COUNT: rows in words, e.g. "five (5)"
   });
   return out;
 }
