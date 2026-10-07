@@ -111,7 +111,7 @@ export async function p2Sections(doc, start) {
   const D = await loadScript('lib/docx.min.js', 'docx');
   const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, PageNumber, Tab } = D;
   const F = 'Times New Roman';
-  const isNum = (s) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
+  const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
   const al = (a) => ({ both: AlignmentType.JUSTIFIED, center: AlignmentType.CENTER, right: AlignmentType.RIGHT }[a] || AlignmentType.LEFT);
   const run = (r, p) => (r.t === '\t' ? new TextRun({ children: [new Tab()], font: F, size: 24 }) : new TextRun({ text: r.t, bold: !!(p.bold || r.b), italics: !!p.italic, font: F, size: 24 }));
   const para = (p) => {

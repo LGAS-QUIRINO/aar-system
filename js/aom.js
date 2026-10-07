@@ -410,7 +410,7 @@ export function findingParas(aom, ctx) {
         out.push(P([{ t: `(See Annex ${L}${b.caption ? ' – ' + b.caption : ''})` }], { italic: true, ind: { left } }));
       } else if (tbl) {
         if (b.caption) out.push(P(fillRuns(b.caption, vars), { bold: true, align: 'center', ind: { left } }));
-        out.push({ kind: 'table', rows: tbl.rows, left, source: tbl.sheet, n: b.n });
+        out.push({ kind: 'table', rows: pesoRows(tbl.rows), left, source: tbl.sheet, n: b.n });
       } else {
         out.push(P([{ t: `[TABLE ${b.n}: import the working paper]`, missing: 'TABLE_' + b.n }], { ind: { left } }));
       }
@@ -441,7 +441,46 @@ export function findingParas(aom, ctx) {
       if (bi < aom.blocks.length - 1) out.push(BL());
     }
   });
+  keepLeadIns(out);
   return out;
+}
+
+// A lead-in ("Section 112 of P.D. No. 1445 provides that:", "We recommend that Management:") never stays alone at the
+// bottom of a page: it moves to the next page with the start of what it introduces. A lead-in that fits with some of
+// its text stays where it is (the text may continue on the next page).
+function keepLeadIns(out) {
+  out.forEach((p, i) => {
+    if (p.kind !== 'p' || p.blank || !(p.runs || []).length) return;
+    const text = p.runs.map((r) => r.t || '').join('').trim();
+    if (!/:[”"’']?$/.test(text)) return;
+    let j = i + 1;
+    while (j < out.length && out[j].kind === 'p' && out[j].blank) j++;
+    if (j >= out.length) return;
+    for (let k = i; k < j; k++) out[k].keep = true;
+  });
+}
+
+/* ── Peso signs in tables (as in the financial statements) ── */
+// ₱ on the first amount of each column (after the headings, and again after each "CY 2024" heading) and on the
+// Sub-Total and Total rows; the amounts in between have none.
+const MONEY_CELL = /^\(?\s*-?\s*₱?\s*-?[\d,]+\.\d{2}\s*\)?$/;
+const isTotalRow = (r) => (r || []).some((c) => /^(sub-?\s*total|total|grand total)\b/i.test(String(c ?? '').trim()));
+export function pesoRows(rows) {
+  if (!rows || rows.length < 2) return rows;
+  const bare = (c) => String(c).replace(/₱\s*/g, '').trim();
+  const withPeso = (c) => { const s = bare(c); return /^\(.*\)$/.test(s) ? `(₱${s.slice(1, -1).trim()})` : s.startsWith('-') ? `-₱${s.slice(1).trim()}` : `₱${s}`; };
+  let done = new Set();
+  return rows.map((r, i) => {
+    if (i === 0 || !Array.isArray(r)) return r;
+    if (isYearHead(r)) { done = new Set(); return r; }
+    const tot = isTotalRow(r);
+    return r.map((c, ci) => {
+      if (!MONEY_CELL.test(String(c ?? '').trim())) return c;
+      if (tot) return withPeso(c);
+      if (!done.has(ci)) { done.add(ci); return withPeso(c); }
+      return bare(c);
+    });
+  });
 }
 
 // Whole AOM letter for one Barangay. info: { audit, lgu, mun, team, atl, sa, aoms (records, ordered), nums, varsFor(aom), draft }
@@ -540,7 +579,7 @@ export function buildLetter(info) {
       paras: [
         P(fillRuns(x.block.caption || x.aom.data.title || '', info.varsFor(x.aom)), { align: 'center', bold: true }),
         P(lgu.name, { align: 'center' }), BL(),
-        tbl ? { kind: 'table', rows: tbl.rows, left: 0 } : P('[Table not imported]', { align: 'center' })
+        tbl ? { kind: 'table', rows: pesoRows(tbl.rows), left: 0 } : P('[Table not imported]', { align: 'center' })
       ]
     };
   });
@@ -556,7 +595,7 @@ export function buildLetter(info) {
 
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const tw = (v) => (v || 0) / 1440 + 'in';
-const isNum = (s) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
+const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 function runsHTML(runs, mark) {
   return runs.map((r) => {

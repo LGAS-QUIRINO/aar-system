@@ -1,7 +1,7 @@
 // Word (.docx) file of the AOM letter, built from the same layout as the screen and the printout.
 import { loadScript } from './wp.js';
 
-const isNum = (s) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
+const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 export async function downloadWord(doc) {
   const D = await loadScript('lib/docx.min.js', 'docx');
