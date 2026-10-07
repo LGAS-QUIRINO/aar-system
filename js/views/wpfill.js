@@ -99,7 +99,7 @@ export function fillHTML(d, F, ctx, editable) {
     const t = w.tables && w.tables[n];
     const cols = colsFor(d, n, v), rows = dataRows(t), ac = amtCols(d, n, cols);
     const tot = ac.length ? cols.map((_, i) => ac.includes(i) ? money(rows.reduce((s, r) => s + cents(parseAmt(r[i]) || 0), 0), { dash: '-' }) : '') : null;
-    return `<div style="margin-top:12px"><div class="lr-row"><b style="color:var(--navy)">AOM Table ${n}</b>${editable ? `<span class="btn-row"><button class="btn sm ghost" type="button" data-wppaste="${n}">Paste from Excel</button><button class="btn sm ghost" type="button" data-wpaddrow="${n}">+ Add Row</button><button class="btn sm ghost" type="button" data-wpaddcol="${n}">+ Column</button></span>` : ''}</div>
+    return `<div style="margin-top:12px"><div class="lr-row"><b style="color:var(--navy)">AOM Table ${n}</b>${editable ? `<span class="btn-row">${F && (F.figY.any || F.figP.any) && ac.length ? `<button class="btn sm ghost" type="button" data-wptbfill="${n}" title="Fills the empty amount boxes from the trial balances: all funds combined, or the GF or 5% BDRRMF only when the row says so">Fill from Trial Balance</button>` : ''}<button class="btn sm ghost" type="button" data-wppaste="${n}">Paste from Excel</button><button class="btn sm ghost" type="button" data-wpaddrow="${n}">+ Add Row</button><button class="btn sm ghost" type="button" data-wpaddcol="${n}">+ Column</button></span>` : ''}</div>
       <table class="pf wpt"><thead><tr>${cols.map((h, i) => `<th${ac.includes(i) ? ' class="n"' : ''}>${editable ? `<input class="input" data-wph="${n}:${i}" value="${esc(h)}" aria-label="Column ${i + 1}">` : esc(h)}</th>`).join('')}<th style="width:30px"></th></tr></thead><tbody>
       ${rows.map((r, ri) => `<tr>${cols.map((_, i) => `<td><input class="input${ac.includes(i) ? ' amt' : ''}" data-wpc="${n}:${ri}:${i}" value="${esc(ac.includes(i) ? amtText(r[i] ?? '') : r[i] ?? '')}" aria-label="${esc(cols[i])} row ${ri + 1}" ${dis}></td>`).join('')}<td>${editable ? `<button class="x sm" type="button" data-wprm="${n}:${ri}" aria-label="Remove row">✕</button>` : ''}</td></tr>`).join('') || `<tr><td colspan="${cols.length + 1}" class="hint">No rows yet.</td></tr>`}
       ${tot && rows.length ? `<tr style="font-weight:700">${tot.map((x, i) => `<td class="${ac.includes(i) ? 'n' : ''}">${i === 0 ? 'Total' : esc(x)}</td>`).join('')}<td></td></tr>` : ''}</tbody></table></div>`;
@@ -134,6 +134,13 @@ export function wireFill(root, d, me, changed, F, v) {
   $$('[data-wpaddrow]', root).forEach((b) => { b.onclick = () => { const n = +b.dataset.wpaddrow, g = getRows(n); g.rows.push(g.cols.map(() => '')); putRows(n, g.cols, g.rows); }; });
   $$('[data-wpaddcol]', root).forEach((b) => { b.onclick = () => { const n = +b.dataset.wpaddcol, g = getRows(n); g.cols.push(`Column ${g.cols.length + 1}`); g.rows.forEach((r) => r.push('')); putRows(n, g.cols, g.rows); }; });
   $$('[data-wprm]', root).forEach((b) => { b.onclick = () => { const [n, ri] = b.dataset.wprm.split(':').map(Number); const g = getRows(n); g.rows.splice(ri, 1); putRows(n, g.cols, g.rows); }; });
+  $$('[data-wptbfill]', root).forEach((b) => { b.onclick = () => {
+    const n = +b.dataset.wptbfill, g = getRows(n), ac = amtCols(d, n, g.cols);
+    const res = fillFromTb(F, g.cols, g.rows, ac);
+    if (res.filled) putRows(n, g.cols, g.rows);
+    const notes = [res.missing.length ? `Not found in the trial balance: ${res.missing.slice(0, 4).join(', ')}${res.missing.length > 4 ? '…' : ''}` : '', res.noYear.length ? res.noYear.join('; ') : ''].filter(Boolean);
+    toast(`${res.filled ? `${res.filled} amount${res.filled > 1 ? 's' : ''} filled from the trial balance.` : 'Nothing was filled (boxes with amounts are kept).'}${notes.length ? ' ' + notes.join('. ') + '.' : ''}`, notes.length ? 'bad' : 'ok');
+  }; });
   $$('[data-wppaste]', root).forEach((b) => { b.onclick = async () => {
     const n = +b.dataset.wppaste; let text = '', head = false;
     const ok = await modal({ title: `Paste · AOM Table ${n}`, wide: true, body: '<p class="hint" style="margin:0 0 8px">Copy the rows from Excel and paste them here. Leave out the Total row; it is added by itself.</p><textarea class="input" id="wp-p" rows="10" style="font-family:var(--mono);font-size:12px"></textarea><label class="check" style="min-height:0"><input type="checkbox" id="wp-h">The first row is the column headings</label>',
@@ -148,6 +155,63 @@ export function wireFill(root, d, me, changed, F, v) {
     while (cols.length < w) cols.push(`Column ${cols.length + 1}`);
     putRows(n, cols, [...g.rows, ...rows.map((r) => cols.map((_, i) => r[i] || ''))]);
   }; });
+}
+
+/* ── Fill an AOM Table from the trial balances ── */
+// The fund a row asks for: 'GF', 'BDRRMF', another fund code named in the row, or '' for all funds combined.
+const FUND_WORDS = [[/\b5\s*%|\bb?drrm/i, 'BDRRMF'], [/\bgf\b|general fund/i, 'GF']];
+function fundOfLabel(label, F) {
+  for (const [re, k] of FUND_WORDS) if (re.test(label)) return k;
+  const other = (F.funds || []).concat(F.fundsP || []).map((f) => f.k).find((k) => k !== 'ALL' && k !== 'GF' && k !== 'BDRRMF' && new RegExp(`\\b${k}\\b`, 'i').test(label));
+  return other || '';
+}
+// Account names compared loosely: case, punctuation, a plural "s", and the fund words do not matter.
+const normName = (s) => String(s || '').toLowerCase().replace(/\b5\s*%|\(?\b(gf|general fund|b?drrmf?|bdrrm fund)\b\)?/g, ' ')
+  .replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(Boolean).map((w) => (w.length > 3 ? w.replace(/s$/, '') : w)).join(' ');
+// The trial balance account a row names: by account code, by the same name, or by the only name that contains it.
+function acctOfLabel(label, keys, chart) {
+  const code = (String(label).match(/\b\d-\d{2}-\d{2}-\d{3}\b/) || [])[0];
+  if (code) return keys.find((k) => chart.byKey[k].code === code) || null;
+  const n = normName(label);
+  if (!n) return null;
+  const same = keys.filter((k) => normName(chart.byKey[k].title) === n);
+  if (same.length === 1) return same[0];
+  const near = keys.filter((k) => { const t = normName(chart.byKey[k].title); return t.includes(n) || n.includes(t); });
+  return near.length === 1 ? near[0] : null;
+}
+// The amount of one account for one year and fund (centavos), or why there is none.
+function tbAmount(F, yr, fund, key) {
+  const fig = yr === F.y ? F.figY : yr === F.yp ? F.figP : null;
+  if (!fig || !fig.any) return { why: `no trial balance for ${yr}` };
+  if (!fund) return { amt: fig.accts[key] || 0 };
+  const st = fig.st && fig.st[fund];
+  if (!st) return { why: fig.st && fig.st.ALL ? `only a consolidated trial balance for ${yr}` : `no ${fund} trial balance for ${yr}` };
+  return { amt: st.accts[key] || 0 };
+}
+// Fills the empty amount boxes of AOM Table n. Returns { filled, missing: [labels], noYear: [notes] }.
+export function fillFromTb(F, cols, rows, ac) {
+  const keys = [...new Set([F.figY, F.figP].flatMap((f) => (f && f.st ? Object.values(f.st) : []).flatMap((s) => Object.keys(s.accts || {})).concat(Object.keys((f && f.accts) || {}))))].filter((k) => F.chart.byKey[k]);
+  const yearCol = cols.findIndex((c) => /^\s*(year|cy)\s*$/i.test(c));
+  const labCol = cols.findIndex((c, i) => !ac.includes(i) && i !== yearCol);
+  const out = { filled: 0, missing: [], noYear: new Set() };
+  if (labCol < 0) return out;
+  rows.forEach((r) => {
+    const label = String(r[labCol] || '').trim();
+    if (!label) return;
+    const empty = ac.filter((i) => String(r[i] ?? '').trim() === '');
+    if (!empty.length) return;
+    const key = acctOfLabel(label, keys, F.chart);
+    if (!key) { out.missing.push(label); return; }
+    const fund = fundOfLabel(label, F);
+    empty.forEach((i) => {
+      const y = Number((String(cols[i]).match(/\b(19|20)\d{2}\b/) || [])[0] || (yearCol >= 0 ? (String(r[yearCol]).match(/\b(19|20)\d{2}\b/) || [])[0] : 0) || F.y);
+      const got = tbAmount(F, y, fund, key);
+      if (got.why) { out.noYear.add(got.why); return; }
+      r[i] = amtText(got.amt / 100); out.filled++;
+    });
+  });
+  out.noYear = [...out.noYear];
+  return out;
 }
 
 /* ── Download Excel: VARIABLE / VALUE and the "AOM Table n" sheets ── */
