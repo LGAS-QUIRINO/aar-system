@@ -784,3 +784,4 @@ details.mgrp>summary b{color:var(--navy)}
 details.mgrp>summary .hint{margin-right:auto}
 details.mgrp>summary:hover b{color:var(--primary)}
 details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
+.sync-box button.aside{border-color:#F59E0B;color:#FCD34D}

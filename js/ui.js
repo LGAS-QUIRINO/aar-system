@@ -1,4 +1,5 @@
-import { syncState, syncNow } from './sync.js';
+import { syncState, syncNow, setAside, resolveSetAside } from './sync.js';
+import { store } from './store.js';
 import { ROLE_NAMES, nice, initials, timeAgo } from './format.js';
 import { DEMO, CONFIG } from './config.js';
 
@@ -112,16 +113,45 @@ export function syncBox(s = syncState) {
     synced: ['', s.pending ? `Online · ${s.pending} Waiting` : 'Online · All Synced'],
     idle: ['', 'Online · All Synced'],
     syncing: ['busy', 'Syncing…'],
+    retry: ['busy', s.pending ? `Retrying · ${s.pending} Waiting` : 'Retrying…'],
     offline: ['off', s.pending ? `Offline · ${s.pending} Saved on Device` : 'Offline'],
     signin: ['off', 'Sign In Needed'],
     error: ['off', 'Sync Problem']
   };
   const [dot, text] = map[s.status] || map.idle;
   const detail = s.message ? esc(s.message)
+    : s.status === 'retry' ? 'The server did not answer just now. Your work is saved on this device and will be sent automatically.'
     : s.status === 'offline' ? 'Keep working. Saved work stays on this device and syncs when you are back online.'
       : `Last sync ${esc(timeAgo(s.lastSync))}. Work saves on this device even without signal.`;
   return `<div class="state"><span class="dot ${dot}"></span>${esc(text)}</div><small>${detail}</small>
-    <button type="button" id="sync-now">${s.status === 'signin' ? 'Sign In Again' : 'Sync Now'}</button>`;
+    <button type="button" id="sync-now">${s.status === 'signin' ? 'Sign In Again' : 'Sync Now'}</button>
+    ${s.aside ? `<button type="button" id="sync-aside" class="aside">${s.aside} Change${s.aside > 1 ? 's' : ''} Not Saved · View</button>` : ''}`;
+}
+
+// The changes the server refused, with a way to put them back or let them go.
+const TABLE_NAME = { audits: 'Audit', aoms: 'AOM', letters: 'Financial statements / letter', aom_library: 'AOM Library template', lgus: 'LGU', users: 'User', teams: 'Team', auditlog: 'Activity entry' };
+const asideTitle = (x) => { const d = x.data || {}; return d.title || d.name || (d.type ? `${d.type} · ${d.lguId || ''} ${d.year || ''}` : '') || x.id; };
+export async function showSetAside() {
+  const list = (await setAside()).reverse();
+  if (!list.length) { toast('Nothing set aside.', 'ok'); return; }
+  await modal({ title: 'Changes Not Saved', wide: true,
+    body: `<p class="hint" style="margin:0 0 10px">The server did not accept these changes, so they were kept here. <b>Restore my version</b> saves your copy over what is on the server now; <b>Discard</b> keeps the server's copy.</p>
+      ${list.map((x) => `<div class="panel" style="margin:0 0 8px;padding:10px 12px" data-aside="${esc(x.at)}"><div class="lr-row" style="gap:8px;flex-wrap:wrap">
+        <div style="min-width:0;flex:1"><b>${esc(TABLE_NAME[x.table] || x.table)}</b> · ${esc(asideTitle(x))}<div class="hint">${esc(timeAgo(x.at))} · ${esc(x.status === 'conflict' ? `${x.by || 'someone else'} saved it first` : x.error || 'refused')}</div></div>
+        ${x.status === 'conflict' ? '<button class="btn sm primary" type="button" data-act="restore">Restore my version</button>' : ''}
+        <button class="btn sm ghost" type="button" data-act="discard">Discard</button></div></div>`).join('')}`,
+    onOpen: (bg) => {
+      $$('[data-aside]', bg).forEach((row) => {
+        const x = list.find((y) => y.at === row.dataset.aside);
+        $$('[data-act]', row).forEach((b) => { b.onclick = async () => {
+          if (b.dataset.act === 'restore') {
+            try { await store.save(x.table, x.id, x.data, { deleted: !!x.deleted }); } catch (e) { toast(e.message, 'bad'); return; }
+            await resolveSetAside(x.at, 'restored'); toast('Your version was restored and is being saved.', 'ok');
+          } else { await resolveSetAside(x.at, 'discarded'); }
+          row.remove();
+        }; });
+      });
+    } });
 }
 
 let syncListen = false;
@@ -136,6 +166,7 @@ export function wireShell(onSignOut) {
 function wireSyncBtn() {
   const b = $('#sync-now');
   if (b) b.onclick = () => (syncState.status === 'signin' ? window.dispatchEvent(new Event('need-signin')) : syncNow());
+  const a = $('#sync-aside'); if (a) a.onclick = () => showSetAside();
 }
 
 export const pill = (text, kind = 'grey') => `<span class="pill ${kind}">${esc(text)}</span>`;

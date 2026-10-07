@@ -3,16 +3,44 @@ import { CONFIG, DEMO } from './config.js';
 import { auth } from './auth.js';
 import { demoServer } from './demo-server.js';
 
+// Google sometimes loses a reply when it is busy (404, 429, 5xx, or a dropped connection). Such a call is tried again
+// after 2 and then 5 seconds before it counts as failed. A push sent twice is safe: the sync recognizes its own save.
+const AGAIN = [2000, 5000];
+const busyStatus = (n) => n === 404 || n === 408 || n === 429 || n >= 500;
+const busyError = (m) => /Lock timeout|too many times|timed out|Service unavailable|try again later/i.test(m);
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
 export async function call(action, payload = {}) {
   if (DEMO) return demoServer.handle(action, payload, auth.email);
   const idToken = await auth.getToken();
-  const res = await fetch(CONFIG.API_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: no CORS preflight
-    body: JSON.stringify({ action, idToken, ...payload })
-  });
-  if (!res.ok) throw new Error('Server error ' + res.status);
-  const out = await res.json();
-  if (!out.ok) throw new Error(out.error || 'Server error');
-  return out;
+  const body = JSON.stringify({ action, idToken, ...payload });
+  for (let i = 0; ; i++) {
+    const last = i >= AGAIN.length;
+    let res;
+    try {
+      res = await fetch(CONFIG.API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },   // simple request: no CORS preflight
+        body
+      });
+    } catch (e) {
+      if (last || !navigator.onLine) throw e;
+      await wait(AGAIN[i]); continue;
+    }
+    if (!res.ok) {
+      if (!last && busyStatus(res.status)) { await wait(AGAIN[i]); continue; }
+      throw new Error('Server error ' + res.status);
+    }
+    let out;
+    try { out = await res.json(); } catch (e) {
+      if (!last) { await wait(AGAIN[i]); continue; }     // a Google error page instead of the app's answer
+      throw new Error('The server answer was not valid JSON');
+    }
+    if (!out.ok) {
+      const m = out.error || 'Server error';
+      if (!last && busyError(m)) { await wait(AGAIN[i]); continue; }
+      throw new Error(m);
+    }
+    return out;
+  }
 }

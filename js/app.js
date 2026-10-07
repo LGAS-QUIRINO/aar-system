@@ -288,7 +288,7 @@ function watchUpdates() {
   };
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloading) return;            // the very first visit: nothing to switch from
-    if (guard.dirty) { showBar(); return; }
+    if (isBusy()) { showBar(); return; }   // something is being typed or not yet saved: never reload over it
     reloading = true; location.reload();
   });
   navigator.serviceWorker.register('sw.js').then((reg) => {
