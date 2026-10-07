@@ -230,7 +230,26 @@ async function enter(email, signIn) {
   await boot();
 }
 
-window.addEventListener('signed-in', (e) => { if (!started) enter(e.detail.email); else syncNow(); });
+window.addEventListener('signed-in', async (e) => {
+  if (!started) return enter(e.detail.email);
+  // Signed in again while the app was open: a different Gmail starts from a clean copy, like a new sign-in.
+  if ((await db.get('meta', 'owner')) !== e.detail.email) { started = false; location.hash = ''; return enter(e.detail.email); }
+  syncNow();
+});
+// The server no longer accepts this Gmail (removed, disabled or changed in Users & Roles): its copy leaves this computer.
+let revoking = false;
+window.addEventListener('access-revoked', async (e) => {
+  if (revoking || !started) return;      // during the first sign-in, boot() shows the message itself
+  revoking = true;
+  try {
+    setDirty(false);
+    document.querySelectorAll('.modal-bg').forEach((m) => m.remove());
+    await store.wipe(); await db.del('meta', 'owner'); await db.del('meta', 'inflight');
+    await auth.signOut();
+    location.hash = '';
+    await showLogin(`${e.detail} Sign in with your own Gmail.${/ask the admin/i.test(e.detail) ? '' : ' If you should have access, ask the Admin to add you in Users & Roles.'}`);
+  } finally { revoking = false; }
+});
 window.addEventListener('need-signin', async () => {
   await modal({ title: 'Sign In Again', body: '<p style="margin:0">Google needs you to sign in again before syncing. Your work is safe on this device.</p><div id="gsi-again" style="min-height:44px"></div>',
     onOpen: (bg) => auth.renderButton(bg.querySelector('#gsi-again')).catch(() => {}) });
@@ -301,6 +320,12 @@ function watchUpdates() {
 (async function main() {
   if ('serviceWorker' in navigator && location.protocol !== 'file:') watchUpdates();
   const s = await auth.restore();
-  if (s && s.email) boot(); else showLogin();
+  if (!s || !s.email) return showLogin();
+  // Open straight in only with a recent sign-in that Google can still vouch for; otherwise the person signs in again
+  // (the same Gmail keeps this computer's copy and anything waiting to sync; another Gmail starts from a clean copy).
+  const chk = auth.openCheck();
+  if (chk === 'old') return showLogin(navigator.onLine ? 'It has been more than 7 days since the last sign-in on this computer. Sign in again to continue.' : 'It has been more than 7 days since the last sign-in on this computer. Connect to the internet and sign in again.');
+  if (chk === 'again') return showLogin('Sign in again to continue.');
+  boot();
 })().catch((e) => { app.innerHTML = `<div class="page"><div class="note bad">The app could not start: ${esc(e.message)}</div></div>`; });
 window.addEventListener('error', (e) => toast('Something went wrong: ' + (e.message || 'error'), 'bad'));

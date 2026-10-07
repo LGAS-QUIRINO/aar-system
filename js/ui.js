@@ -100,7 +100,7 @@ export function shell({ me, team, active, crumbs, body, counts = {} }) {
         <div class="me">
           ${DEMO ? '<span class="pill violet">Demo Mode</span>' : ''}${CONFIG.LABEL ? `<span class="pill warn">${esc(CONFIG.LABEL)}</span>` : ''}
           <div class="avatar" aria-hidden="true">${esc(initials(me.name))}</div>
-          <div class="who"><b>${esc(nice(me.name))}</b><span>${esc(roleLine(me))}</span></div>
+          <div class="who"><b>${esc(nice(me.name))}</b><span>${esc(roleLine(me))}</span><span class="em" title="The Gmail signed in on this computer">${esc(me.email || '')}</span></div>
           <button class="btn ghost sm" id="sign-out">Sign Out</button>
         </div>
       </header>

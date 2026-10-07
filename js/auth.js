@@ -4,6 +4,7 @@ import { db } from './db.js';
 
 let session = null;          // { email, token, exp }
 let waiting = [];
+const STALE_DAYS = 7;       // a sign-in older than this is asked again, even without internet
 
 function decode(jwt) {
   const p = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -12,7 +13,7 @@ function decode(jwt) {
 
 function onCredential(resp) {
   const info = decode(resp.credential);
-  session = { email: String(info.email).toLowerCase(), token: resp.credential, exp: info.exp * 1000, name: info.name, picture: info.picture };
+  session = { email: String(info.email).toLowerCase(), token: resp.credential, exp: info.exp * 1000, name: info.name, picture: info.picture, signedAt: Date.now() };
   db.put('meta', session, 'session');
   waiting.forEach((w) => w.resolve(session.token)); waiting = [];
   window.dispatchEvent(new CustomEvent('signed-in', { detail: session }));
@@ -25,7 +26,7 @@ function loadGis() {
     const s = document.createElement('script');
     s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
     s.onload = () => {
-      window.google.accounts.id.initialize({ client_id: CONFIG.CLIENT_ID, callback: onCredential, auto_select: true, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
+      window.google.accounts.id.initialize({ client_id: CONFIG.CLIENT_ID, callback: onCredential, auto_select: false, cancel_on_tap_outside: false, use_fedcm_for_prompt: true });
       resolve(window.google);
     };
     s.onerror = () => { gisReady = null; reject(new Error('Google Sign-In could not load. Check the internet connection.')); };
@@ -38,6 +39,15 @@ export const auth = {
   async restore() { session = (await db.get('meta', 'session')) || null; return session; },
   get email() { return session && session.email; },
   get session() { return session; },
+  // How the saved sign-in on this browser may be used when the app opens:
+  // 'ok' = open; 'again' = the Google sign-in has run out while online (Google must confirm the account again first);
+  // 'old' = no sign-in for more than STALE_DAYS (asked again even offline).
+  openCheck() {
+    if (DEMO || !session) return 'ok';
+    if (!session.signedAt || Date.now() - session.signedAt > STALE_DAYS * 864e5) return 'old';
+    if (navigator.onLine && !(session.exp > Date.now() + 60000)) return 'again';
+    return 'ok';
+  },
   async renderButton(el) {
     const g = await loadGis();
     g.accounts.id.renderButton(el, { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'rectangular', width: 300 });

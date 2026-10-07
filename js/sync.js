@@ -135,6 +135,12 @@ async function doSync() {
   if (changed) emitChange('sync');
   await refreshPending();
   fails = 0;
+  // This person's own user record removed, disabled or given another Gmail: they no longer have access.
+  const me = String(auth.email || '').toLowerCase(), users = await db.all('records', 'users');
+  if (me && users.length && !users.some((u) => !u.deleted && String((u.data || {}).email || '').toLowerCase() === me && (u.data || {}).status !== 'disabled')) {
+    window.dispatchEvent(new CustomEvent('access-revoked', { detail: `This Gmail (${me}) is no longer registered in the Annual Audit Report System.` }));
+    return problems;
+  }
   publish({ status: problems.length ? 'error' : 'synced', lastSync: new Date().toISOString(), message: problems[0] || '', aside: (await setAside()).length });
   if (again) setTimeout(syncNow, 1500);
   return problems;
@@ -144,7 +150,8 @@ export function syncNow() {
   if (!running) {
     running = doSync().catch((e) => {
       const m = String(e.message || e);
-      if (m === 'SIGNIN_NEEDED') publish({ status: 'signin', message: 'Sign in again to sync. Your work is safe on this device.' });
+      if (/is not registered|not for this app|is not verified/i.test(m)) { publish({ status: 'signin', message: m }); window.dispatchEvent(new CustomEvent('access-revoked', { detail: m })); }
+      else if (m === 'SIGNIN_NEEDED') publish({ status: 'signin', message: 'Sign in again to sync. Your work is safe on this device.' });
       else if (m === 'OFFLINE' || !navigator.onLine || /Failed to fetch|NetworkError/i.test(m)) publish({ status: 'offline', message: '' });
       else {
         // One missed round is usually Google being busy: say it is retrying; report a problem when it keeps failing.

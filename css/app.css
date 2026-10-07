@@ -785,3 +785,4 @@ details.mgrp>summary .hint{margin-right:auto}
 details.mgrp>summary:hover b{color:var(--primary)}
 details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .sync-box button.aside{border-color:#F59E0B;color:#FCD34D}
+.me .who span.em{font-size:11.5px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
