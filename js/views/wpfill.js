@@ -28,6 +28,7 @@ const tbKeysOf = (d, F) => {
 };
 // The trial balance amount a placeholder is checked against: { amt (centavos), label } or null.
 function tbFor(d, p, F) {
+  if (isMoneyName(p) && /TOTAL/.test(p) && wpNeeds(d).tn.length) return null;   // a TOTAL with an AOM Table comes from the table
   const w = d.wpData || {};
   if (w.tb && w.tb[p]) return w.tb[p];
   const def = ((d.wpDef && d.wpDef.ph) || []).find((x) => x.name === p);
@@ -82,6 +83,47 @@ function withTotal(d, n, cols, rows) {
 }
 const tableTotal = (d, n) => { const t = d.wpData && d.wpData.tables && d.wpData.tables[n]; if (!t) return null; const cols = t.cols || t.rows[0] || []; const ac = amtCols(d, n, cols); if (!ac.length) return null; return dataRows(t).reduce((s, r) => s + cents(parseAmt(r[ac[ac.length - 1]]) || 0), 0); };
 
+/* ── Totals taken from the AOM Table ── */
+// A money placeholder named with TOTAL (PAYABLE_TOTAL, TOTAL_RECEIVABLES, …) is the total of the AOM Table, not a guess
+// from the trial balance: the column of the year it names (_PY = the year before, _PY2 = two years before; otherwise
+// the last year of the audit period), or the last amount column when the columns are not years.
+const yearWanted = (p, v) => { const end = Number(v && v.PERIOD_END_YEAR) || 0; return /_PY2$/.test(p) ? end - 2 : /_PY$/.test(p) ? end - 1 : end; };
+export function tableSourced(d, p, v) {
+  if (!isMoneyName(p) || !/TOTAL/.test(p)) return null;
+  const { tn } = wpNeeds(d);
+  for (const n of tn) {
+    const t = d.wpData && d.wpData.tables && d.wpData.tables[n];
+    const cols = colsFor(d, n, v), ac = amtCols(d, n, cols);
+    if (!ac.length) continue;
+    const y = yearWanted(p, v);
+    let ci = ac.find((i) => new RegExp(`\\b${y}\\b`).test(String(cols[i])));
+    let rows = dataRows(t);
+    const yearCol = /^\s*year\s*$/i.test(String(cols[0] || ''));
+    if (ci === undefined) {
+      if (/_PY2?$/.test(p) && !yearCol) return null;       // a prior-year total needs a column (or a Year column) for that year
+      ci = ac[ac.length - 1];
+      if (yearCol && /_(CY|PY2?)$/.test(p)) rows = rows.filter((r) => yearOf(r) === String(y));
+    }
+    const amt = rows.reduce((s, r) => s + cents(parseAmt(r[ci]) || 0), 0);
+    return { n, amt, label: `AOM Table ${n} total${/^(19|20)\d\d$/.test(String(cols[ci]).trim()) ? `, ${String(cols[ci]).trim()}` : ` (${cols[ci]})`}`, rows: rows.length };
+  }
+  return null;
+}
+// Puts the table totals in their placeholders (unless a different amount was typed on purpose). Returns true when one changed.
+export function syncTableTotals(d, v) {
+  const w = d.wpData; if (!w) return false;
+  w.vars = w.vars || {};
+  let changed = false;
+  wpNeeds(d).ph.forEach((p) => {
+    if (w.typed && w.typed[p]) return;
+    const s = tableSourced(d, p, v);
+    if (!s || !s.rows) return;
+    const raw = s.amt / 100;
+    if (!w.vars[p] || cents(w.vars[p].raw) !== s.amt) { w.vars[p] = { raw }; changed = true; }
+  });
+  return changed;
+}
+
 /* ── Fill in Here ── */
 export function fillHTML(d, F, ctx, editable) {
   const { ph, tn } = wpNeeds(d);
@@ -90,6 +132,12 @@ export function fillHTML(d, F, ctx, editable) {
   const dis = editable ? '' : 'disabled';
   const filled = ph.filter((p) => v[p] !== undefined).length;
   const phRows = ph.map((p) => {
+    const ts = tableSourced(d, p, v);
+    if (ts) {
+      const raw = w.vars && w.vars[p] ? w.vars[p].raw : '', typedOwn = !!(w.typed && w.typed[p]) && cents(raw) !== ts.amt;
+      return `<tr><td class="mono">${esc(p)}</td><td><input class="input" style="height:32px" data-wpv="${esc(p)}" data-amt value="${esc(raw === '' ? '' : amtText(raw))}" placeholder="${esc(ts.rows ? money(ts.amt, { dash: '0.00' }) : 'fill in the table')}" aria-label="${esc(p)}" ${dis}></td>
+        <td>${typedOwn ? `Typed · <span class="hint">${esc(ts.label)} ₱${money(ts.amt, { dash: '0.00' })}</span>${editable ? ` <button class="reset" type="button" data-wptt="${esc(p)}">Use table total</button>` : ''}` : `${esc(ts.label)} <span class="hint">· follows the table by itself</span>`}</td></tr>`;
+    }
     const tb = tbFor(d, p, F), raw = w.vars && w.vars[p] ? w.vars[p].raw : '';
     const typed = tb && raw !== '' && cents(raw) !== tb.amt, empty = raw === '';
     return `<tr><td class="mono">${esc(p)}</td><td><input class="input" style="height:32px" data-wpv="${esc(p)}"${isMoneyName(p) ? ' data-amt' : ''} value="${esc(isMoneyName(p) && typeof raw === 'number' ? amtText(raw) : raw)}" ${tb && empty ? `placeholder="${esc(money(tb.amt, { dash: '0.00' }))}"` : ''} aria-label="${esc(p)}" ${dis}></td>
@@ -117,6 +165,7 @@ export function wpResults(d, F, ctx) {
     if (!(w.tables && w.tables[n])) { out.push({ st: 'warn', t: `AOM Table ${n} has no rows yet` }); return; }
     if (t !== null && amtPh && w.vars && w.vars[amtPh]) out.push(Math.abs(t) === Math.abs(cents(w.vars[amtPh].raw)) ? { st: 'ok', t: `AOM Table ${n} total ₱${money(t)} agrees with ${amtPh}` } : { st: 'warn', t: `AOM Table ${n} total ₱${money(t, { dash: '0.00' })} differs from ${amtPh} ₱${money(cents(w.vars[amtPh].raw), { dash: '0.00' })}` });
   });
+  ph.forEach((p) => { const ts = tableSourced(d, p, v); if (ts && w.vars && w.vars[p]) out.push(cents(w.vars[p].raw) === ts.amt ? { st: 'ok', t: `${p} is the ${ts.label} (₱${money(ts.amt, { dash: '0.00' })})` } : { st: 'warn', t: `${p} ₱${money(cents(w.vars[p].raw), { dash: '0.00' })} was typed; the ${ts.label} is ₱${money(ts.amt, { dash: '0.00' })}` }); });
   ph.forEach((p) => { const tb = tbFor(d, p, F); if (tb && w.vars && w.vars[p]) out.push(cents(w.vars[p].raw) === tb.amt ? { st: 'ok', t: `${p} agrees with the trial balance (${tb.label}, all funds)` } : { st: 'warn', t: `${p} ₱${money(cents(w.vars[p].raw), { dash: '0.00' })} differs from the trial balance ₱${money(tb.amt, { dash: '0.00' })} (${tb.label})` }); });
   const miss = ph.filter((p) => v[p] === undefined);
   out.push(miss.length ? { st: 'warn', t: `Not yet filled: ${miss.join(', ')}` } : { st: 'ok', t: 'All placeholders filled' });
@@ -126,8 +175,16 @@ export function wpResults(d, F, ctx) {
 export function wireFill(root, d, me, changed, F, v) {
   const W = () => { d.wpData = d.wpData || { file: FILLED, at: new Date().toISOString(), by: me.email, vars: {}, tables: {} }; d.wpData.vars = d.wpData.vars || {}; d.wpData.tables = d.wpData.tables || {}; if (d.wpData.file !== FILLED) { d.wpData.file = FILLED; } d.wpData.at = new Date().toISOString(); d.wpData.by = me.email; return d.wpData; };
   const getRows = (n) => { const t = (d.wpData && d.wpData.tables || {})[n]; return { cols: [...colsFor(d, n, v)], rows: dataRows(t).map((r) => [...r]) }; };
-  const putRows = (n, cols, rows) => { W().tables[n] = withTotal(d, n, cols, rows); changed(); };
-  $$('[data-wpv]', root).forEach((el) => { el.onchange = () => { const w = W(), p = el.dataset.wpv, t = el.value.trim(); if (t === '') delete w.vars[p]; else { const n = parseAmt(t); w.vars[p] = { raw: n !== null && !isNaN(n) && /^[-\d,.()₱\s]+$/.test(t) ? n : t }; } changed(); }; });
+  const putRows = (n, cols, rows) => { W().tables[n] = withTotal(d, n, cols, rows); syncTableTotals(d, v); changed(); };
+  $$('[data-wpv]', root).forEach((el) => { el.onchange = () => { const w = W(), p = el.dataset.wpv, t = el.value.trim();
+    if (tableSourced(d, p, v)) {   // a different amount typed on purpose stays; clearing the box goes back to the table total
+      w.typed = w.typed || {};
+      if (t === '') { delete w.typed[p]; syncTableTotals(d, v); } else { w.typed[p] = true; const n = parseAmt(t); w.vars[p] = { raw: n !== null && !isNaN(n) ? n : t }; }
+      changed(); return;
+    }
+    if (t === '') delete w.vars[p]; else { const n = parseAmt(t); w.vars[p] = { raw: n !== null && !isNaN(n) && /^[-\d,.()₱\s]+$/.test(t) ? n : t }; } changed(); }; });
+  $$('[data-wptt]', root).forEach((b) => { b.onclick = () => { const w = W(); if (w.typed) delete w.typed[b.dataset.wptt]; syncTableTotals(d, v); changed(); }; });
+  if (d.wpData && root.querySelector('[data-wpc]:not([disabled]),[data-wpv]:not([disabled])') && syncTableTotals(d, v)) setTimeout(changed, 0);   // an older total (e.g. from the trial balance) is replaced by the table total
   $$('[data-wptb]', root).forEach((b) => { b.onclick = () => { const p = b.dataset.wptb, tb = tbFor(d, p, F); if (!tb) return; const w = W(); w.vars[p] = { raw: tb.amt / 100 }; changed(); }; });
   $$('[data-wph]', root).forEach((el) => { el.onchange = () => { const [n, i] = el.dataset.wph.split(':').map(Number); const g = getRows(n); g.cols[i] = el.value.trim() || `Column ${i + 1}`; putRows(n, g.cols, g.rows); }; });
   $$('[data-wpc]', root).forEach((el) => { el.onchange = () => { const [n, ri, i] = el.dataset.wpc.split(':').map(Number); const g = getRows(n); g.rows[ri][i] = el.value.trim(); putRows(n, g.cols, g.rows); }; });
