@@ -630,14 +630,73 @@ export function paraHTML(p, mark = true) {
   return `<p class="${cls}" style="${st.join(';')}"${blk}>${label}${runsHTML(runs, mark) || '&nbsp;'}</p>`;
 }
 
+/* ── Table layout: short columns on one line ── */
+// Every column but the one with the longest text (Project Name, Particulars, Remarks…) is made wide enough for its
+// longest entry on one line; that column takes the rest and wraps. When it does not fit, the font goes from 11 pt to
+// 10.5 and then 10 pt (never smaller). Headings may wrap. avail: the width for the table in twips.
+let measureCtx = null;
+function textPt(s, sizePt, bold) {
+  s = String(s ?? '');
+  if (typeof document !== 'undefined') {
+    try {
+      measureCtx = measureCtx || document.createElement('canvas').getContext('2d');
+      measureCtx.font = `${bold ? 'bold ' : ''}${sizePt}pt "Times New Roman", Tinos, Times, serif`;
+      return measureCtx.measureText(s).width * 0.75;   // px → pt
+    } catch (e) { /* estimate below */ }
+  }
+  return s.length * sizePt * (bold ? 0.53 : 0.48);
+}
+const PAD_PT = 11.5;   // cell padding left + right, borders and a little room
+export function tableLayout(rows, avail) {
+  rows = rows || [];
+  const n = Math.max(0, ...rows.map((r) => (r || []).length));
+  if (!n || rows.length < 2) return null;
+  const body = rows.slice(1);
+  const isTot = (r) => /total/i.test((r || []).join(' ')) || isYearHead(r);
+  const allNum = (c) => body.every((r) => { const x = String((r || [])[c] ?? '').trim(); return !x || isNum(x) || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(x); });
+  const at = (size) => {
+    const need = [], head = [], word = [];
+    for (let c = 0; c < n; c++) {
+      need[c] = PAD_PT + Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
+      head[c] = PAD_PT + Math.max(0, ...String(rows[0][c] ?? '').split(/\s+/).map((w) => textPt(w, size, true)));
+      word[c] = PAD_PT + Math.max(0, ...body.map((r) => Math.max(0, ...String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false)))));
+    }
+    return { need, head, word };
+  };
+  // the column that wraps: the widest one that is not all amounts or dates
+  const m11 = at(11);
+  let flex = -1;
+  for (let c = 0; c < n; c++) if (!allNum(c) && (flex < 0 || m11.need[c] > m11.need[flex])) flex = c;
+  const availPt = avail / 20;
+  for (const size of [11, 10.5, 10]) {
+    const m = size === 11 ? m11 : at(size);
+    const w = m.need.map((x, c) => Math.max(x, m.head[c]));
+    if (flex < 0) {
+      const sum = w.reduce((a, b) => a + b, 0);
+      if (sum <= availPt) return { size, nowrap: true, flex, widths: w.map((x) => Math.round((x + (availPt - sum) / n) * 20)) };
+      continue;
+    }
+    const fixed = w.reduce((a, b, c) => (c === flex ? a : a + b), 0);
+    const flexMin = Math.max(m.head[flex], m.word[flex], 72);   // at least an inch for the wrapping column
+    if (fixed + flexMin <= availPt) return { size, nowrap: true, flex, widths: w.map((x, c) => Math.round((c === flex ? availPt - fixed : x) * 20)) };
+  }
+  // Too wide even at 10 pt: the columns share the width in proportion and wrap as a last resort.
+  const m = at(10), w = m.need.map((x, c) => Math.max(x, m.head[c])), sum = w.reduce((a, b) => a + b, 0);
+  return { size: 10, nowrap: false, flex, widths: w.map((x) => Math.round((x / sum) * avail)) };
+}
+
 function tableHTML(t) {
   if (t.receipt) {
     return `<table class="aom-t receipt"><colgroup>${t.widths.map((w) => `<col style="width:${tw(w)}">`).join('')}</colgroup>${t.rows.map((r, i) => `<tr>${r.map((c) => i === 0 ? `<th>${escH(c)}</th>` : `<td>${Array.isArray(c) ? `<b>${escH(c[0])}</b><br>${escH(c[1])}` : '&nbsp;'}</td>`).join('')}</tr>`).join('')}</table>`;
   }
   const rows = t.rows || [];
-  return `<div style="margin-left:${tw(t.left)}"><table class="aom-t">${rows.map((r, i) => {
+  const avail = (t.avail || 9360) - (t.left || 0);
+  const L = tableLayout(rows, avail);
+  const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / avail) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
+  const nw = (ci) => (L && L.nowrap && ci !== L.flex ? ' nw' : '');
+  return `<div style="margin-left:${tw(t.left)}"><table class="aom-t"${L ? ` style="table-layout:fixed;font-size:${L.size}pt"` : ''}>${cg}${rows.map((r, i) => {
     const total = i > 0 && (/total/i.test(r.join(' ')) || isYearHead(r));
-    return `<tr class="${total ? 'tot' : ''}">${r.map((c) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${isNum(c) ? 'num' : ''}">${escH(c)}</td>`).join('')}</tr>`;
+    return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${isNum(c) ? 'num' : ''}${nw(ci)}">${escH(c)}</td>`).join('')}</tr>`;
   }).join('')}</table></div>`;
 }
 
@@ -665,6 +724,7 @@ export const DOC_CSS = `
 .aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
 .aom-t th{font-weight:700;text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap}
+.aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
 .aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}

@@ -4,7 +4,7 @@
 // the observation numbered 1., 2., … (bold), its paragraphs numbered 2.1, 2.2, …, the recommendation with a., b.,
 // then Management's Comment/s and, when there is one, the Auditor's Rejoinder. Times New Roman 12, Letter size.
 import { loadScript } from './wp.js';
-import { ST, findingParas, fillText, paraHTML, DOC_CSS } from './aom.js';
+import { ST, findingParas, fillText, paraHTML, DOC_CSS, tableLayout } from './aom.js';
 import { aomAmount, titleAmount, titleHasAmount, topicVars } from './aom.js';
 import { IAR_CSS } from './baar-iar.js';
 
@@ -84,6 +84,7 @@ export function paginateP2(paras, box) {
   box.innerHTML = '';
   box.className = 'aom-doc p2';
   box.style.cssText = 'position:absolute;left:-9999px;top:0;width:6in;visibility:hidden';
+  paras = paras.map((p) => (p.kind === 'table' && !p.receipt ? { ...p, avail: 8640 } : p));
   const hs = paras.map((p) => { const w = document.createElement('div'); w.innerHTML = paraHTML(p, false); box.appendChild(w); return w.offsetHeight; });
   const pages = [[]]; let h = 0; const max = 9 * 96;
   const runH = (i) => { let s = 0, j = i; while (j < paras.length) { s += hs[j]; if (!paras[j].keep && !paras[j].blank) break; j++; } return s; };
@@ -109,7 +110,7 @@ export const p2FileName = (audit, lgu, mun) => `${String(lgu.name).toUpperCase()
 /* ── Word: the Part II page, then the observations with page numbers ── */
 export async function p2Sections(doc, start) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, PageNumber, Tab } = D;
+  const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, PageNumber, Tab, TableLayoutType } = D;
   const F = 'Times New Roman';
   const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
   const al = (a) => ({ both: AlignmentType.JUSTIFIED, center: AlignmentType.CENTER, right: AlignmentType.RIGHT }[a] || AlignmentType.LEFT);
@@ -122,9 +123,10 @@ export async function p2Sections(doc, start) {
     const ind = p.ind || {};
     return new Paragraph({ children: kids, keepNext: !!p.keep, alignment: al(p.align), indent: { left: ind.left || 0, right: ind.right || 0, hanging: ind.hanging || undefined }, spacing: { after: 0, line: 240 } });
   };
-  const cellP = (t, o = {}) => new Paragraph({ alignment: o.al || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(t || ''), bold: !!o.b, font: F, size: 22 })] });
-  const table = (t) => new Table({ width: { size: 9360 - 1440 - (t.left || 0), type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
-    rows: (t.rows || []).map((r, i) => { const tot = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim())); return new TableRow({ tableHeader: i === 0, cantSplit: true, children: r.map((c) => new TableCell({ children: [cellP(c, { b: i === 0 || tot, al: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] })) }); }) });
+  const cellP = (t, o = {}) => new Paragraph({ alignment: o.al || AlignmentType.LEFT, spacing: { after: 0 }, children: [new TextRun({ text: String(t || ''), bold: !!o.b, font: F, size: o.size || 22 })] });
+  const table = (t) => { const avail = 8640 - (t.left || 0), L = tableLayout(t.rows || [], avail), size = L ? Math.round(L.size * 2) : 22;
+    return new Table({ width: { size: avail, type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined, columnWidths: L ? L.widths : undefined, layout: L ? TableLayoutType.FIXED : undefined,
+    rows: (t.rows || []).map((r, i) => { const tot = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim())); return new TableRow({ tableHeader: i === 0, cantSplit: true, children: r.map((c, ci) => new TableCell({ width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined, children: [cellP(c, { b: i === 0 || tot, size, al: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] })) }); }) }); };
   const margin = { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
   const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: F, size: 22 })] })] });

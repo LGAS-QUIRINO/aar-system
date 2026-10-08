@@ -1,11 +1,12 @@
 // Word (.docx) file of the AOM letter, built from the same layout as the screen and the printout.
 import { loadScript } from './wp.js';
+import { tableLayout } from './aom.js';
 
 const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 export async function downloadWord(doc) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType } = D;
+  const { Document, Packer, Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, Header, PageNumber, Tab, VerticalAlign, HeightRule, BorderStyle, HorizontalPositionRelativeFrom, VerticalPositionRelativeFrom, TextWrappingType, TableLayoutType } = D;
   const FONT = 'Times New Roman';
   const run = (r, p) => new TextRun({ text: r.t, bold: !!(p.bold || r.b), italics: !!p.italic, font: FONT, size: p.size || 24 });
   const align = (a) => ({ both: AlignmentType.JUSTIFIED, center: AlignmentType.CENTER, right: AlignmentType.RIGHT }[a] || AlignmentType.LEFT);
@@ -48,13 +49,16 @@ export async function downloadWord(doc) {
       });
     }
     const rows = t.rows || [];
+    const avail = 9360 - (t.left || 0), L = tableLayout(rows, avail), size = L ? Math.round(L.size * 2) : 22;
     return new Table({
-      width: { size: 9360 - (t.left || 0), type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
+      width: { size: avail, type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
+      columnWidths: L ? L.widths : undefined, layout: L ? TableLayoutType.FIXED : undefined,
       rows: rows.map((r, i) => {
         const total = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim()));
         return new TableRow({
           tableHeader: i === 0,
-          children: r.map((c) => new TableCell({ children: [cellP(c, { bold: i === 0 || total, align: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
+          children: r.map((c, ci) => new TableCell({ width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined,
+            children: [cellP(c, { bold: i === 0 || total, size, align: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
         });
       })
     });
