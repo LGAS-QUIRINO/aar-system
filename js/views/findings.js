@@ -85,7 +85,7 @@ export async function findings(refs, params, q) {
         <span class="btn-row" style="margin-left:auto">${!d.wp && ed ? '<button class="btn sm primary" type="button" id="wp-new">New Working Paper</button>' : ''}<button class="btn sm ghost" type="button" id="wp-dl">Download Excel</button></span></div>
       <div class="panel-body">
         <div class="seg" role="group" aria-label="Working paper" style="margin-bottom:10px"><button type="button" class="${mode === 'fill' ? 'on' : ''}" data-wpmode="fill">Fill in Here</button><button type="button" class="${mode === 'import' ? 'on' : ''}" data-wpmode="import">Import Excel</button></div>
-        ${mode === 'fill' ? `<p class="hint" style="margin:0 0 8px">Fill in the working paper here, or import the Excel working paper as before. Amounts from the trial balance fill in by themselves.</p>${ed ? '<input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">' : ''}${fillHTML(d, F, ctx, ed)}` : importBody}
+        ${mode === 'fill' ? `<p class="hint" style="margin:0 0 8px">Fill in the working paper here, or import the Excel working paper as before. Type the placeholder amounts; a TOTAL follows the AOM Table total. The table's Fill from Trial Balance button fills its amounts when you click it.</p>${ed ? '<input type="file" id="wp-file" accept=".xlsx,.xlsm,.xls" class="sr-only">' : ''}${fillHTML(d, F, ctx, ed)}` : importBody}
       </div>`;
   }
 

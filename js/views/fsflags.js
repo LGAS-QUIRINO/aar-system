@@ -158,12 +158,8 @@ export async function findingsPanel({ F, ctx, me, base, canEdit }) {
         const f = byId(b.dataset.pfadd); const t = rules[f.rule] ? tplOf(rules[f.rule]) : null;
         const now = new Date().toISOString();
         const data = t ? fromTemplate(t) : { ...blankAom(), title: f.t };
+        // The placeholders are left for the auditor to fill in: the flagged amount is often only part of the finding.
         const vars = {}, src = {}, tb = {};
-        if (f.amt !== null && f.amt !== undefined) {
-          const ph = placeholders(data).filter((n) => !SETUP_VAR_NAMES.includes(n));
-          const p = ph.find((n) => AMT_PH.test(n));
-          if (p) { vars[p] = { raw: f.amt / 100 }; src[p] = `Trial balance · ${f.d || f.t}`; tb[p] = { amt: f.amt, label: f.d || f.t }; }
-        }
         const seq = Math.max(0, ...(ctx.aoms || []).map((a) => a.data.seq || 0)) + 1;
         const id = newId('aom');
         await store.save('aoms', id, { ...data, auditId: ctx.rec.id, teamId: ctx.teamId, lguId: F.lguId, status: ST.DRAFT, flag: f.id, flagCodes: f.codes || [],

@@ -29,11 +29,10 @@ const tbKeysOf = (d, F) => {
 // The trial balance amount a placeholder is checked against: { amt (centavos), label } or null.
 function tbFor(d, p, F) {
   if (isMoneyName(p) && /TOTAL/.test(p) && wpNeeds(d).tn.length) return null;   // a TOTAL with an AOM Table comes from the table
-  const w = d.wpData || {};
-  if (w.tb && w.tb[p]) return w.tb[p];
+  // Only a placeholder set up on purpose as "Trial balance · accounts covered" (New Working Paper) is linked to the
+  // trial balance. Nothing else is filled in or compared: most amounts are totals of a table or not in the trial balance.
   const def = ((d.wpDef && d.wpDef.ph) || []).find((x) => x.name === p);
-  const fromTb = (def && def.from === 'tb') || (w.src && /^Trial balance/.test(w.src[p] || ''));
-  if (!fromTb || !F) return null;
+  if (!def || def.from !== 'tb' || !F) return null;
   const keys = tbKeysOf(d, F);
   if (!keys.length) return null;
   return { amt: keys.reduce((t, k) => t + (F.figY.accts[k] || 0), 0), label: keys.map((k) => F.chart.byKey[k].title).join(', ') };
