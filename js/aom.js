@@ -687,11 +687,11 @@ export function tableLayout(rows, avail) {
   for (const size of [11, 10.5, 10]) {
     const m = size === 11 ? m11 : at(size);
     const w = m.need.map((x, c) => Math.max(x, m.head[c]));
-    if (flex < 0) {
-      const sum = w.reduce((a, b) => a + b, 0);
-      if (sum <= availPt) return { size, nowrap: true, flex, widths: w.map((x) => Math.round((x + (availPt - sum) / n) * 20)) };
-      continue;
-    }
+    const sum = w.reduce((a, b) => a + b, 0);
+    // Everything fits on one line: like Word's AutoFit, each column keeps its natural width and the spare room is
+    // shared in proportion, so no single column ends up much wider than its contents.
+    if (sum <= availPt) return { size, nowrap: true, flex, widths: w.map((x) => Math.round(x * (availPt / sum) * 20)) };
+    if (flex < 0) continue;
     const fixed = w.reduce((a, b, c) => (c === flex ? a : a + b), 0);
     const flexMin = Math.max(m.head[flex], m.word[flex], 72);   // at least an inch for the wrapping column
     if (fixed + flexMin <= availPt) return { size, nowrap: true, flex, widths: w.map((x, c) => Math.round((c === flex ? availPt - fixed : x) * 20)) };
@@ -712,7 +712,7 @@ function tableHTML(t) {
   const nw = (ci) => (L && L.nowrap && ci !== L.flex ? ' nw' : '');
   return `<div style="margin-left:${tw(t.left)}"><table class="aom-t"${L ? ` style="table-layout:fixed;font-size:${L.size}pt"` : ''}>${cg}${rows.map((r, i) => {
     const total = i > 0 && (/total/i.test(r.join(' ')) || isYearHead(r));
-    return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${isNum(c) ? 'num' : ''}${nw(ci)}">${escH(c)}</td>`).join('')}</tr>`;
+    return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${/^(19|20)\d{2}$/.test(String(c ?? '').trim()) ? 'yr' : isNum(c) ? 'num' : ''}${nw(ci)}">${escH(c)}</td>`).join('')}</tr>`;
   }).join('')}</table></div>`;
 }
 
@@ -738,7 +738,8 @@ export const DOC_CSS = `
 .keepblk{break-inside:avoid;page-break-inside:avoid}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
 .aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
-.aom-t th{font-weight:700;text-align:center}
+.aom-t th{font-weight:700;text-align:center;vertical-align:middle}
+.aom-t td.yr{text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap}
 .aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}

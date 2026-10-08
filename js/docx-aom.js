@@ -57,8 +57,8 @@ export async function downloadWord(doc) {
         const total = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim()));
         return new TableRow({
           tableHeader: i === 0,
-          children: r.map((c, ci) => new TableCell({ width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined,
-            children: [cellP(c, { bold: i === 0 || total, size, align: i === 0 ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
+          children: r.map((c, ci) => new TableCell({ width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined, verticalAlign: i === 0 ? VerticalAlign.CENTER : undefined,
+            children: [cellP(c, { bold: i === 0 || total, size, align: i === 0 || /^(19|20)\d{2}$/.test(String(c ?? '').trim()) ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
         });
       })
     });
