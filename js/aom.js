@@ -481,13 +481,15 @@ function keepLeadIns(out) {
 // Sub-Total and Total rows; the amounts in between have none.
 const MONEY_CELL = /^\(?\s*-?\s*₱?\s*-?[\d,]+\.\d{2}\s*\)?$/;
 const isTotalRow = (r) => (r || []).some((c) => /^(sub-?\s*total|total|grand total)\b/i.test(String(c ?? '').trim()));
+// A rate column: "Utilization Rate", "Percentage", "% Utilized", "Rate (%)" — not "Required 20% Development Fund".
+export const isRateHead = (h) => /\brate\b|\bpercent(age)?\b|^\s*%|\(%\)|%\s*$/i.test(String(h ?? ''));
 export function pesoRows(rows) {
   if (!rows || rows.length < 2) return rows;
   const bare = (c) => String(c).replace(/₱\s*/g, '').trim();
   const withPeso = (c) => { const s = bare(c); return /^\(.*\)$/.test(s) ? `(₱${s.slice(1, -1).trim()})` : s.startsWith('-') ? `-₱${s.slice(1).trim()}` : `₱${s}`; };
   let done = new Set();
   // A rate or percent column is never money: its entries print as rates (96.4 → 96.40%), without ₱.
-  const rateCol = (rows[0] || []).map((h) => /\brate\b|percent|%/i.test(String(h ?? '')));
+  const rateCol = (rows[0] || []).map((h) => isRateHead(h));
   const asRate = (c) => { const s = String(c ?? '').replace(/[₱,\s]/g, '').replace(/%$/, ''); const v = Number(s); return s === '' || isNaN(v) ? c : `${v.toFixed(2)}%`; };
   return rows.map((r, i) => {
     if (i === 0 || !Array.isArray(r)) return r;

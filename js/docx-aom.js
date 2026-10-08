@@ -50,9 +50,13 @@ export async function downloadWord(doc) {
     }
     const rows = t.rows || [];
     const avail = 9360 - (t.left || 0), L = tableLayout(rows, avail), size = L ? Math.round(L.size * 2) : 22;
+    const line = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
     return new Table({
       width: { size: avail, type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
       columnWidths: L ? L.widths : undefined, layout: L ? TableLayoutType.FIXED : undefined,
+      // every cell ruled, with a little room inside (as in the preview)
+      borders: { top: line, bottom: line, left: line, right: line, insideHorizontal: line, insideVertical: line },
+      margins: { top: 30, bottom: 30, left: 100, right: 100 },
       rows: rows.map((r, i) => {
         const total = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim()));
         return new TableRow({

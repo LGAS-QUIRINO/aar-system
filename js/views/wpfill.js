@@ -4,7 +4,7 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable, isMoneyName } from '../aom.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable, isMoneyName, isRateHead } from '../aom.js';
 import { money, cents, parseAmt, amtText } from '../fs.js';
 import { loadScript } from '../wp.js';
 
@@ -58,7 +58,7 @@ const amtCols = (d, n, cols, rows) => {
   const allMoney = (i) => { const xs = data.map((r) => String((r || [])[i] ?? '').trim()).filter(Boolean); return xs.length > 0 && xs.every((x) => MONEY_ENTRY.test(x)); };
   return cols.map((h, i) => {
     if (def && def.cols[i]) return def.cols[i].amt ? i : -1;
-    if (/\brate\b|percent|%/i.test(String(h || ''))) return -1;
+    if (isRateHead(h)) return -1;
     return isAmtCol(h) || allMoney(i) ? i : -1;
   }).filter((i) => i >= 0);
 };
