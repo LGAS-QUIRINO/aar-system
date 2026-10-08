@@ -49,16 +49,25 @@ const colsFor = (d, n, v) => {
   if (def) return def.cols.map((c) => c.t);
   return (WP_COLS[d.wp] && n === 1) ? WP_COLS[d.wp] : ['Particulars', 'Amount'];
 };
-const amtCols = (d, n, cols) => {
+// Amount columns: set in the working paper, or by the heading (Amount, Balance, Appropriation, a year…), or because
+// every entry typed in it is an amount with centavos (Annual NTA, Required 20%…). A rate or percent column is never one.
+const MONEY_ENTRY = /^\(?\s*-?\s*₱?\s*-?[\d,]+\.\d{2}\s*\)?$/;
+const amtCols = (d, n, cols, rows) => {
   const def = ((d.wpDef && d.wpDef.tables) || []).find((x) => x.n === n);
-  return cols.map((h, i) => (def && def.cols[i] ? !!def.cols[i].amt : isAmtCol(h)) ? i : -1).filter((i) => i >= 0);
+  const data = rows || dataRows(d.wpData && d.wpData.tables && d.wpData.tables[n]);
+  const allMoney = (i) => { const xs = data.map((r) => String((r || [])[i] ?? '').trim()).filter(Boolean); return xs.length > 0 && xs.every((x) => MONEY_ENTRY.test(x)); };
+  return cols.map((h, i) => {
+    if (def && def.cols[i]) return def.cols[i].amt ? i : -1;
+    if (/\brate\b|percent|%/i.test(String(h || ''))) return -1;
+    return isAmtCol(h) || allMoney(i) ? i : -1;
+  }).filter((i) => i >= 0);
 };
 // Data rows of a table (without its header and the year headings, Sub-Total and Total rows added here).
 // A grouped table keeps its rows in the order typed (t.data), so the boxes do not move while typing.
 const dataRows = (t) => { if (!t || !t.rows) return []; if (t.data) return t.data; const r = t.rows.slice(1); return t.filled ? r.filter((x) => !isCalcRow(x)) : r; };
 const yearOf = (r) => { const m = /(?:19|20)\d\d/.exec(String((r || [])[0] ?? '')); return m ? m[0] : ''; };
 function withTotal(d, n, cols, rows) {
-  const ac = amtCols(d, n, cols);
+  const ac = amtCols(d, n, cols, rows);
   // Sub-Total per Year (set in the AOM Table block): rows grouped by the year in the first column, each group with
   // a "CY 2024" heading and a Sub-Total, then the Total. The labels sit in the column before the first amount column.
   const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
