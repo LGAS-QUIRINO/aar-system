@@ -486,11 +486,15 @@ export function pesoRows(rows) {
   const bare = (c) => String(c).replace(/₱\s*/g, '').trim();
   const withPeso = (c) => { const s = bare(c); return /^\(.*\)$/.test(s) ? `(₱${s.slice(1, -1).trim()})` : s.startsWith('-') ? `-₱${s.slice(1).trim()}` : `₱${s}`; };
   let done = new Set();
+  // A rate or percent column is never money: its entries print as rates (96.4 → 96.40%), without ₱.
+  const rateCol = (rows[0] || []).map((h) => /\brate\b|percent|%/i.test(String(h ?? '')));
+  const asRate = (c) => { const s = String(c ?? '').replace(/[₱,\s]/g, '').replace(/%$/, ''); const v = Number(s); return s === '' || isNaN(v) ? c : `${v.toFixed(2)}%`; };
   return rows.map((r, i) => {
     if (i === 0 || !Array.isArray(r)) return r;
     if (isYearHead(r)) { done = new Set(); return r; }
     const tot = isTotalRow(r);
     return r.map((c, ci) => {
+      if (rateCol[ci]) return asRate(c);
       if (!MONEY_CELL.test(String(c ?? '').trim())) return c;
       if (tot) return withPeso(c);
       if (!done.has(ci)) { done.add(ci); return withPeso(c); }
