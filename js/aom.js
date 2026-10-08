@@ -405,9 +405,14 @@ export function findingParas(aom, ctx) {
         const lines = String(b.text || '').split('\n').filter((l) => l.trim());
         lines.forEach((l, i) => {
           if (i > 0) out.push(BL());   // a blank line between quoted paragraphs, as in the other parts
-          const runs = fillRuns(l.trim(), vars);
+          // "(Emphasis supplied)" goes after the closing quotation mark, as in legal writing.
+          let line = l.trim(), note = '';
+          const em = i === lines.length - 1 && /\s*(\((?:emphasis|underscoring|italics|underlining)(?: and \w+)? supplied\))\s*$/i.exec(line);
+          if (em) { note = em[1]; line = line.slice(0, em.index).trim(); }
+          const runs = fillRuns(line, vars);
           if (i === 0) runs.unshift({ t: '“' });
           if (i === lines.length - 1) runs.push({ t: '”' });
+          if (note) runs.push({ t: ' ' + note });
           out.push(P(runs, { italic: true, align: 'both', ind: { left: inSub ? QL_SUB : QL, right: inSub ? QR_SUB : QR } }));
         });
       } else {
