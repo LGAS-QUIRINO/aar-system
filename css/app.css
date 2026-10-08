@@ -240,11 +240,16 @@ a.t-row:focus-visible, .t-row:focus-visible, .btn:focus-visible { outline: 2px s
 .aom-doc .lh img{display:inline-block}
 .aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
-.aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
-.aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
-.aom-t th{font-weight:700;text-align:center}
-.aom-t td.num{text-align:right;white-space:nowrap}
+.aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:3pt 0}
+.aom-t th,.aom-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top}
+.aom-t th{font-weight:700;text-align:center;vertical-align:middle;background:#F8F9FA}
+.aom-t td.yr,.aom-t td.date,.aom-t td.ref{text-align:center}
+.aom-t td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
+.aom-t tr.yr-grp td{font-weight:700;text-align:center;background:#F2F4F7;letter-spacing:0.04em}
+.aom-t tr.sub-tot td{border-top:1.5px solid #000}
+.aom-t tr.grand-tot td{border-top:1.5px solid #000;border-bottom:3.5px double #000}
 .aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}
 .ph-fill{background:#E3F1E7;border-radius:2px}
@@ -343,8 +348,12 @@ label.btn{cursor:pointer}
 .rv-table{border-collapse:collapse;font-size:14px;line-height:1.35;width:100%}
 .rv-table th,.rv-table td{border:1px solid #444;padding:4px 7px;vertical-align:top;text-align:left}
 .rv-table th{font-weight:700;text-align:center;background:#F6F7F9}
-.rv-table td.num{text-align:right;white-space:nowrap}
+.rv-table td.yr,.rv-table td.date,.rv-table td.ref{text-align:center}
+.rv-table td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .rv-table tr.tot td{font-weight:700}
+.rv-table tr.yr-grp td{font-weight:700;text-align:center;background:#F2F4F7;letter-spacing:0.04em}
+.rv-table tr.sub-tot td{border-top:1.5px solid #444}
+.rv-table tr.grand-tot td{border-top:1.5px solid #444;border-bottom:3.5px double #000}
 .rv-doc p.tcap{font-weight:700;text-align:center}
 .rv-block.t-table.on-tbl .rv-table{outline:2px solid #8DB1DC;outline-offset:2px}
 @media (max-width:640px){.rv-thead,.rv-tablewrap{margin-left:0}}

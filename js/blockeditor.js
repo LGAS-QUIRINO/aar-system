@@ -58,7 +58,9 @@ export function blocksHTML(aom, o = {}) {
         <div class="field"><label class="label">Columns (when filled in the app)</label><input class="input" data-bi="${bi}" data-k="cols" value="${esc(b.cols || '')}" placeholder="e.g. Account, [EACH_YEAR]" ${dis}><span class="hint">Separate with commas. [EACH_YEAR] gives one amount column per year of the audit period.</span></div>
         <div class="field"><label class="label">Fixed Table (same in every AOM)</label><textarea class="input be-text" data-bi="${bi}" data-k="fixed" rows="${Math.max(2, Math.min(14, String(b.fixed || '').split('\n').length + 1))}" placeholder="Only for a table that never changes, e.g. a circular's sample format. One row per line; separate cells with | or paste from Excel." ${dis}>${esc(b.fixed || '')}</textarea></div>
         <label class="check" style="min-height:0"><input type="checkbox" data-bi="${bi}" data-k="subYear" ${b.subYear ? 'checked' : ''} ${dis}>Sub-Total per Year (grouped by the year in the first column, e.g. the date)</label>
-        <div class="grid-2">
+        <div class="grid-3">
+          <div class="field"><label class="label">Table mode</label><select class="input" data-bi="${bi}" data-k="tableMode" ${dis}>
+            ${[['auto', `Auto (${blocks.some((x) => x.perYear && (Number(x.perYearTable) || 1) === (Number(b.n) || 1)) ? 'Split' : 'Continuing'})`], ['split', 'Split (under a., b.)'], ['continuing', 'Continuing']].map(([v, t]) => `<option value="${v}" ${(b.tableMode || 'auto') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
           <div class="field"><label class="label">Total row</label><select class="input" data-bi="${bi}" data-k="totalRow" ${dis}>
             ${[['auto', 'Automatic (when the table has amounts)'], ['always', 'Always'], ['none', 'None']].map(([v, t]) => `<option value="${v}" ${(b.totalRow || 'auto') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
           <div class="field"><label class="label">Peso signs</label><select class="input" data-bi="${bi}" data-k="peso" ${dis}>
@@ -96,15 +98,16 @@ export function wireBlocks(root, state, onChange) {
     const b = aom().blocks[+bi];
     if (el.dataset.k === 'sub') b.sub = el.checked;
     else if (el.dataset.k === 'subYear') b.subYear = el.checked;
-    else if (el.dataset.k === 'perYear') b.perYear = el.checked;
+    else if (el.dataset.k === 'perYear') { b.perYear = el.checked; onChange(true); return; }
     else if (el.dataset.k === 'n') b.n = Number(el.value);
     else if (el.dataset.k === 'annex') b.annex = el.value === '1';
     else if (el.dataset.k === 'totalRow') b.totalRow = el.value;
     else if (el.dataset.k === 'peso') b.peso = el.value;
+    else if (el.dataset.k === 'tableMode') b.tableMode = el.value;
     else if (el.dataset.k === 'ctype') { b.colTypes = { ...(b.colTypes || {}), [el.dataset.tok]: el.value }; if (el.value === 'auto') delete b.colTypes[el.dataset.tok]; }
     else if (el.dataset.k === 'cols') { onChange(true); return; }   // new columns: show their type boxes
     else return;
-    onChange(el.dataset.k === 'sub');
+    onChange(el.dataset.k === 'sub' || el.dataset.k === 'tableMode');
   });
   root.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-act]'); if (!btn || btn.disabled) return;
