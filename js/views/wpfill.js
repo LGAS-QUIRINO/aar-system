@@ -4,7 +4,7 @@
 import { store } from '../store.js';
 import { esc, toast, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
-import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable, isMoneyName, isRateHead } from '../aom.js';
+import { placeholders, SETUP_VAR_NAMES, formatVar, plannedCols, isTableVar, isCalcRow, isFixedTable, isMoneyName, isRateHead, colTypeFn } from '../aom.js';
 import { money, cents, parseAmt, amtText } from '../fs.js';
 import { loadScript } from '../wp.js';
 
@@ -55,9 +55,14 @@ const MONEY_ENTRY = /^\(?\s*-?\s*₱?\s*-?[\d,]+\.\d{2}\s*\)?$/;
 const amtCols = (d, n, cols, rows) => {
   const def = ((d.wpDef && d.wpDef.tables) || []).find((x) => x.n === n);
   const data = rows || dataRows(d.wpData && d.wpData.tables && d.wpData.tables[n]);
+  const blk = (d.blocks || []).find((b) => b.type === 'table' && (Number(b.n) || 1) === n);
+  const typeOf = colTypeFn(blk);
   const allMoney = (i) => { const xs = data.map((r) => String((r || [])[i] ?? '').trim()).filter(Boolean); return xs.length > 0 && xs.every((x) => MONEY_ENTRY.test(x)); };
   return cols.map((h, i) => {
     if (def && def.cols[i]) return def.cols[i].amt ? i : -1;
+    const t = typeOf(h);
+    if (t === 'amount') return i;
+    if (t !== 'auto') return -1;                  // set as Text, Rate, Number or Date in the template
     if (isRateHead(h)) return -1;
     return isAmtCol(h) || allMoney(i) ? i : -1;
   }).filter((i) => i >= 0);

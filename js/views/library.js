@@ -76,7 +76,7 @@ export async function pool(refs, params, q) {
         <div class="field"><label class="label" for="p-saorrec">SAOR Recommendation</label><textarea class="input be-text" id="p-saorrec" rows="3" ${editable ? '' : 'disabled'} placeholder="Leave blank to use the AOM recommendation">${esc(rec.data.saorRec || '')}</textarea><span class="hint">Leave blank to use the AOM recommendation in the SAOR.</span></div>
         <div class="field"><span class="label">Placeholders Found</span><div id="p-ph" class="hint"></div></div>
       </div></section>
-    <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft. Put ** before and after words to print them in bold, e.g. **draw journal vouchers**.</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable })}</div></section>
+    <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft. Put ** before and after words to print them in bold, e.g. **draw journal vouchers**.</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable, template: true })}</div></section>
     ${editable ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
       <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="p-save">Save Draft</button><button class="btn success" id="p-approve">Approve and Make Active</button></div></div>` : ''}
     <section class="panel"><div class="panel-head"><h2>Version History</h2>${canManage && rec.data.status === 'Active' && !editable ? '' : ''}</div>
@@ -139,7 +139,7 @@ export async function pool(refs, params, q) {
       $('#p-tvar', root).addEventListener('change', tshowVis);
       $$('[data-tshow]', root).forEach((b) => { b.onclick = () => { tshow = b.dataset.tshow === 'Yes'; $$('[data-tshow]', root).forEach((x) => x.classList.toggle('on', x === b)); dirty(); }; });
       const host = $('#p-blocks', root);
-      wireBlocks(host, state, (redraw) => { if (redraw) host.innerHTML = blocksHTML(state.aom, { editable }); ph(); dirty(); });
+      wireBlocks(host, state, (redraw) => { if (redraw) host.innerHTML = blocksHTML(state.aom, { editable, template: true }); ph(); dirty(); });
       const collect = () => ({ ...state.aom, title: $('#p-title', root).value.trim(), area: $('#p-area', root).value.trim(), section: $('#p-sec', root).value, wp: $('#p-wp', root).value.trim(), saor: $('#p-saor', root).value.trim(), saorRec: $('#p-saorrec', root).value.trim(), titleVar: $('#p-tvar', root).value, titleShow: tshow });
       async function save(approve) {
         const d = collect();

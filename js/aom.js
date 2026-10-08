@@ -426,7 +426,7 @@ export function findingParas(aom, ctx) {
         out.push(P([{ t: `(See Annex ${L}${b.caption ? ' – ' + b.caption : ''})` }], { italic: true, ind: { left } }));
       } else if (tbl) {
         if (b.caption) out.push(P(fillRuns(b.caption, vars), { bold: true, align: 'center', ind: { left } }));
-        out.push({ kind: 'table', rows: pesoRows(tbl.rows), left, source: tbl.sheet, n: b.n });
+        out.push({ kind: 'table', rows: tableRowsFor(tbl.rows, b, vars), left, source: tbl.sheet, n: b.n });
       } else {
         out.push(P([{ t: `[TABLE ${b.n}: import the working paper]`, missing: 'TABLE_' + b.n }], { ind: { left } }));
       }
@@ -483,13 +483,44 @@ const MONEY_CELL = /^\(?\s*-?\s*₱?\s*-?[\d,]+\.\d{2}\s*\)?$/;
 const isTotalRow = (r) => (r || []).some((c) => /^(sub-?\s*total|total|grand total)\b/i.test(String(c ?? '').trim()));
 // A rate column: "Utilization Rate", "Percentage", "% Utilized", "Rate (%)" — not "Required 20% Development Fund".
 export const isRateHead = (h) => /\brate\b|\bpercent(age)?\b|^\s*%|\(%\)|%\s*$/i.test(String(h ?? ''));
-export function pesoRows(rows) {
+/* ── Table settings (AOM Table block) ── */
+// colTypes: { "Annual NTA": "amount", "[EACH_YEAR]": "amount", … } (template); totalRow: auto | always | none; peso: yes | no.
+export const COL_TYPES = [['auto', 'Auto'], ['text', 'Text'], ['amount', 'Amount'], ['rate', 'Rate (%)'], ['number', 'Number'], ['date', 'Date']];
+export function colTypeFn(block, vars) {
+  const m = {}; let yearT = '';
+  Object.entries((block && block.colTypes) || {}).forEach(([tok, t]) => {
+    if (!t || t === 'auto') return;
+    if (/^\[EACH_YEAR\]$/i.test(tok.trim())) yearT = t; else m[fillText(tok, vars || {}).trim().toLowerCase()] = t;
+  });
+  return (h) => m[String(h ?? '').trim().toLowerCase()] || (yearT && /^(19|20)\d{2}$/.test(String(h ?? '').trim()) ? yearT : 'auto');
+}
+const isGrandTotal = (r) => (r || []).some((c) => /^(grand\s+)?total$/i.test(String(c ?? '').trim()));
+const numOf = (c) => { const s = String(c ?? '').replace(/[₱,\s]/g, ''); const neg = /^\(.*\)$/.test(s); const v = Number(s.replace(/[()]/g, '')); return s === '' || isNaN(v) ? null : neg ? -v : v; };
+const fmtAmt = (v) => { const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); return v < 0 ? `(${s})` : s; };
+// The rows of an AOM Table as printed, with the block's settings applied (Total row, column types, peso signs).
+export function tableRowsFor(rows, block, vars) {
+  if (!rows || rows.length < 2 || !block) return pesoRows(rows);
+  const typeOf = colTypeFn(block, vars), head = rows[0] || [];
+  const types = head.map((h) => typeOf(h));
+  let out = rows;
+  const tr = block.totalRow || 'auto';
+  if (tr === 'none') out = out.filter((r, i) => i === 0 || !isGrandTotal(r));
+  if (tr === 'always' && !out.slice(1).some(isGrandTotal)) {
+    const body = out.slice(1).filter((r) => !isYearHead(r) && !isTotalRow(r));
+    const amtCol = (ci) => types[ci] === 'amount' || (types[ci] === 'auto' && !isRateHead(head[ci]) && body.some((r) => MONEY_CELL.test(String(r[ci] ?? '').trim())) && body.every((r) => !String(r[ci] ?? '').trim() || MONEY_CELL.test(String(r[ci]).trim())));
+    const lab = head.findIndex((h, ci) => !amtCol(ci));
+    out = [...out, head.map((h, ci) => (ci === Math.max(0, lab) ? 'Total' : amtCol(ci) ? fmtAmt(body.reduce((s, r) => s + (numOf(r[ci]) || 0), 0)) : ''))];
+  }
+  return pesoRows(out, types, block.peso !== 'no');
+}
+export function pesoRows(rows, types = [], pesoOn = true) {
   if (!rows || rows.length < 2) return rows;
   const bare = (c) => String(c).replace(/₱\s*/g, '').trim();
   const withPeso = (c) => { const s = bare(c); return /^\(.*\)$/.test(s) ? `(₱${s.slice(1, -1).trim()})` : s.startsWith('-') ? `-₱${s.slice(1).trim()}` : `₱${s}`; };
   let done = new Set();
   // A rate or percent column is never money: its entries print as rates (96.4 → 96.40%), without ₱.
-  const rateCol = (rows[0] || []).map((h) => isRateHead(h));
+  const tOf = (ci) => types[ci] || 'auto';
+  const rateCol = (rows[0] || []).map((h, ci) => tOf(ci) === 'rate' || (tOf(ci) === 'auto' && isRateHead(h)));
   const asRate = (c) => { const s = String(c ?? '').replace(/[₱,\s]/g, '').replace(/%$/, ''); const v = Number(s); return s === '' || isNaN(v) ? c : `${v.toFixed(2)}%`; };
   return rows.map((r, i) => {
     if (i === 0 || !Array.isArray(r)) return r;
@@ -497,7 +528,11 @@ export function pesoRows(rows) {
     const tot = isTotalRow(r);
     return r.map((c, ci) => {
       if (rateCol[ci]) return asRate(c);
+      const t = tOf(ci);
+      if (t === 'text' || t === 'date' || t === 'number') return c;           // printed as typed, never with ₱
+      if (t === 'amount' && !MONEY_CELL.test(String(c ?? '').trim()) && numOf(c) !== null) c = fmtAmt(numOf(c));   // 4500 → 4,500.00
       if (!MONEY_CELL.test(String(c ?? '').trim())) return c;
+      if (!pesoOn) return bare(c);
       if (tot) return withPeso(c);
       if (!done.has(ci)) { done.add(ci); return withPeso(c); }
       return bare(c);
@@ -601,7 +636,7 @@ export function buildLetter(info) {
       paras: [
         P(fillRuns(x.block.caption || x.aom.data.title || '', info.varsFor(x.aom)), { align: 'center', bold: true }),
         P(lgu.name, { align: 'center' }), BL(),
-        tbl ? { kind: 'table', rows: pesoRows(tbl.rows), left: 0 } : P('[Table not imported]', { align: 'center' })
+        tbl ? { kind: 'table', rows: tableRowsFor(tbl.rows, x.block, info.varsFor(x.aom)), left: 0 } : P('[Table not imported]', { align: 'center' })
       ]
     };
   });

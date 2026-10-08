@@ -1,7 +1,7 @@
 // Block editor: Topic Sentence, Criteria, Condition, Table, Sub-heading, Cause, Effect, Recommendation.
 // Labels never print. Placeholders like [TOTAL_UNLIQ_CA] are filled from the working paper and Setup.
 import { esc } from './ui.js';
-import { BLOCK_LABELS, ADDABLE, newBlock, letterOf, diffWords, blockPlain } from './aom.js';
+import { BLOCK_LABELS, ADDABLE, newBlock, letterOf, diffWords, blockPlain, COL_TYPES } from './aom.js';
 
 const area = (bi, key, val, rows = 3, extra = '') =>
   `<textarea class="input be-text" data-bi="${bi}" data-k="${key}" rows="${rows}" ${extra}>${esc(val || '')}</textarea>`;
@@ -9,7 +9,7 @@ const area = (bi, key, val, rows = 3, extra = '') =>
 function autoRows(t, min = 2) { return Math.max(min, Math.min(18, Math.ceil(String(t || '').length / 95) + String(t || '').split('\n').length)); }
 
 export function blocksHTML(aom, o = {}) {
-  const { editable = true, tables = {}, initials = {} } = o;
+  const { editable = true, tables = {}, initials = {}, template = false } = o;
   const dis = editable ? '' : 'disabled';
   let sub = -1;
   const blocks = aom.blocks || [];
@@ -58,6 +58,13 @@ export function blocksHTML(aom, o = {}) {
         <div class="field"><label class="label">Columns (when filled in the app)</label><input class="input" data-bi="${bi}" data-k="cols" value="${esc(b.cols || '')}" placeholder="e.g. Account, [EACH_YEAR]" ${dis}><span class="hint">Separate with commas. [EACH_YEAR] gives one amount column per year of the audit period.</span></div>
         <div class="field"><label class="label">Fixed Table (same in every AOM)</label><textarea class="input be-text" data-bi="${bi}" data-k="fixed" rows="${Math.max(2, Math.min(14, String(b.fixed || '').split('\n').length + 1))}" placeholder="Only for a table that never changes, e.g. a circular's sample format. One row per line; separate cells with | or paste from Excel." ${dis}>${esc(b.fixed || '')}</textarea></div>
         <label class="check" style="min-height:0"><input type="checkbox" data-bi="${bi}" data-k="subYear" ${b.subYear ? 'checked' : ''} ${dis}>Sub-Total per Year (grouped by the year in the first column, e.g. the date)</label>
+        <div class="grid-2">
+          <div class="field"><label class="label">Total row</label><select class="input" data-bi="${bi}" data-k="totalRow" ${dis}>
+            ${[['auto', 'Automatic (when the table has amounts)'], ['always', 'Always'], ['none', 'None']].map(([v, t]) => `<option value="${v}" ${(b.totalRow || 'auto') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+          <div class="field"><label class="label">Peso signs</label><select class="input" data-bi="${bi}" data-k="peso" ${dis}>
+            <option value="yes" ${b.peso !== 'no' ? 'selected' : ''}>Yes (first row and totals)</option><option value="no" ${b.peso === 'no' ? 'selected' : ''}>No</option></select></div></div>
+        ${template && String(b.cols || '').trim() ? `<div class="field"><span class="label">Column types</span><div class="ctypes">${String(b.cols).split(',').map((x) => x.trim()).filter(Boolean).map((tok) => `<label class="ctype"><span>${esc(tok)}</span><select class="input" data-bi="${bi}" data-k="ctype" data-tok="${esc(tok)}" ${dis}>${COL_TYPES.map(([v, t]) => `<option value="${v}" ${((b.colTypes || {})[tok] || 'auto') === v ? 'selected' : ''}>${t}</option>`).join('')}</select></label>`).join('')}</div>
+          <span class="hint">Auto lets the app decide from the heading and the entries. Amount: ₱ and totals. Rate: printed as 96.40%. Number: counts, as typed. Text and Date: as typed.</span></div>` : ''}
         ${String(b.fixed || '').trim() ? '<div class="hint">Fixed table: prints the same in every AOM. No working paper needed.</div>' : t ? `<div class="hint">From sheet "${esc(t.sheet)}" · ${t.rows.length - 1} rows · ${t.rows[0].length} columns. Edit the numbers in the working paper, then re-import.</div>`
           : '<div class="note warn">Not imported yet. Import the working paper on the Findings screen.</div>'}`;
     } else if (b.type === 'subheading') {
@@ -92,6 +99,10 @@ export function wireBlocks(root, state, onChange) {
     else if (el.dataset.k === 'perYear') b.perYear = el.checked;
     else if (el.dataset.k === 'n') b.n = Number(el.value);
     else if (el.dataset.k === 'annex') b.annex = el.value === '1';
+    else if (el.dataset.k === 'totalRow') b.totalRow = el.value;
+    else if (el.dataset.k === 'peso') b.peso = el.value;
+    else if (el.dataset.k === 'ctype') { b.colTypes = { ...(b.colTypes || {}), [el.dataset.tok]: el.value }; if (el.value === 'auto') delete b.colTypes[el.dataset.tok]; }
+    else if (el.dataset.k === 'cols') { onChange(true); return; }   // new columns: show their type boxes
     else return;
     onChange(el.dataset.k === 'sub');
   });
