@@ -34,7 +34,7 @@ export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : Stri
 // "A", "A and B", "A, B and C"
 export const joinAnd = (xs) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
 // Rows the app adds to a table it fills in: a "CY 2024" year heading, Sub-Total and Total rows.
-export const isYearHead = (r) => /^CY \d{4}$/.test(String((r || [])[0] ?? '').trim()) && (r || []).slice(1).every((c) => !String(c ?? '').trim());
+export const isYearHead = (r) => /^(?:CY|FY)\.?\s*\d{4}/i.test(String((r || [])[0] ?? '').trim()) && (r || []).slice(1).every((c) => !String(c ?? '').trim());
 export const isCalcRow = (r) => isYearHead(r) || (r || []).some((c) => /^(sub-?total|total)$/i.test(String(c ?? '').trim()));
 // A fixed table typed in the template (same in every AOM, e.g. a circular's sample format): one row per line,
 // cells separated by a tab (pasted from Excel or Word) or by " | ".
@@ -61,15 +61,21 @@ export function yearGroups(aom, n = 1) {
   const t = tableData(aom, { type: 'table', n });
   if (!t) return [];
   const cols = t.cols || (t.rows || [])[0] || [];
+  const yc = cols.findIndex((h) => /^\s*(year|cy)\s*$/i.test(String(h ?? '')));
   let rows;
-  if (t.data) rows = t.data.map((r) => ({ r, y: (/(?:19|20)\d\d/.exec(String(r[0] ?? '')) || [])[0] || '' }));
-  else {   // a table read from Excel: years from its "CY 2024" headings or from its first column
+  if (t.data) {
+    rows = t.data.map((r) => {
+      const cell = yc >= 0 ? (r || [])[yc] : (r || [])[0];
+      return { r, y: (/(?:19|20)\d\d/.exec(String(cell ?? '')) || [])[0] || '' };
+    });
+  } else {   // a table read from Excel: years from its "CY 2024" headings or from its first column
     let cur = '';
     rows = [];
     (t.rows || []).slice(1).forEach((r) => {
       if (isYearHead(r)) { cur = /\d{4}/.exec(r[0])[0]; return; }
       if (isCalcRow(r)) return;
-      rows.push({ r, y: (/(?:19|20)\d\d/.exec(String(r[0] ?? '')) || [])[0] || cur });
+      const cell = yc >= 0 ? (r || [])[yc] : (r || [])[0];
+      rows.push({ r, y: (/(?:19|20)\d\d/.exec(String(cell ?? '')) || [])[0] || cur });
     });
   }
   const amtIdx = cols.map((h, i) => (/amount|total|balance|appropriation|disburs|utiliz|cost|₱/i.test(h) ? i : -1)).filter((i) => i >= 0);
@@ -393,6 +399,7 @@ export function findingParas(aom, ctx) {
   out.push(P([...fillRuns(aom.title || '', tv), ...(amt !== null ? [{ t: ' - ' + titleAmount(amt) }] : [])], { italic: true }));
   out.push(BL());
   let subIdx = -1;
+  const handledTables = new Set();
   (aom.blocks || []).forEach((b, bi) => {
     const inSub = !!b.sub && subIdx >= 0 && b.type !== 'subheading';
     const left = inSub ? SUB : BODY;
@@ -425,11 +432,27 @@ export function findingParas(aom, ctx) {
         out.push(...withBlanks(textParas(t, vars, { ind: { left } })));
       }
     } else if (b.type === 'table') {
+      if (handledTables.has(b.id || b)) return;
       const tbl = tableData(aom, b);
       if (b.annex) {
         const L = (ctx.annexLetters || {})[aom._id + ':' + b.n] || 'A';
         out.push(P([{ t: `(See Annex ${L}${b.caption ? ' – ' + b.caption : ''})` }], { italic: true, ind: { left } }));
       } else if (tbl) {
+        if (isSplitTable(aom, b)) {
+          const groups = yearGroups(aom, Number(b.n) || 1);
+          if (groups.length > 1) {
+            groups.forEach((g, gi) => {
+              const yrRows = tableRowsForYear(tbl, b, vars, g.YEAR);
+              if (yrRows && yrRows.length > 1) {
+                if (gi > 0) out.push(BL());
+                out.push(P([{ t: `CY ${g.YEAR}` }], { bold: true, ind: { left } }));
+                if (b.caption) out.push(P(fillRuns(b.caption, { ...vars, ...g }), { bold: true, align: 'center', ind: { left } }));
+                out.push({ kind: 'table', rows: yrRows, left, source: tbl.sheet, n: b.n, year: g.YEAR, isSplit: true });
+              }
+            });
+            return;
+          }
+        }
         if (b.caption) out.push(P(fillRuns(b.caption, vars), { bold: true, align: 'center', ind: { left } }));
         out.push({ kind: 'table', rows: tableRowsFor(tbl.rows, b, vars), left, source: tbl.sheet, n: b.n });
       } else {
@@ -448,12 +471,33 @@ export function findingParas(aom, ctx) {
       }
     } else if (b.perYear) {
       // Printed once per year of AOM Table 1, lettered a., b., c., with that year's values.
-      const groups = yearGroups(aom, Number(b.perYearTable) || 1);
-      if (!groups.length) out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
-      groups.forEach((g, gi) => {
-        if (gi) out.push(BL());
-        out.push(P(fillRuns(String(b.text || '').replace(/\s*\n\s*/g, ' ').trim(), { ...vars, ...g }), { align: 'both', ind: { left: left + 360, hanging: 360 }, label: letterOf(gi) + '.' }));
-      });
+      const targetTableNum = Number(b.perYearTable) || 1;
+      const groups = yearGroups(aom, targetTableNum);
+      const tblBlock = (aom.blocks || []).find((x) => x.type === 'table' && (Number(x.n) || 1) === targetTableNum);
+      const isSplit = tblBlock && isSplitTable(aom, tblBlock);
+
+      if (!groups.length) {
+        out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
+      } else {
+        groups.forEach((g, gi) => {
+          if (gi) out.push(BL());
+          out.push(P(fillRuns(String(b.text || '').replace(/\s*\n\s*/g, ' ').trim(), { ...vars, ...g }), { align: 'both', ind: { left: left + 360, hanging: 360 }, label: letterOf(gi) + '.' }));
+          if (isSplit && tblBlock && !tblBlock.annex) {
+            const tbl = tableData(aom, tblBlock);
+            if (tbl) {
+              const yrRows = tableRowsForYear(tbl, tblBlock, vars, g.YEAR);
+              if (yrRows && yrRows.length > 1) {
+                out.push(BL());
+                if (tblBlock.caption) out.push(P(fillRuns(tblBlock.caption, { ...vars, ...g }), { bold: true, align: 'center', ind: { left: left + 360 } }));
+                out.push({ kind: 'table', rows: yrRows, left: left + 360, source: tbl.sheet, n: tblBlock.n, year: g.YEAR, isSplit: true });
+              }
+            }
+          }
+        });
+        if (isSplit && tblBlock && !tblBlock.annex) {
+          handledTables.add(tblBlock.id || tblBlock);
+        }
+      }
     } else {
       out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
     }
@@ -543,6 +587,64 @@ export function pesoRows(rows, types = [], pesoOn = true) {
       return bare(c);
     });
   });
+}
+
+export function isSplitTable(aom, b) {
+  if (!b) return false;
+  if (b.tableMode === 'split') return true;
+  if (b.tableMode === 'continuing') return false;
+  const n = Number(b.n) || 1;
+  return (aom.blocks || []).some((x) => x.perYear && (Number(x.perYearTable) || 1) === n);
+}
+
+// Extract rows of an AOM table for one specific year (Split Mode)
+export function tableRowsForYear(tbl, block, vars, year) {
+  if (!tbl || !tbl.rows || tbl.rows.length < 2 || !block) return null;
+  const head = tbl.cols || tbl.rows[0] || [];
+  const typeOf = colTypeFn(block, vars);
+  const types = head.map((h) => typeOf(h));
+  const yc = head.findIndex((h) => /^\s*(year|cy)\s*$/i.test(String(h ?? '')));
+  const isMatchYear = (cell) => {
+    const m = /(?:19|20)\d\d/.exec(String(cell ?? ''));
+    return m ? m[0] === String(year) : false;
+  };
+
+  let rows = [];
+  if (tbl.data) {
+    rows = tbl.data.filter((r) => {
+      const cell = yc >= 0 ? r[yc] : r[0];
+      return isMatchYear(cell);
+    });
+  } else {
+    let curYear = '';
+    for (let i = 1; i < tbl.rows.length; i++) {
+      const r = tbl.rows[i];
+      if (isYearHead(r)) {
+        const m = /\d{4}/.exec(r[0]);
+        curYear = m ? m[0] : '';
+        continue;
+      }
+      if (isCalcRow(r)) continue;
+      const cell = yc >= 0 ? r[yc] : r[0];
+      const m = /(?:19|20)\d\d/.exec(String(cell ?? ''));
+      const rowY = m ? m[0] : curYear;
+      if (rowY === String(year)) rows.push(r);
+    }
+  }
+
+  if (!rows.length) return null;
+
+  const dropYear = yc === 0 && head.length > 2;
+  const finalHead = dropYear ? head.slice(1) : head;
+  const finalTypes = dropYear ? types.slice(1) : types;
+  const finalRows = dropYear ? rows.map((r) => r.slice(1)) : rows;
+
+  const body = finalRows;
+  const amtCol = (ci) => finalTypes[ci] === 'amount' || (finalTypes[ci] === 'auto' && !isRateHead(finalHead[ci]) && body.some((r) => MONEY_CELL.test(String(r[ci] ?? '').trim())) && body.every((r) => !String(r[ci] ?? '').trim() || MONEY_CELL.test(String(r[ci]).trim())));
+  const lab = finalHead.findIndex((h, ci) => !amtCol(ci));
+  const totRow = finalHead.map((h, ci) => (ci === Math.max(0, lab) ? 'TOTAL' : amtCol(ci) ? fmtAmt(body.reduce((s, r) => s + (numOf(r[ci]) || 0), 0)) : ''));
+
+  return pesoRows([finalHead, ...finalRows, totRow], finalTypes, block.peso !== 'no');
 }
 
 // Whole AOM letter for one Barangay. info: { audit, lgu, mun, team, atl, sa, aoms (records, ordered), nums, varsFor(aom), draft }
@@ -725,26 +827,36 @@ export function tableLayout(rows, avail) {
     }
     return { need, head, word };
   };
-  // the column that wraps: the widest one that is not all amounts or dates
+  // the columns that can wrap: text columns wider than a short code
   const m11 = at(11);
   let flex = -1;
-  for (let c = 0; c < n; c++) if (!allNum(c) && (flex < 0 || m11.need[c] > m11.need[flex])) flex = c;
+  const wrapCols = new Set();
+  for (let c = 0; c < n; c++) {
+    if (!allNum(c)) {
+      if (flex < 0 || m11.need[c] > m11.need[flex]) flex = c;
+      if (m11.need[c] > 70) wrapCols.add(c);
+    }
+  }
+  if (!wrapCols.size && flex >= 0) wrapCols.add(flex);
   const availPt = avail / 20;
   for (const size of [11, 10.5, 10]) {
     const m = size === 11 ? m11 : at(size);
     const w = m.need.map((x, c) => Math.max(x, m.head[c]));
     const sum = w.reduce((a, b) => a + b, 0);
-    // Everything fits on one line: like Word's AutoFit, each column keeps its natural width and the spare room is
-    // shared in proportion, so no single column ends up much wider than its contents.
-    if (sum <= availPt) return { size, nowrap: true, flex, widths: w.map((x) => Math.round(x * (availPt / sum) * 20)) };
+    // Everything fits on one line: each column keeps natural width and spare room is shared
+    if (sum <= availPt) return { size, nowrap: true, flex, wrapCols, widths: w.map((x) => Math.round(x * (availPt / sum) * 20)) };
     if (flex < 0) continue;
-    const fixed = w.reduce((a, b, c) => (c === flex ? a : a + b), 0);
-    const flexMin = Math.max(m.head[flex], m.word[flex], 72);   // at least an inch for the wrapping column
-    if (fixed + flexMin <= availPt) return { size, nowrap: true, flex, widths: w.map((x, c) => Math.round((c === flex ? availPt - fixed : x) * 20)) };
+    const fixed = w.reduce((a, b, c) => (wrapCols.has(c) ? a : a + b), 0);
+    const wrapMin = Array.from(wrapCols).reduce((a, c) => a + Math.max(m.head[c], m.word[c], 72), 0);
+    if (fixed + wrapMin <= availPt) {
+      const flexRoom = availPt - fixed;
+      const flexWeights = Array.from(wrapCols).reduce((a, c) => a + w[c], 0) || 1;
+      return { size, nowrap: true, flex, wrapCols, widths: w.map((x, c) => Math.round((wrapCols.has(c) ? (w[c] / flexWeights) * flexRoom : x) * 20)) };
+    }
   }
   // Too wide even at 10 pt: the columns share the width in proportion and wrap as a last resort.
   const m = at(10), w = m.need.map((x, c) => Math.max(x, m.head[c])), sum = w.reduce((a, b) => a + b, 0);
-  return { size: 10, nowrap: false, flex, widths: w.map((x) => Math.round((x / sum) * avail)) };
+  return { size: 10, nowrap: false, flex, wrapCols, widths: w.map((x) => Math.round((x / sum) * avail)) };
 }
 
 function tableHTML(t) {
@@ -755,10 +867,26 @@ function tableHTML(t) {
   const avail = (t.avail || 9360) - (t.left || 0);
   const L = tableLayout(rows, avail);
   const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / avail) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
-  const nw = (ci) => (L && L.nowrap && ci !== L.flex ? ' nw' : '');
+  const colCount = Math.max(1, ...(rows.map((r) => (r || []).length)));
+  const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
+  const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
+  const nw = (ci) => (L && L.nowrap && !L.wrapCols?.has(ci) && ci !== L.flex ? ' nw' : '');
+
   return `<div style="margin-left:${tw(t.left)}"><table class="aom-t"${L ? ` style="table-layout:fixed;font-size:${L.size}pt"` : ''}>${cg}${rows.map((r, i) => {
-    const total = i > 0 && (/total/i.test(r.join(' ')) || isYearHead(r));
-    return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => i === 0 ? `<th>${escH(c)}</th>` : `<td class="${/^(19|20)\d{2}$/.test(String(c ?? '').trim()) ? 'yr' : isNum(c) ? 'num' : ''}${nw(ci)}">${escH(c)}</td>`).join('')}</tr>`;
+    if (i === 0) {
+      return `<tr>${r.map((c) => `<th>${escH(c)}</th>`).join('')}</tr>`;
+    }
+    if (isYearHead(r)) {
+      return `<tr class="tot yr-grp"><td colspan="${colCount}" class="yr font-bold">${escH(r[0])}</td></tr>`;
+    }
+    const isSub = /sub-?\s*total/i.test(r.join(' '));
+    const isGrand = /grand\s*total/i.test(r.join(' ')) || /^\s*total\s*$/i.test(String(r[0] ?? '').trim()) || (t.isSplit && /total/i.test(r.join(' ')));
+    const totCls = isGrand ? 'tot grand-tot' : isSub ? 'tot sub-tot' : '';
+    return `<tr class="${totCls}">${r.map((c, ci) => {
+      const v = String(c ?? '').trim();
+      const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : isNum(c) ? 'num' : '';
+      return `<td class="${alignCls}${nw(ci)}">${escH(c)}</td>`;
+    }).join('')}</tr>`;
   }).join('')}</table></div>`;
 }
 
@@ -782,13 +910,16 @@ export const DOC_CSS = `
 .aom-doc p.rule-below{border-bottom:3px solid #000;padding-bottom:4pt;margin-bottom:6px;position:relative}
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .keepblk{break-inside:avoid;page-break-inside:avoid}
-.aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:2pt 0}
-.aom-t th,.aom-t td{border:1px solid #000;padding:2pt 5pt;vertical-align:top}
-.aom-t th{font-weight:700;text-align:center;vertical-align:middle}
-.aom-t td.yr{text-align:center}
-.aom-t td.num{text-align:right;white-space:nowrap}
+.aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:3pt 0}
+.aom-t th,.aom-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top}
+.aom-t th{font-weight:700;text-align:center;vertical-align:middle;background:#F8F9FA}
+.aom-t td.yr,.aom-t td.date,.aom-t td.ref{text-align:center}
+.aom-t td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
+.aom-t tr.yr-grp td{font-weight:700;text-align:center;background:#F2F4F7;letter-spacing:0.04em}
+.aom-t tr.sub-tot td{border-top:1.5px solid #000}
+.aom-t tr.grand-tot td{border-top:1.5px solid #000;border-bottom:3.5px double #000}
 .aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}
 .ph-fill{background:#E3F1E7;border-radius:2px}

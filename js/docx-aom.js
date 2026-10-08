@@ -1,6 +1,6 @@
 // Word (.docx) file of the AOM letter, built from the same layout as the screen and the printout.
 import { loadScript } from './wp.js';
-import { tableLayout } from './aom.js';
+import { tableLayout, isYearHead } from './aom.js';
 
 const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
@@ -51,18 +51,63 @@ export async function downloadWord(doc) {
     const rows = t.rows || [];
     const avail = 9360 - (t.left || 0), L = tableLayout(rows, avail), size = L ? Math.round(L.size * 2) : 22;
     const line = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
+    const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
+    const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
+
     return new Table({
       width: { size: avail, type: WidthType.DXA }, indent: t.left ? { size: t.left, type: WidthType.DXA } : undefined,
       columnWidths: L ? L.widths : undefined, layout: L ? TableLayoutType.FIXED : undefined,
-      // every cell ruled, with a little room inside (as in the preview)
+      // every cell ruled, with comfortable margin inside
       borders: { top: line, bottom: line, left: line, right: line, insideHorizontal: line, insideVertical: line },
-      margins: { top: 30, bottom: 30, left: 100, right: 100 },
+      margins: { top: 60, bottom: 60, left: 100, right: 100 },
       rows: rows.map((r, i) => {
-        const total = i > 0 && (/total/i.test(r.join(' ')) || /^CY \d{4}$/.test(String(r[0] ?? '').trim()));
+        if (i === 0) {
+          return new TableRow({
+            tableHeader: true,
+            cantSplit: true,
+            children: r.map((c, ci) => new TableCell({
+              width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined,
+              verticalAlign: VerticalAlign.CENTER,
+              children: [cellP(c, { bold: true, size, align: AlignmentType.CENTER })]
+            }))
+          });
+        }
+        if (isYearHead(r)) {
+          return new TableRow({
+            cantSplit: true,
+            children: [new TableCell({
+              columnSpan: r.length,
+              width: { size: avail, type: WidthType.DXA },
+              verticalAlign: VerticalAlign.CENTER,
+              children: [cellP(r[0], { bold: true, size, align: AlignmentType.CENTER })]
+            })]
+          });
+        }
+        const isSub = /sub-?\s*total/i.test(r.join(' '));
+        const isGrand = /grand\s*total/i.test(r.join(' ')) || /^\s*total\s*$/i.test(String(r[0] ?? '').trim()) || (t.isSplit && /total/i.test(r.join(' ')));
+        const total = isSub || isGrand;
+        const cellBorders = isGrand
+          ? { top: line, bottom: { style: BorderStyle.DOUBLE, size: 12, color: '000000' }, left: line, right: line }
+          : isSub
+            ? { top: { style: BorderStyle.SINGLE, size: 8, color: '000000' }, bottom: line, left: line, right: line }
+            : undefined;
+
         return new TableRow({
-          tableHeader: i === 0,
-          children: r.map((c, ci) => new TableCell({ width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined, verticalAlign: i === 0 ? VerticalAlign.CENTER : undefined,
-            children: [cellP(c, { bold: i === 0 || total, size, align: i === 0 || /^(19|20)\d{2}$/.test(String(c ?? '').trim()) ? AlignmentType.CENTER : isNum(c) ? AlignmentType.RIGHT : AlignmentType.LEFT })] }))
+          cantSplit: true,
+          children: r.map((c, ci) => {
+            const v = String(c ?? '').trim();
+            const align = /^(19|20)\d{2}$/.test(v) || isDate(v) || isRef(v)
+              ? AlignmentType.CENTER
+              : isNum(c)
+                ? AlignmentType.RIGHT
+                : AlignmentType.LEFT;
+            return new TableCell({
+              width: L ? { size: L.widths[ci], type: WidthType.DXA } : undefined,
+              verticalAlign: isNum(c) ? VerticalAlign.TOP : undefined,
+              borders: cellBorders,
+              children: [cellP(c, { bold: total, size, align })]
+            });
+          })
         });
       })
     });

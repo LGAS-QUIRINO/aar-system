@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, isYearHead } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -85,10 +85,27 @@ export function mountReview(host, opts) {
         ${opts.canAct && t ? `<button class="btn sm ghost" data-act="tblc" data-b="${id}">💬 Comment on this table</button>` : ''}</div>`;
       if (!t) return head + '<p class="tbl">[Not imported yet. Import the working paper on the Findings screen.]</p>';
       const num = (c) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(c).trim());
+      const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
+      const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
+      const colCount = Math.max(1, ...((t.rows || []).map((r) => (r || []).length)));
       return head + `<div class="rv-tablewrap"><table class="rv-table">${t.rows.map((r, ri) => {
-        const total = ri > 0 && /total/i.test(r.join(' '));
-        return `<tr class="${total ? 'tot' : ''}">${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? ''); const tag = ri === 0 ? 'th' : 'td';
-          return `<${tag} class="${ri && num(v) ? 'num' : ''}" data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</${tag}>`; }).join('')}</tr>`;
+        if (ri === 0) {
+          return `<tr>${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? '');
+            return `<th data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</th>`; }).join('')}</tr>`;
+        }
+        if (isYearHead(r)) {
+          const k = `cell:${ri}:0`, v = String(r[0] ?? '');
+          return `<tr class="tot yr-grp"><td colspan="${colCount}" class="yr font-bold" data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</td></tr>`;
+        }
+        const total = /total/i.test(r.join(' '));
+        const isSub = /sub-?\s*total/i.test(r.join(' '));
+        const isGrand = /grand\s*total/i.test(r.join(' ')) || /^\s*total\s*$/i.test(String(r[0] ?? '').trim());
+        const totCls = isGrand ? 'tot grand-tot' : (isSub || total) ? 'tot sub-tot' : '';
+        return `<tr class="${totCls}">${r.map((c, ci) => {
+          const k = `cell:${ri}:${ci}`, v = String(c ?? '').trim();
+          const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : num(v) ? 'num' : '';
+          return `<td class="${alignCls}" data-b="${id}" data-part="${k}">${inner(id, String(c ?? ''), String(c ?? ''), k) || '&nbsp;'}</td>`;
+        }).join('')}</tr>`;
       }).join('')}</table></div>`;
     };
     const inner = (blockId, before, after, k) => {
