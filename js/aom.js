@@ -402,9 +402,14 @@ export function findingParas(aom, ctx) {
     } else if (b.type === 'criteria') {
       if (b.quoted) {
         if (b.lead && b.lead.trim()) { out.push(...textParas(b.lead, vars, { ind: { left } })); out.push(BL()); }
-        const lines = String(b.text || '').split('\n').filter((l) => l.trim());
+        // Spacing exactly as typed: lines one after another print together; each empty line typed between them prints as
+        // one blank line (two empty lines, two blank lines).
+        const raw = String(b.text || '').split('\n');
+        const lines = [], gaps = [];
+        let empty = 0;
+        raw.forEach((l) => { if (!l.trim()) { empty++; return; } gaps.push(lines.length ? empty : 0); lines.push(l); empty = 0; });
         lines.forEach((l, i) => {
-          if (i > 0) out.push(BL());   // a blank line between quoted paragraphs, as in the other parts
+          for (let g = 0; g < gaps[i]; g++) out.push(BL());
           // "(Emphasis supplied)" goes after the closing quotation mark, as in legal writing.
           let line = l.trim(), note = '';
           const em = i === lines.length - 1 && /\s*(\((?:emphasis|underscoring|italics|underlining)(?: and \w+)? supplied\))\s*$/i.exec(line);

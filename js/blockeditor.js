@@ -34,7 +34,7 @@ export function blocksHTML(aom, o = {}) {
             <button type="button" class="${b.quoted ? '' : 'on'}" data-act="para" data-bi="${bi}" ${dis}>Paraphrased</button></div></div>
         ${b.quoted ? `<input class="input" data-bi="${bi}" data-k="lead" value="${esc(b.lead || '')}" placeholder="Lead-in, e.g. Section 89 of P.D. No. 1445 provides that:" ${dis}>` : ''}
         ${area(bi, 'text', b.text, autoRows(b.text), dis + (b.quoted ? ' style="font-style:italic"' : ''))}
-        ${b.quoted ? '<span class="hint">Quotation marks “ ” are added when printed. Each line prints as its own paragraph.</span>' : ''}`;
+        ${b.quoted ? '<span class="hint">Quotation marks “ ” are added when printed. Spacing prints exactly as typed: lines one after another stay together; each empty line you leave prints as one blank line.</span>' : ''}`;
     } else if (b.type === 'recommendation') {
       const lettered = (b.items || []).length > 0;
       body = `<div class="be-row"><div class="seg" role="group" aria-label="Recommendation style">
