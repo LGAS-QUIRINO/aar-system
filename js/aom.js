@@ -26,8 +26,8 @@ export function setupVars(audit, lgu, mun) {
   return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`, AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
 // Filled in by the app (not typed in the working paper): from Audit Setup, and TABLEn_ITEMS from the AOM Tables.
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT'];
-export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT)$/.test(n);
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT', 'TABLE1_YEARS', 'TABLE2_YEARS', 'TABLE3_YEARS'];
+export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT|YEARS)$/.test(n);
 // COA style for small numbers: 0 to 9 in words with the numeral, e.g. "two (2)"; 10 and up in numerals.
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
@@ -92,6 +92,17 @@ export function tableVars(d) {
   Object.keys(tables).forEach((n) => {
     const rows = (tables[n].rows || []).slice(1).filter((r) => !isCalcRow(r)).map((r) => String((r || [])[0] ?? '').trim()).filter(Boolean);
     if (rows.length) { out[`TABLE${n}_ITEMS`] = joinAnd(rows); out[`TABLE${n}_COUNT`] = countWords(rows.length); }   // COUNT: rows in words, e.g. "five (5)"
+    // YEARS: the earliest and latest year in the table's Year column (or its "CY 2024" headings): "2022 to 2025", or "2025"
+    const t = tables[n], cols = t.cols || (t.rows || [])[0] || [];
+    const yc = cols.findIndex((h) => /^\s*(year|cy)\s*$/i.test(String(h ?? '')));
+    const src = t.data || (t.rows || []).slice(1);
+    const ys = [];
+    src.forEach((r) => {
+      const cell = yc >= 0 ? (r || [])[yc] : isYearHead(r) ? r[0] : '';
+      const m = /\b(19|20)\d{2}\b/.exec(String(cell ?? ''));
+      if (m) ys.push(Number(m[0]));
+    });
+    if (ys.length) { const a = Math.min(...ys), b = Math.max(...ys); out[`TABLE${n}_YEARS`] = a === b ? String(a) : `${a} to ${b}`; }
   });
   return out;
 }
