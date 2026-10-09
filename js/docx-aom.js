@@ -49,7 +49,7 @@ export async function downloadWord(doc) {
       });
     }
     const rows = t.rows || [];
-    const avail = 9360 - (t.left || 0), L = tableLayout(rows, avail), size = L ? Math.round(L.size * 2) : 22;
+    const avail = 9360 - (t.left || 0), L = t.layout || tableLayout(rows, avail), size = L ? Math.round(L.size * 2) : 22;
     const line = { style: BorderStyle.SINGLE, size: 4, color: '000000' };
     const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
     const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
