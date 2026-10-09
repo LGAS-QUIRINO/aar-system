@@ -782,7 +782,7 @@ export function buildLetter(info) {
 
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const tw = (v) => (v || 0) / 1440 + 'in';
-const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
+export const isNum = (s) => /^[-–—]$|^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s ?? '').trim());
 
 function runsHTML(runs, mark) {
   return runs.map((r) => {
@@ -840,46 +840,90 @@ export function tableLayout(rows, avail) {
   if (!n || rows.length < 2) return null;
   const body = rows.slice(1);
   const isTot = (r) => /total/i.test((r || []).join(' ')) || isYearHead(r);
-  const allNum = (c) => body.every((r) => { const x = String((r || [])[c] ?? '').trim(); return !x || isNum(x) || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(x); });
-  const at = (size) => {
-    const need = [], head = [], word = [];
-    for (let c = 0; c < n; c++) {
-      need[c] = PAD_PT + Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
-      head[c] = PAD_PT + Math.max(0, ...String(rows[0][c] ?? '').split(/\s+/).map((w) => textPt(w, size, true)));
-      word[c] = PAD_PT + Math.max(0, ...body.map((r) => Math.max(0, ...String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false)))));
-    }
-    return { need, head, word };
-  };
-  // the columns that can wrap: text columns wider than a short code
-  const m11 = at(11);
-  let flex = -1;
-  const wrapCols = new Set();
+
+  // A column is numeric if its non-empty entries are numbers, currency, dashes, or dates
+  const isColNum = (c) => body.every((r) => {
+    const x = String((r || [])[c] ?? '').trim();
+    return !x || isNum(x) || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(x);
+  });
+
+  const numCols = new Set();
   for (let c = 0; c < n; c++) {
-    if (!allNum(c)) {
-      if (flex < 0 || m11.need[c] > m11.need[flex]) flex = c;
-      if (m11.need[c] > 70) wrapCols.add(c);
+    if (isColNum(c)) numCols.add(c);
+  }
+
+  // Find the primary text flex column (the non-numeric column with the longest content, e.g. Particulars/Description)
+  let flex = -1, maxTextLen = -1;
+  for (let c = 0; c < n; c++) {
+    if (!numCols.has(c)) {
+      const len = Math.max(0, ...body.map((r) => String((r || [])[c] ?? '').length));
+      if (len > maxTextLen) {
+        maxTextLen = len;
+        flex = c;
+      }
     }
   }
-  if (!wrapCols.size && flex >= 0) wrapCols.add(flex);
+  if (flex < 0) flex = 0;
+
   const availPt = avail / 20;
+
+  // Try font sizes: 11pt, 10.5pt, 10pt (applies to all cells in the table)
   for (const size of [11, 10.5, 10]) {
-    const m = size === 11 ? m11 : at(size);
-    const w = m.need.map((x, c) => Math.max(x, m.head[c]));
-    const sum = w.reduce((a, b) => a + b, 0);
-    // Everything fits on one line: each column keeps natural width and spare room is shared
-    if (sum <= availPt) return { size, nowrap: true, flex, wrapCols, widths: w.map((x) => Math.round(x * (availPt / sum) * 20)) };
-    if (flex < 0) continue;
-    const fixed = w.reduce((a, b, c) => (wrapCols.has(c) ? a : a + b), 0);
-    const wrapMin = Array.from(wrapCols).reduce((a, c) => a + Math.max(m.head[c], m.word[c], 72), 0);
-    if (fixed + wrapMin <= availPt) {
-      const flexRoom = availPt - fixed;
-      const flexWeights = Array.from(wrapCols).reduce((a, c) => a + w[c], 0) || 1;
-      return { size, nowrap: true, flex, wrapCols, widths: w.map((x, c) => Math.round((wrapCols.has(c) ? (w[c] / flexWeights) * flexRoom : x) * 20)) };
+    const minW = [];
+    for (let c = 0; c < n; c++) {
+      const hText = String((rows[0] || [])[c] ?? '');
+      const hPt = PAD_PT + textPt(hText, size, true);
+
+      if (numCols.has(c)) {
+        // Numeric column must fit longest amount on one line without wrapping
+        const maxValPt = Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
+        minW[c] = Math.max(hPt, PAD_PT + maxValPt);
+      } else if (c !== flex) {
+        // Short text column (e.g. Remarks): must fit longest single word and header
+        const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
+        minW[c] = Math.max(hPt, PAD_PT + maxWordPt);
+      } else {
+        // Flex column (Particulars): minimum width so words don't break
+        const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
+        minW[c] = Math.max(hPt, PAD_PT + maxWordPt, 80);
+      }
+    }
+
+    const nonFlexSum = minW.reduce((sum, w, c) => (c === flex ? sum : sum + w), 0);
+    const flexAvail = availPt - nonFlexSum;
+
+    if (flexAvail >= minW[flex]) {
+      // It fits cleanly! Flex column receives all the remaining width
+      const finalW = minW.map((w, c) => (c === flex ? flexAvail : w));
+      return {
+        size,
+        nowrap: true,
+        flex,
+        widths: finalW.map((w) => Math.round(w * 20))
+      };
     }
   }
-  // Too wide even at 10 pt: the columns share the width in proportion and wrap as a last resort.
-  const m = at(10), w = m.need.map((x, c) => Math.max(x, m.head[c])), sum = w.reduce((a, b) => a + b, 0);
-  return { size: 10, nowrap: false, flex, wrapCols, widths: w.map((x) => Math.round((x / sum) * avail)) };
+
+  // Fallback at 10pt if table is exceptionally wide
+  const size = 10;
+  const minW = [];
+  for (let c = 0; c < n; c++) {
+    const hPt = PAD_PT + textPt(rows[0][c], size, true);
+    if (numCols.has(c)) {
+      const maxValPt = Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
+      minW[c] = Math.max(hPt, PAD_PT + maxValPt);
+    } else {
+      const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
+      minW[c] = Math.max(hPt, PAD_PT + maxWordPt, 50);
+    }
+  }
+  const totalMin = minW.reduce((a, b) => a + b, 0) || 1;
+  return {
+    size: 10,
+    nowrap: true,
+    flex,
+    widths: minW.map((w) => Math.round((w / totalMin) * avail))
+  };
 }
 
 function tableHTML(t) {
@@ -893,7 +937,8 @@ function tableHTML(t) {
   const colCount = Math.max(1, ...(rows.map((r) => (r || []).length)));
   const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
   const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
-  const nw = (ci) => (L && L.nowrap && !L.wrapCols?.has(ci) && ci !== L.flex ? ' nw' : '');
+  const isDash = (s) => /^[-–—]$/.test(String(s ?? '').trim());
+  const nw = (ci) => (L && ci !== L.flex ? ' nw' : '');
 
   return `<div style="margin-left:${tw(t.left)}"><table class="aom-t"${L ? ` style="table-layout:fixed;font-size:${L.size}pt"` : ''}>${cg}${rows.map((r, i) => {
     if (i === 0) {
@@ -907,7 +952,7 @@ function tableHTML(t) {
     const totCls = isGrand ? 'tot grand-tot' : isSub ? 'tot sub-tot' : '';
     return `<tr class="${totCls}">${r.map((c, ci) => {
       const v = String(c ?? '').trim();
-      const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : isNum(c) ? 'num' : '';
+      const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : isDash(v) ? 'center' : isNum(c) ? 'num' : '';
       return `<td class="${alignCls}${nw(ci)}">${escH(c)}</td>`;
     }).join('')}</tr>`;
   }).join('')}</table></div>`;
@@ -934,9 +979,9 @@ export const DOC_CSS = `
 .aom-doc p.rule-below::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .keepblk{break-inside:avoid;page-break-inside:avoid}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:3pt 0}
-.aom-t th,.aom-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top}
-.aom-t th{font-weight:700;text-align:center;vertical-align:middle}
-.aom-t td.yr,.aom-t td.date,.aom-t td.ref{text-align:center}
+.aom-t th,.aom-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top;word-break:normal;overflow-wrap:normal}
+.aom-t th{font-weight:700;text-align:center;vertical-align:middle;background:#fff}
+.aom-t td.yr,.aom-t td.date,.aom-t td.ref,.aom-t td.center{text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}

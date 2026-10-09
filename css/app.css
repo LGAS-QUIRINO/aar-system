@@ -346,9 +346,9 @@ label.btn{cursor:pointer}
 .rv-thead .btn{margin-left:auto}
 .rv-tablewrap{margin:0 0 16px 32px;overflow-x:auto}
 .rv-table{border-collapse:collapse;font-size:14px;line-height:1.35;width:100%;table-layout:fixed}
-.rv-table th,.rv-table td{border:1px solid #444;padding:4px 7px;vertical-align:top;text-align:left}
-.rv-table th{font-weight:700;text-align:center}
-.rv-table td.yr,.rv-table td.date,.rv-table td.ref{text-align:center}
+.rv-table th,.rv-table td{border:1px solid #444;padding:4px 7px;vertical-align:top;text-align:left;word-break:normal;overflow-wrap:normal}
+.rv-table th{font-weight:700;text-align:center;background:#fff}
+.rv-table td.yr,.rv-table td.date,.rv-table td.ref,.rv-table td.center{text-align:center}
 .rv-table td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .rv-table tr.tot td{font-weight:700}
 .rv-table tr.yr-grp td{font-weight:700;text-align:center;letter-spacing:0.04em}

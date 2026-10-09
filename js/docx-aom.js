@@ -1,8 +1,7 @@
 // Word (.docx) file of the AOM letter, built from the same layout as the screen and the printout.
 import { loadScript } from './wp.js';
-import { tableLayout, isYearHead } from './aom.js';
+import { tableLayout, isYearHead, isNum } from './aom.js';
 
-const isNum = (s) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(s).trim());
 
 export async function downloadWord(doc) {
   const D = await loadScript('lib/docx.min.js', 'docx');
@@ -96,7 +95,7 @@ export async function downloadWord(doc) {
           cantSplit: true,
           children: r.map((c, ci) => {
             const v = String(c ?? '').trim();
-            const align = /^(19|20)\d{2}$/.test(v) || isDate(v) || isRef(v)
+            const align = /^(19|20)\d{2}$/.test(v) || isDate(v) || isRef(v) || /^[-–—]$/.test(v)
               ? AlignmentType.CENTER
               : isNum(c)
                 ? AlignmentType.RIGHT
