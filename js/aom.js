@@ -26,8 +26,8 @@ export function setupVars(audit, lgu, mun) {
   return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`, AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
 }
 // Filled in by the app (not typed in the working paper): from Audit Setup, and TABLEn_ITEMS from the AOM Tables.
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT', 'TABLE1_YEARS', 'TABLE2_YEARS', 'TABLE3_YEARS'];
-export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT|YEARS)$/.test(n);
+export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT', 'TABLE1_YEARS', 'TABLE2_YEARS', 'TABLE3_YEARS', 'TABLE1_PERIOD', 'TABLE2_PERIOD', 'TABLE3_PERIOD', 'TABLE1_PERIOD_START', 'TABLE2_PERIOD_START', 'TABLE3_PERIOD_START', 'TABLE1_PERIOD_END', 'TABLE2_PERIOD_END', 'TABLE3_PERIOD_END', 'TABLE1_PERIOD_LENGTH', 'TABLE2_PERIOD_LENGTH', 'TABLE3_PERIOD_LENGTH'];
+export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT|YEARS|PERIOD(_START|_END|_LENGTH)?)$/.test(n);
 // COA style for small numbers: 0 to 9 in words with the numeral, e.g. "two (2)"; 10 and up in numerals.
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
@@ -108,7 +108,17 @@ export function tableVars(d) {
       const m = /\b(19|20)\d{2}\b/.exec(String(cell ?? ''));
       if (m) ys.push(Number(m[0]));
     });
-    if (ys.length) { const a = Math.min(...ys), b = Math.max(...ys); out[`TABLE${n}_YEARS`] = a === b ? String(a) : `${a} to ${b}`; }
+    if (ys.length) {
+      const a = Math.min(...ys), b = Math.max(...ys);
+      const yrsLabel = a === b ? String(a) : `${a} to ${b}`;
+      out[`TABLE${n}_YEARS`]          = yrsLabel;                                       // "2022 to 2024" (kept for existing templates)
+      out[`TABLE${n}_PERIOD`]         = yrsLabel;                                       // alias: same value, clearer name
+      out[`TABLE${n}_PERIOD_START`]   = String(a);                                      // "2022"
+      out[`TABLE${n}_PERIOD_END`]     = String(b);                                      // "2024"
+      const span = b - a + 1;
+      out[`TABLE${n}_PERIOD_LENGTH`]  = `${countWords(span)} year${span === 1 ? '' : 's'}`; // "three (3) years"
+    }
+
   });
   return out;
 }
