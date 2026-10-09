@@ -22,7 +22,7 @@ export async function loadAudit(refs, auditId) {
     const v = {};
     const wp = (a.data || a).wpData;
     if (wp && wp.vars) Object.entries(wp.vars).forEach(([k, x]) => { v[k] = formatVar(k, x.raw); });
-    SETUP_VAR_NAMES.forEach((k) => { if (base[k]) v[k] = base[k]; });
+    Object.assign(v, base);
     Object.assign(v, tableVars(a.data || a));
     return v;
   };
