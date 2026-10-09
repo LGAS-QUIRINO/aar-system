@@ -128,7 +128,7 @@ export async function findings(refs, params, q) {
       $('#f-find', root).oninput = (e) => { $('#f-pool', root).innerHTML = poolHTML(e.target.value); };
       const addItem = (data) => {
         const id = newId('aom');
-        items.push({ id, data: { ...data, auditId: ctx.rec.id, teamId: audit.teamId, lguId: audit.lguId, status: ST.DRAFT, wpData: null, comments: [], history: [{ at: new Date().toISOString(), by: refs.me.email, action: 'Added to findings' }] }, orig: '' });
+        items.push({ id, data: { ...data, auditId: ctx.rec.id, teamId: audit.teamId, lguId: audit.lguId, memberId: refs.me.id, status: ST.DRAFT, wpData: null, comments: [], history: [{ at: new Date().toISOString(), by: refs.me.email, action: 'Added to findings' }] }, orig: '' });
         sel = id; dirty();
       };
       root.addEventListener('click', async (e) => {
@@ -218,7 +218,7 @@ export async function findings(refs, params, q) {
         for (const it of items) {
           i++;
           it.data.seq = i;
-          if (!it.data.memberId) it.data.memberId = audit.memberId || refs.me.id;
+          if (!it.data.memberId) it.data.memberId = refs.me.id || audit.memberId;
           const s = JSON.stringify(it.data);
           if (s !== it.orig) { await store.save('aoms', it.id, it.data, { silent: true }); it.orig = s; }
         }
