@@ -170,14 +170,14 @@ export async function review(refs, params, q) {
       <a class="btn sm ghost" href="${i > 0 ? link(list[i - 1].id, view) : '#'}" ${i > 0 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Previous AOM">‹</a>
       <b>AOM ${i + 1} of ${list.length}</b>
       <a class="btn sm ghost" href="${i < list.length - 1 ? link(list[i + 1].id, view) : '#'}" ${i < list.length - 1 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Next AOM">›</a>
-      <div class="seg" style="margin-left:8px"><a class="${view === 'review' ? 'on' : ''}" href="${link(cur.id, 'review')}">Review View</a><a class="${view === 'edit' ? 'on' : ''}" href="${link(cur.id, 'edit')}">Correct Text</a><a class="${view === 'page' ? 'on' : ''}" href="${link(cur.id, 'page')}">Print View</a></div>
+      <span class="hint">Single document editor · Click text to correct · Select text or a table cell to comment</span>
       ${view === 'review' ? '<div class="rv-nav" id="rv-nav"></div>' : ''}
-      <a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/print?draft=1">Print Draft</a></div>`;
+      <a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/aoms">Review History / Word</a><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/print?draft=1">Official Word / Print</a></div>`;
   const body = view === 'review' ? `${head}
     <div class="panel" style="padding:10px 16px;flex-direction:row;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mono" style="font-weight:600">${esc(aomNoText)}</span> · <b>${esc(fillText(cur.data.title, ctx.varsFor(cur)))}</b>
       <span class="hint">${esc(cur.data.poolCode || 'Not in Library')} · ${esc(cur.data.mode || 'Standard')}</span>
       <span style="margin-left:auto;display:flex;gap:6px" id="rv-counts">${rc.corrections ? pill(rc.corrections + ' correction' + (rc.corrections > 1 ? 's' : ''), 'grey') : ''}${rc.comments ? pill(rc.comments + ' comment' + (rc.comments > 1 ? 's' : ''), 'grey') : ''}</span></div>
-    ${reviewing ? '<div class="note info"><span>Select words in the AOM to comment on them, like in Word. To change the wording, use <b>Correct Text</b>; your changes show here in red and green with your initials.</span></div>' : ''}
+    ${reviewing ? '<div class="note info"><span>Click an editable paragraph to correct wording; select words or table cells to comment. Changes are tracked and working-paper tables are protected.</span></div>' : ''}
     <div id="rv-host"></div>
     <div class="grid-3" style="align-items:start">${sidePanels()}</div>` : `${head}
     <div class="split" style="grid-template-columns:minmax(0,1fr) 380px">
@@ -309,6 +309,8 @@ export async function review(refs, params, q) {
         if (!numOk()) return;
         await settle();
         if (!filledOk([{ data: state.aom }])) return;
+        const openComments=(state.aom.comments||[]).filter(c=>!c.resolved).length;
+        if(openComments && !(await confirmBox('Unresolved Comments',openComments+' comment(s) remain unresolved. Approve anyway? They will remain in the review history.','Approve Anyway')))return;
         const d = approveOne(clone(state.aom), cur.id);
         await store.save('aoms', cur.id, d, { silent: true });
         await store.log(willFinal ? 'approved an AOM as Final' : 'approved an AOM and forwarded it to the SA', `${ctx.lgu.name} · ${cur.data.title}`, ctx.teamId, me.email);
@@ -338,6 +340,8 @@ export async function review(refs, params, q) {
         if (!(await confirmBox('Approve Remaining', `Approve this AOM and the ${pendingMine.length} other${pendingMine.length > 1 ? 's' : ''} waiting for you${willFinal ? ' as Final' : ' and forward them to the SA'}? Open each one first if you have not reviewed it.`, 'Approve All', 'success'))) return;
         await settle();
         if (!filledOk([{ data: state.aom }, ...pendingMine.map((a) => ({ data: a.data }))])) return;
+        const openComments=[state.aom,...pendingMine.map(a=>a.data)].reduce((n,d)=>n+(d.comments||[]).filter(c=>!c.resolved).length,0);
+        if(openComments && !(await confirmBox('Unresolved Comments',openComments+' comment(s) across the batch remain unresolved. Approve anyway?','Approve Anyway')))return;
         for (const a of [cur, ...pendingMine]) {
           const d = approveOne(clone(a.id === cur.id ? state.aom : a.data), a.id);
           await store.save('aoms', a.id, d, { silent: true });
