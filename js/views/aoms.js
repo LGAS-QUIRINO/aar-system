@@ -218,7 +218,7 @@ export async function aoms(refs, params, q) {
 }
 
 // Review Trail: tick the AOMs to include (all ticked to start), then Print or Word (Track Changes).
-async function reviewTrailDialog(ctx, refs, list, N, curId) {
+export async function reviewTrailDialog(ctx, refs, list, N, curId) {
   const no = (a) => aomNo(ctx.audit.auditYear, N[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
   const nameOf = (e) => (e ? nice(refs.users.find((u) => u.data.email === e)?.data.name || e) : '');
   const sorted = list.slice().sort((a, b) => N[a.id].n - N[b.id].n);
