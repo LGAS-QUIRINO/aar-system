@@ -55,6 +55,17 @@ export function mountReview(host, opts) {
   let draft = null;                    // new comment being typed: { blockId, part, quote }
   const typed = {};                    // reply boxes with text, by comment id
   let items = [];
+  let editing = null;
+  let saving = false;
+  const tokenRE = /\[[A-Z][A-Z0-9_]*(?::[^\]]+)?\]/g;
+  const canEditPart = (k) => opts.canAct && !k.startsWith('cell:') && !k.startsWith('text_yr_') && k !== 'table';
+  const rawPart = (id,k) => id === '_title' ? data.title : partVal(data.blocks.find(b=>b.id===id),k);
+  const putPart = (d,id,k,v) => {
+    if(id==='_title'){d.title=v;return;}
+    const b=d.blocks.find(x=>x.id===id);if(!b)return;
+    if(k.startsWith('item')){b.items=[...(b.items||[])];b.items[Number(k.slice(4))]=v;} else b[k]=v;
+  };
+  const sameTokens = (a,b) => JSON.stringify((String(a).match(tokenRE)||[]).sort())===JSON.stringify((String(b).match(tokenRE)||[]).sort());
   const userOf = (email) => (opts.users || []).find((u) => u.data.email === email)?.data || { name: email || '' };
   const nameOf = (email) => (email === me.email ? 'You' : nice(userOf(email).name || email));
   const iniOf = (who) => (!who ? '' : who.includes('@') ? initials(userOf(who).name || who) : who);
@@ -63,7 +74,7 @@ export function mountReview(host, opts) {
   const tableOf = (b) => tableData(data, { ...b, n: b.n || 1 });
 
   function render() {
-    const base = (data.submitted && data.submitted.blocks) || null;
+    const base = (data.versions?.length ? data.versions[data.versions.length-1].blocks : null) || (data.submitted && data.submitted.blocks) || null;
     const baseOf = (id) => (base ? base.find((b) => b.id === id) : null);
     const cs = data.comments || [];
     const byBlock = {};
@@ -76,7 +87,7 @@ export function mountReview(host, opts) {
       // Paragraphs within a part are set apart by a blank line, as printed.
       const html = /\b(quote|body)\b/.test(cls) ? inner(blockId, before, after, k).replace(/<br>/g, '<br><span class="pgap"></span>') : inner(blockId, before, after, k);
       const changed = before !== after;
-      return `<p class="${cls}" data-b="${blockId}" data-part="${k}">${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
+      return `<p class="${cls} ${canEditPart(k)?'rv-editable':''}" data-b="${blockId}" data-part="${k}" ${canEditPart(k)?'title="Click to edit wording" tabindex="0"':''}>${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
     };
     // The working-paper table, cell by cell, so a number or a name in any cell can be commented on.
     const tableHTML = (b, id) => {
@@ -174,7 +185,7 @@ export function mountReview(host, opts) {
 
     // Walk the document: title, then every block (removed ones stay where they were, struck through).
     const docParts = [];
-    const tBefore = fillT(data.submitted ? data.submitted.title : data.title), tAfter = fillT(data.title);
+    const tBefore = fillT(data.versions?.length ? data.versions[data.versions.length-1].title : (data.submitted ? data.submitted.title : data.title)), tAfter = fillT(data.title);
     docParts.push(`<div class="aomno">${esc(opts.heading || '')}</div>`);
     if (!opts.readOnlyTitle) docParts.push(partHTML('_title', tBefore, tAfter, 'title', 'ttl', '', '', iniOf(data.editedBy?._title)));
     if (tBefore !== tAfter) correctionCard('_title', 'Finding Title', tBefore, tAfter);
@@ -228,7 +239,7 @@ export function mountReview(host, opts) {
       <div class="quote">${draft.part === 'table' ? esc(draft.quote) : `${draft.where ? esc(draft.where) + ': ' : ''}“${esc(short(draft.quote, 120))}”`}</div>${draftBox('Type your comment')}</div>` : '';
 
     host.innerHTML = `<div class="rv-work">
-      <div class="rv-doc" id="rv-doc">${docParts.join('')}
+      <div class="rv-doc" id="rv-doc"><div class="rv-edit-hint">${opts.canAct ? 'Click a paragraph to edit; select words to comment. Working-paper tables are protected.' : 'Read-only document'}</div>${docParts.join('')}
         ${opts.canAct ? '<button class="btn sm primary rv-float" id="rv-float" hidden>💬 Comment</button>' : ''}</div>
       <aside class="rv-margin" id="rv-margin"><h3>Comments and Corrections</h3>
         ${opts.canAct ? `<div class="hint rv-tip">Select words in the ${esc(opts.noun || 'AOM')} to comment on them.</div>` : ''}
@@ -286,6 +297,7 @@ export function mountReview(host, opts) {
   }
 
   async function flush() {
+    if(editing)await commitInline();
     const now = new Date().toISOString();
     const replies = Object.entries(typed).filter(([, t]) => t && t.trim());
     const dr = draft && (draft.text || '').trim() ? { ...draft } : null;
@@ -302,6 +314,28 @@ export function mountReview(host, opts) {
 
   const LABEL = (d, id) => { if (id === '_title') return 'Finding Title'; const b = d.blocks.find((x) => x.id === id) || (d.submitted?.blocks || []).find((x) => x.id === id) || {}; return b.label || BLOCK_LABELS[b.type] || 'block'; };
 
+  function beginInline(p) {
+    if (!opts.canAct || editing || !p?.classList.contains('rv-editable')) return;
+    const id=p.dataset.b,k=p.dataset.part,value=String(rawPart(id,k)||'');
+    const box=document.createElement('textarea');
+    box.className='input be-text rv-inline-editor';box.value=value;
+    box.rows=Math.max(2,Math.min(14,value.split('\\n').length+Math.ceil(value.length/100)));
+    p.replaceWith(box);editing={id,k,value,box};box.focus();
+    setDirty(true,async()=>{await commitInline();return true;});
+    box.addEventListener('keydown',e=>{if(e.key==='Escape'){editing=null;setDirty(false);render();}});
+    box.addEventListener('blur',()=>{if(editing?.box===box)commitInline().catch(e=>toast('Save failed: '+e.message,'bad'));});
+  }
+  async function commitInline(){
+    if(!editing||saving)return;
+    const e=editing,v=e.box.value;
+    if(v===e.value){editing=null;setDirty(false);render();return;}
+    if(!sameTokens(e.value,v)){toast('Working-paper placeholders are protected. Update their source instead.','warn');e.box.focus();return;}
+    saving=true;
+    try{
+      await act(d=>{putPart(d,e.id,e.k,v);d.editedBy={...(d.editedBy||{}),[e.id]:me.email};},'Edited AOM wording during review');
+      editing=null;setDirty(false);toast('Correction saved.','ok');
+    }finally{saving=false;}
+  }
   host.addEventListener('click', async (e) => {
     const nav = e.target.closest('[data-nav]');
     const btn = e.target.closest('[data-act]');
@@ -350,6 +384,7 @@ export function mountReview(host, opts) {
       applyFocus(); return;
     }
     if (e.target.id === 'rv-float') return;
+    if(e.target.closest('.rv-editable') && !window.getSelection()?.toString().trim()){beginInline(e.target.closest('.rv-editable'));return;}
     const m = e.target.closest('mark[data-c]'), x = e.target.closest('[data-x]');
     if (m && m.dataset.c !== '_new') { focus = 'c:' + m.dataset.c; applyFocus(); return; }
     if (x) { focus = 'x:' + x.dataset.x; applyFocus(); return; }
