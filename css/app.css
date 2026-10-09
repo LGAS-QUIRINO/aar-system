@@ -811,3 +811,10 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-doc p.rv-editable:hover,.rv-doc p.rv-editable:focus-visible{background:#f3f7fd;outline:1px solid #b5c9e7;outline-offset:3px}
 .rv-doc .rv-inline-editor{box-sizing:border-box;width:100%;font:inherit;line-height:1.65;color:#111;background:#fff;resize:vertical;padding:12px;min-height:100px;margin:4px 0 16px;box-shadow:0 0 0 2px #acc3e8;border:1px solid #7c9cc9}
 .rv-doc .rv-table th,.rv-doc .rv-table td{cursor:help}
+
+.rv-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:9px 12px;background:var(--surface,#f8fafc);border:1px solid var(--line);border-radius:8px;margin-bottom:8px}
+.rv-work.rv-comments-hidden{grid-template-columns:minmax(0,1fr)}
+.rv-work.rv-comments-hidden .rv-margin{display:none}
+.rv-work.rv-comments-hidden .rv-doc{border-right:0}
+.rv-work.rv-clean .rv-doc del.chg,.rv-work.rv-clean .rv-doc .chgcard{display:none}
+.rv-work.rv-clean .rv-doc ins.chg{background:transparent;border:0;color:inherit;text-decoration:none}
