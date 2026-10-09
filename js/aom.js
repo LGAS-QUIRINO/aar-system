@@ -863,44 +863,59 @@ export function tableLayout(rows, avail) {
       }
     }
   }
-  if (flex < 0) flex = 0;
 
   const availPt = avail / 20;
 
   // Try font sizes: 11pt, 10.5pt, 10pt (applies to all cells in the table)
   for (const size of [11, 10.5, 10]) {
-    const minW = [];
+    const need = [], headWord = [], cellWord = [];
     for (let c = 0; c < n; c++) {
-      const hText = String((rows[0] || [])[c] ?? '');
-      const hPt = PAD_PT + textPt(hText, size, true);
+      const bodyMax = Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
+      need[c] = PAD_PT + bodyMax;
 
-      if (numCols.has(c)) {
-        // Numeric column must fit longest amount on one line without wrapping
-        const maxValPt = Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
-        minW[c] = Math.max(hPt, PAD_PT + maxValPt);
-      } else if (c !== flex) {
-        // Short text column (e.g. Remarks): must fit longest single word and header
-        const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
-        minW[c] = Math.max(hPt, PAD_PT + maxWordPt);
-      } else {
-        // Flex column (Particulars): minimum width so words don't break
-        const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
-        minW[c] = Math.max(hPt, PAD_PT + maxWordPt, 80);
-      }
+      // Longest single word in header (headers can wrap at spaces!)
+      const hWords = String(rows[0][c] ?? '').split(/\s+/).map((w) => textPt(w, size, true));
+      headWord[c] = PAD_PT + Math.max(0, ...hWords);
+
+      // Longest single word in body cells
+      const bWords = body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false)));
+      cellWord[c] = PAD_PT + Math.max(0, ...bWords);
     }
 
-    const nonFlexSum = minW.reduce((sum, w, c) => (c === flex ? sum : sum + w), 0);
-    const flexAvail = availPt - nonFlexSum;
+    const colW = [];
+    let sum = 0;
+    for (let c = 0; c < n; c++) {
+      colW[c] = Math.max(need[c], headWord[c]);
+      sum += colW[c];
+    }
 
-    if (flexAvail >= minW[flex]) {
-      // It fits cleanly! Flex column receives all the remaining width
-      const finalW = minW.map((w, c) => (c === flex ? flexAvail : w));
+    // Case 1: All columns fit unwrapped (e.g. NTA table, or other multi-column summary tables)
+    // Spare width is shared in proportion so columns are spacious and no column is starved.
+    if (sum <= availPt) {
       return {
         size,
         nowrap: true,
         flex,
-        widths: finalW.map((w) => Math.round(w * 20))
+        widths: colW.map((x) => Math.round(x * (availPt / sum) * 20))
       };
+    }
+
+    // Case 2: One flex column wraps (e.g. Particulars / Project Name in Utilization table)
+    // If the flex column has long text, give it a comfortable target width so text wraps cleanly,
+    // stepping down font size if needed (11 -> 10.5 -> 10pt).
+    if (flex >= 0) {
+      let fixedSum = 0;
+      for (let c = 0; c < n; c++) if (c !== flex) fixedSum += colW[c];
+      const targetFlexMin = need[flex] > 120 ? 130 : Math.max(headWord[flex], cellWord[flex], 72);
+      if (fixedSum + targetFlexMin <= availPt || size === 10) {
+        const flexRoom = Math.max(availPt - fixedSum, Math.max(headWord[flex], cellWord[flex], 72));
+        return {
+          size,
+          nowrap: true,
+          flex,
+          widths: colW.map((x, c) => Math.round((c === flex ? flexRoom : x) * 20))
+        };
+      }
     }
   }
 
@@ -908,13 +923,14 @@ export function tableLayout(rows, avail) {
   const size = 10;
   const minW = [];
   for (let c = 0; c < n; c++) {
-    const hPt = PAD_PT + textPt(rows[0][c], size, true);
+    const hWords = String(rows[0][c] ?? '').split(/\s+/).map((w) => textPt(w, size, true));
+    const hWord = PAD_PT + Math.max(0, ...hWords);
     if (numCols.has(c)) {
       const maxValPt = Math.max(0, ...body.filter((r) => !isYearHead(r)).map((r) => textPt((r || [])[c], size, isTot(r))));
-      minW[c] = Math.max(hPt, PAD_PT + maxValPt);
+      minW[c] = Math.max(hWord, PAD_PT + maxValPt);
     } else {
-      const maxWordPt = Math.max(0, ...body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false))));
-      minW[c] = Math.max(hPt, PAD_PT + maxWordPt, 50);
+      const bWords = body.flatMap((r) => String((r || [])[c] ?? '').split(/\s+/).map((w) => textPt(w, size, false)));
+      minW[c] = Math.max(hWord, PAD_PT + Math.max(0, ...bWords), 50);
     }
   }
   const totalMin = minW.reduce((a, b) => a + b, 0) || 1;
