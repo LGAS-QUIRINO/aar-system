@@ -164,7 +164,7 @@ export async function findingsPanel({ F, ctx, me, base, canEdit }) {
         const id = newId('aom');
         await store.save('aoms', id, { ...data, auditId: ctx.rec.id, teamId: ctx.teamId, lguId: F.lguId, status: ST.DRAFT, flag: f.id, flagCodes: f.codes || [],
           wpData: Object.keys(vars).length ? { file: '(filled in the app)', at: now, by: me.email, vars, tables: {}, src, tb } : null,
-          comments: [], history: [{ at: now, by: me.email, action: 'Added to findings from Possible Findings' }], seq, memberId: ctx.audit.memberId || me.id }, { silent: true });
+          comments: [], history: [{ at: now, by: me.email, action: 'Added to findings from Possible Findings' }], seq, memberId: me.id || ctx.audit.memberId }, { silent: true });
         await store.log('added a finding from Possible Findings', `${ctx.lgu.name} · ${data.title}`, ctx.teamId, me.email);
         toast(`Added to Findings as a Draft AOM: ${data.title}.`, 'ok');
         emitChange('local');

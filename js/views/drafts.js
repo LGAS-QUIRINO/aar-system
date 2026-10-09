@@ -9,7 +9,7 @@ export async function drafts(refs) {
   const audits = (await store.list('audits')).filter((a) => teams.includes(a.data.teamId) && !a.data.imported);
   const mineOnly = has(refs.me, 'member') && !has(refs.me, 'atl') && !has(refs.me, 'sa');
   const aoms = await store.list('aoms');
-  const rows = audits.filter((a) => !mineOnly || a.data.memberId === refs.me.id).map((a) => {
+  const rows = audits.filter((a) => !mineOnly || a.data.memberId === refs.me.id || aoms.some((x) => x.data.auditId === a.id && x.data.memberId === refs.me.id)).map((a) => {
     const list = aoms.filter((x) => x.data.auditId === a.id);
     const c = (st) => list.filter((x) => (x.data.status || ST.DRAFT) === st).length;
     return { a, list, draft: c(ST.DRAFT), ret: c(ST.RETURNED), rev: list.length - c(ST.DRAFT) - c(ST.RETURNED) - c(ST.FINAL), fin: c(ST.FINAL), lgu: refs.lgu[a.data.lguId]?.data.name || '?' };

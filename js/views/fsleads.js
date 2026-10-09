@@ -361,7 +361,7 @@ export async function leadsTab({ F, ctx, me, q, base, canEdit }) {
         const seq=Math.max(0,...(ctx.aoms||[]).map(a=>a.data.seq||0))+1, id=newId('aom');
         await store.save('aoms',id,{ ...data, wp: src?src.ref:data.wp, wpDef:{ title: src?src.title:(data.title), accounts: accounts.length?accounts:(src&&src.w&&src.w.accounts)||[], ph:[], tables:[] },
           faItem:resultKey(cat,cur), auditId:ctx.rec.id, teamId:ctx.teamId, lguId:F.lguId, status:ST.DRAFT, wpData: src&&src.imp ? { file:src.imp.file, at:src.imp.at, by:src.imp.by, vars:src.imp.vars, tables:src.imp.tables } : null,
-          comments:[], history:[{at:now,by:me.email,action:`Added to findings from the Financial Audit (${cur.title})`}], seq, memberId:ctx.audit.memberId||me.id },{silent:true});
+          comments:[], history:[{at:now,by:me.email,action:`Added to findings from the Financial Audit (${cur.title})`}], seq, memberId:me.id||ctx.audit.memberId },{silent:true});
         await store.log('drafted an AOM from the Financial Audit',`${ctx.lgu.name} · ${data.title}`,ctx.teamId,me.email);
         toast(`Draft AOM added to Findings: ${data.title}.`,'ok');
         location.hash='#/audits/'+ctx.rec.id+'/findings?sel='+encodeURIComponent(id);
