@@ -385,10 +385,10 @@ export function mountReview(host, opts) {
       applyFocus(); return;
     }
     if (e.target.id === 'rv-float') return;
-    if(e.target.closest('.rv-editable') && !window.getSelection()?.toString().trim()){beginInline(e.target.closest('.rv-editable'));return;}
     const m = e.target.closest('mark[data-c]'), x = e.target.closest('[data-x]');
     if (m && m.dataset.c !== '_new') { focus = 'c:' + m.dataset.c; applyFocus(); return; }
     if (x) { focus = 'x:' + x.dataset.x; applyFocus(); return; }
+    if(e.target.closest('.rv-editable') && !window.getSelection()?.toString().trim()){beginInline(e.target.closest('.rv-editable'));return;}
     const card = e.target.closest('.rv-card[data-key]');
     if (card && card.dataset.key !== '_new' && !e.target.closest('textarea')) { if (focus !== card.dataset.key) { focus = card.dataset.key; applyFocus(); } }
   });
