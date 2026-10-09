@@ -922,14 +922,15 @@ export const DOC_CSS = `
 .keepblk{break-inside:avoid;page-break-inside:avoid}
 .aom-t{border-collapse:collapse;width:100%;font-size:11pt;margin:3pt 0}
 .aom-t th,.aom-t td{border:1px solid #000;padding:3pt 5pt;vertical-align:top}
-.aom-t th{font-weight:700;text-align:center;vertical-align:middle;background:#F8F9FA}
+.aom-t th{font-weight:700;text-align:center;vertical-align:middle}
 .aom-t td.yr,.aom-t td.date,.aom-t td.ref{text-align:center}
 .aom-t td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .aom-t td.nw{white-space:nowrap}
 .aom-t tr.tot td{font-weight:700}
-.aom-t tr.yr-grp td{font-weight:700;text-align:center;background:#F2F4F7;letter-spacing:0.04em}
+.aom-t tr.yr-grp td{font-weight:700;text-align:center;letter-spacing:0.04em}
 .aom-t tr.sub-tot td{border-top:1.5px solid #000}
 .aom-t tr.grand-tot td{border-top:1.5px solid #000;border-bottom:3.5px double #000}
+
 .aom-t.receipt td{height:auto;padding-top:3pt;padding-bottom:3pt}
 .aom-t.receipt td b{white-space:nowrap}
 .ph-fill{background:#E3F1E7;border-radius:2px}

@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, isYearHead } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, tableLayout, isYearHead } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -88,7 +88,11 @@ export function mountReview(host, opts) {
       const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
       const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
       const colCount = Math.max(1, ...((t.rows || []).map((r) => (r || []).length)));
-      return head + `<div class="rv-tablewrap"><table class="rv-table">${t.rows.map((r, ri) => {
+      // Auto-shrink: same layout logic as the print path (avail ≈ 9360 twips = 6.5")
+      const L = tableLayout(t.rows || [], 9360);
+      const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / 9360) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
+      const tStyle = L ? ` style="font-size:${L.size}pt"` : '';
+      return head + `<div class="rv-tablewrap"><table class="rv-table"${tStyle}>${cg}${t.rows.map((r, ri) => {
         if (ri === 0) {
           return `<tr>${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? '');
             return `<th data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</th>`; }).join('')}</tr>`;
