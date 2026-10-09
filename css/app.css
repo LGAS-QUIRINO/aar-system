@@ -804,3 +804,10 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .ctypes{display:flex;flex-wrap:wrap;gap:6px 10px}
 .ctype{display:flex;align-items:center;gap:6px;font-size:13px}.ctype span{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ctype select.input{height:30px;width:auto;padding:0 6px}
+
+/* Unified AOM Review: document-first inline editing */
+.rv-edit-hint{font:12px/1.5 var(--sans);color:var(--muted);background:#f5f7fb;border:1px solid #e1e7ef;border-radius:6px;padding:8px 10px;margin-bottom:20px}
+.rv-doc p.rv-editable{cursor:text;border-radius:3px;transition:background .12s}
+.rv-doc p.rv-editable:hover,.rv-doc p.rv-editable:focus-visible{background:#f3f7fd;outline:1px solid #b5c9e7;outline-offset:3px}
+.rv-doc .rv-inline-editor{box-sizing:border-box;width:100%;font:inherit;line-height:1.65;color:#111;background:#fff;resize:vertical;padding:12px;min-height:100px;margin:4px 0 16px;box-shadow:0 0 0 2px #acc3e8;border:1px solid #7c9cc9}
+.rv-doc .rv-table th,.rv-doc .rv-table td{cursor:help}
