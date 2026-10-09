@@ -451,13 +451,16 @@ export function findingParas(aom, ctx) {
         if (isSplitTable(aom, b)) {
           const groups = yearGroups(aom, Number(b.n) || 1);
           if (groups.length > 1) {
+            // Compute layout ONCE from the full table rows so every year-section uses the same font size.
+            const fullAvail = (ctx.avail || 9360) - left;
+            const sharedLayout = tableLayout(tableRowsFor(tbl.rows, b, vars), fullAvail);
             groups.forEach((g, gi) => {
               const yrRows = tableRowsForYear(tbl, b, vars, g.YEAR);
               if (yrRows && yrRows.length > 1) {
                 if (gi > 0) out.push(BL());
                 out.push(P([{ t: `CY ${g.YEAR}` }], { bold: true, ind: { left } }));
                 if (b.caption) out.push(P(fillRuns(b.caption, { ...vars, ...g }), { bold: true, align: 'center', ind: { left } }));
-                out.push({ kind: 'table', rows: yrRows, left, source: tbl.sheet, n: b.n, year: g.YEAR, isSplit: true });
+                out.push({ kind: 'table', rows: yrRows, left, source: tbl.sheet, n: b.n, year: g.YEAR, isSplit: true, layout: sharedLayout, avail: fullAvail + left });
               }
             });
             return;
@@ -485,6 +488,15 @@ export function findingParas(aom, ctx) {
       const groups = yearGroups(aom, targetTableNum);
       const tblBlock = (aom.blocks || []).find((x) => x.type === 'table' && (Number(x.n) || 1) === targetTableNum);
       const isSplit = tblBlock && isSplitTable(aom, tblBlock);
+      // For split tables: compute layout once from full rows so all year-sections use the same font size.
+      let splitSharedLayout = null;
+      if (isSplit && tblBlock && !tblBlock.annex) {
+        const tblFull = tableData(aom, tblBlock);
+        if (tblFull) {
+          const perYearLeft = left + 360;
+          splitSharedLayout = tableLayout(tableRowsFor(tblFull.rows, tblBlock, vars), (ctx.avail || 9360) - perYearLeft);
+        }
+      }
 
       if (!groups.length) {
         out.push(...withBlanks(textParas(b.text, vars, { ind: { left } })));
@@ -495,11 +507,12 @@ export function findingParas(aom, ctx) {
           if (isSplit && tblBlock && !tblBlock.annex) {
             const tbl = tableData(aom, tblBlock);
             if (tbl) {
+              const perYearLeft = left + 360;
               const yrRows = tableRowsForYear(tbl, tblBlock, vars, g.YEAR);
               if (yrRows && yrRows.length > 1) {
                 out.push(BL());
-                if (tblBlock.caption) out.push(P(fillRuns(tblBlock.caption, { ...vars, ...g }), { bold: true, align: 'center', ind: { left: left + 360 } }));
-                out.push({ kind: 'table', rows: yrRows, left: left + 360, source: tbl.sheet, n: tblBlock.n, year: g.YEAR, isSplit: true });
+                if (tblBlock.caption) out.push(P(fillRuns(tblBlock.caption, { ...vars, ...g }), { bold: true, align: 'center', ind: { left: perYearLeft } }));
+                out.push({ kind: 'table', rows: yrRows, left: perYearLeft, source: tbl.sheet, n: tblBlock.n, year: g.YEAR, isSplit: true, layout: splitSharedLayout, avail: (ctx.avail || 9360) });
               }
             }
           }
@@ -875,7 +888,7 @@ function tableHTML(t) {
   }
   const rows = t.rows || [];
   const avail = (t.avail || 9360) - (t.left || 0);
-  const L = tableLayout(rows, avail);
+  const L = t.layout || tableLayout(rows, avail);
   const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / avail) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
   const colCount = Math.max(1, ...(rows.map((r) => (r || []).length)));
   const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
