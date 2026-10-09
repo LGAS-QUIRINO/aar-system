@@ -28,12 +28,12 @@ export async function loadAudit(refs, auditId) {
   };
   const me = refs.me;
   const oneStep = !!(team.atlUserId && team.atlUserId === team.saUserId);
-  const isMember = me.id === audit.memberId || (has(me, 'member') && (me.teamIds || []).includes(audit.teamId));
+  const isMember = has(me, 'member') || has(me, 'admin') || me.id === audit.memberId || (me.teamIds || []).includes(audit.teamId);
   const canEdit = (a) => {
     const s = a.data.status || ST.DRAFT;
-    if (s === ST.DRAFT || s === ST.RETURNED) return isMember || has(me, 'atl') || has(me, 'sa');
-    if (s === ST.ATL) return me.id === team.atlUserId;
-    if (s === ST.SA) return me.id === team.saUserId;
+    if (s === ST.DRAFT || s === ST.RETURNED) return a.data.memberId === me.id || isMember || has(me, 'member') || has(me, 'atl') || has(me, 'sa') || has(me, 'admin');
+    if (s === ST.ATL) return me.id === team.atlUserId || has(me, 'admin');
+    if (s === ST.SA) return me.id === team.saUserId || has(me, 'admin');
     return false;
   };
   return { rec, audit, lgu, mun, team, teamId: audit.teamId, atl, sa, member, aoms, nums, varsFor, oneStep, isMember, canEdit, title: `${lgu.name} · ${periodYears(audit.periodFrom, audit.periodTo)}` };
