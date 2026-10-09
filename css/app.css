@@ -818,3 +818,13 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-work.rv-comments-hidden .rv-doc{border-right:0}
 .rv-work.rv-clean .rv-doc del.chg,.rv-work.rv-clean .rv-doc .chgcard{display:none}
 .rv-work.rv-clean .rv-doc ins.chg{background:transparent;border:0;color:inherit;text-decoration:none}
+
+/* Official AOM stationery in the unified review document. */
+.rv-letter-preface{font-family:"Times New Roman",Times,serif;font-size:12pt;line-height:1.25;color:#111;margin-bottom:24px}
+.rv-letter-preface p{margin:0 0 4px!important;text-align:inherit}
+.rv-letter-preface .lh2{position:relative;min-height:1.16in;max-width:6.5in;margin:auto}
+.rv-letter-preface .lh2 img{position:absolute;object-fit:contain}
+.rv-letter-preface .lh2 img.seal{left:.53in;top:0}
+.rv-letter-preface .lh2 img.name{position:relative;display:block;margin:0 auto}
+.rv-letter-preface .bl{min-height:.14in;margin:0!important}
+.rv-doc .rv-thead{font-family:var(--sans)}
