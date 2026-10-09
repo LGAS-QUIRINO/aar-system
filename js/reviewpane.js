@@ -190,7 +190,8 @@ export function mountReview(host, opts) {
     // Walk the document: title, then every block (removed ones stay where they were, struck through).
     const docParts = [];
     const tBefore = fillT(data.versions?.length ? data.versions[data.versions.length-1].title : (data.submitted ? data.submitted.title : data.title)), tAfter = fillT(data.title);
-    docParts.push(`<div class="aomno">${esc(opts.heading || '')}</div>`);
+    if (opts.preface) docParts.push(`<div class="rv-letter-preface">${opts.preface}</div>`);
+    else docParts.push(`<div class="aomno">${esc(opts.heading || '')}</div>`);
     if (!opts.readOnlyTitle) docParts.push(partHTML('_title', tBefore, tAfter, 'title', 'ttl', '', '', iniOf(data.editedBy?._title)));
     if (tBefore !== tAfter) correctionCard('_title', 'Finding Title', tBefore, tAfter);
     (byBlock._title || []).sort((a, b) => (found[a.id] ?? 1e9) - (found[b.id] ?? 1e9)).forEach(commentCard);
