@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, tableLayout, isYearHead } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, tableLayout, isYearHead, yearGroups } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -197,9 +197,26 @@ export function mountReview(host, opts) {
       const keys = partsOf(b);
       if (cur && old && cur.type === 'recommendation') partsOf(old).forEach((p) => { if (!keys.some((x) => x.k === p.k)) keys.push(p); });
       let html = '';
-      keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
+      // Per-year blocks: expand one lettered paragraph per year group, exactly as the print view does.
+      if (b.perYear) {
+        const groups = yearGroups(data, Number(b.perYearTable) || 1);
+        const rawOld = old ? (old.text || '').replace(/\s*\n\s*/g, ' ').trim() : '';
+        const rawCur = cur ? (cur.text || '').replace(/\s*\n\s*/g, ' ').trim() : '';
+        if (groups.length > 0) {
+          groups.forEach((g, gi) => {
+            const mv = { ...vars, ...g };
+            html += partHTML(id, rawOld ? fillText(rawOld, mv) : '', rawCur ? fillText(rawCur, mv) : '', 'text_yr_' + gi, 'item', null, letterOf(gi) + '.', gi === 0 ? ini : '');
+          });
+        } else {
+          html += partHTML(id, fill(rawOld), fill(rawCur), 'text', 'body', '', '', ini);
+        }
+      } else {
+        keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
+      }
       if (b.type === 'table') html += tableHTML(b, id);
-      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${b.label ? `<div class="rv-flabel">${esc(b.label)}</div>` : ''}${html}</div>`);
+      // Block-type label: shown above each block so reviewers can orient themselves (omit for tables since rv-thead already labels them).
+      const bTypeLabel = b.type !== 'table' ? (BLOCK_LABELS[b.type] || '') : '';
+      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${bTypeLabel ? `<div class="rv-btype">${esc(bTypeLabel)}</div>` : ''}${b.label ? `<div class="rv-flabel">${esc(b.label)}</div>` : ''}${html}</div>`);
       const label = b.label || BLOCK_LABELS[b.type] || 'Block';
       if (base && (!old || !cur || blockPlain(old) !== blockPlain(cur))) correctionCard(id, label, fill(old ? blockPlain(old) : ''), fill(cur ? blockPlain(cur) : ''), !old ? 'added' : !cur ? 'removed' : '');
       (byBlock[id] || []).sort((a, c) => (found[a.id] ?? 1e9) - (found[c.id] ?? 1e9)).forEach(commentCard);
