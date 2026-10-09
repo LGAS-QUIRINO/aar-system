@@ -84,7 +84,7 @@ export function mountReview(host, opts) {
       const head = `<div class="rv-thead"><span>AOM Table ${esc(b.n || 1)}${b.annex ? ' · printed as an annex' : ''}${t ? ' · from sheet “' + esc(t.sheet || '') + '”' : ''}</span>
         ${opts.canAct && t ? `<button class="btn sm ghost" data-act="tblc" data-b="${id}">💬 Comment on this table</button>` : ''}</div>`;
       if (!t) return head + '<p class="tbl">[Not imported yet. Import the working paper on the Findings screen.]</p>';
-      const num = (c) => /^[(₱-]?\s*[\d,]+(\.\d+)?%?\)?$/.test(String(c).trim());
+      const num = (c) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(c ?? '').trim());
       const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
       const isRef = (s) => /^(?:DV|CK|OR|Check|Voucher|RCD|DV\s*No|Check\s*No)\.?\s*[-–0-9A-Za-z]+$/i.test(String(s ?? '').trim());
       const colCount = Math.max(1, ...((t.rows || []).map((r) => (r || []).length)));
@@ -107,7 +107,7 @@ export function mountReview(host, opts) {
         const totCls = isGrand ? 'tot grand-tot' : (isSub || total) ? 'tot sub-tot' : '';
         return `<tr class="${totCls}">${r.map((c, ci) => {
           const k = `cell:${ri}:${ci}`, v = String(c ?? '').trim();
-          const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : num(v) ? 'num' : '';
+          const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : /^[-–—]$/.test(v) ? 'center' : num(v) ? 'num' : '';
           return `<td class="${alignCls}" data-b="${id}" data-part="${k}">${inner(id, String(c ?? ''), String(c ?? ''), k) || '&nbsp;'}</td>`;
         }).join('')}</tr>`;
       }).join('')}</table></div>`;
