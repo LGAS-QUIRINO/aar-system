@@ -119,10 +119,12 @@ export async function review(refs, params, q) {
   if (!ctx) return { active: '#/review', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
   const me = refs.me;
   const iAmATL = ctx.team.atlUserId === me.id, iAmSA = ctx.team.saUserId === me.id;
-  const mineNow = (a) => ((a.data.status === ST.WITH_ATL || a.data.status === ST.ATL) && iAmATL) || ((a.data.status === ST.WITH_SA || a.data.status === ST.SA) && iAmSA) || (a.data.status === ST.FINAL && iAmSA);
-  const list = ctx.aoms.filter((a) => mineNow(a) || [ST.WITH_ATL, ST.ATL, ST.WITH_SA, ST.SA, ST.FINAL].includes(a.data.status));
-  if (!list.length) return { active: '#/review', crumbs: '<a href="#/review">For My Review</a> / <b>' + esc(ctx.title) + '</b>', body: '<section class="panel"><div class="empty">No AOMs of this Barangay are in review.</div></section>' };
-  let cur = list.find((a) => a.id === q.get('aom')) || list.find(mineNow) || list[0];
+  // The document editor is strictly the logged-in reviewer's active queue.
+  // Final, returned, draft, and other reviewers' AOMs are not review items.
+  const mineNow = (a) => ((a.data.status === ST.WITH_ATL || a.data.status === ST.ATL) && iAmATL) || ((a.data.status === ST.WITH_SA || a.data.status === ST.SA) && iAmSA);
+  const list = ctx.aoms.filter(mineNow);
+  if (!list.length) return { active: '#/review', crumbs: '<a href="#/review">For My Review</a> / <b>' + esc(ctx.title) + '</b>', body: '<section class="panel"><div class="empty">No AOMs currently assigned to you for review. Final and previously reviewed AOMs remain available in the AOM records.</div><div class="panel-body"><a class="btn ghost" href="#/review">Back to For My Review</a></div></section>' };
+  let cur = list.find((a) => a.id === q.get('aom')) || list[0];
   const i = list.indexOf(cur);
   const view = 'review';
   ensureIds(cur.data);
