@@ -45,7 +45,7 @@ export async function loadSaor(refs, munId, year) {
     const wp = a.data.wpData;
     if (wp && wp.vars) Object.entries(wp.vars).forEach(([k, x]) => { v[k] = formatVar(k, x.raw); });
     const base = setupVars(au.data, refs.lgu[au.data.lguId]?.data, mun);
-    SETUP_VAR_NAMES.forEach((k) => { if (base[k]) v[k] = base[k]; });
+    Object.assign(v, base);
     Object.assign(v, tableVars(a.data || a));
     return v;
   };

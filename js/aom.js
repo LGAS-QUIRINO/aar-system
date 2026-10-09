@@ -23,11 +23,59 @@ export function setupVars(audit, lgu, mun) {
   // PERIOD_END_YEAR: the last year the audit covers (e.g. 2025 for Audit Year 2026). AUDIT_YEAR gives the same value and stays for older templates.
   // Years count back from the last year, so a template means the same years in a two- or three-year audit.
   const len = t - f + 1;
-  return { PERIOD_END_YEAR: String(t), PRIOR_YEAR: String(t - 1), PRIOR_YEAR_2: String(t - 2), PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`, AUDIT_YEAR: String(t), AUDIT_PERIOD: period, AUDIT_YEARS: period, BARANGAY: lgu ? lgu.name : '', MUNICIPALITY: mun ? mun.name : '' };
+  const auditYears = [];
+  for (let y = f; y <= t; y++) auditYears.push(y);
+  const allYrsStr = joinAnd(auditYears.map(String));
+  const betweenYrs = auditYears.length > 2 ? auditYears.slice(1, -1) : [];
+  const betweenStr = betweenYrs.length ? joinAnd(betweenYrs.map(String)) : '';
+
+  const res = {
+    PERIOD_END_YEAR: String(t),
+    PRIOR_YEAR: String(t - 1),
+    PRIOR_YEAR_2: String(t - 2),
+    PERIOD_LENGTH: `${countWords(len)} year${len === 1 ? '' : 's'}`,
+    AUDIT_YEAR: String(t),
+    AUDIT_PERIOD: period,
+    AUDIT_YEARS: period,
+    AUDIT_PERIOD_START: String(f),
+    AUDIT_PERIOD_END: String(t),
+    AUDIT_ALL_YEARS: allYrsStr,
+    AUDIT_CY_PREFIX: len > 1 ? 'CYs' : 'CY',
+    AUDIT_CY_PERIOD: (len > 1 ? 'CYs ' : 'CY ') + period,
+    AUDIT_CY_ALL: (len > 1 ? 'CYs ' : 'CY ') + allYrsStr,
+    AUDIT_YEARS_BETWEEN: betweenStr,
+    AUDIT_CY_YEARS_BETWEEN: betweenStr ? ((betweenYrs.length > 1 ? 'CYs ' : 'CY ') + betweenStr) : '',
+    BARANGAY: lgu ? lgu.name : '',
+    MUNICIPALITY: mun ? mun.name : ''
+  };
+
+  auditYears.slice(0, 10).forEach((y, i) => {
+    const yrStr = String(y);
+    res[`AUDIT_YEAR_${i + 1}`] = yrStr;
+    res[`AUDIT_YEAR${i + 1}`] = yrStr;
+    res[`AUDIT_CY_${i + 1}`] = `CY ${yrStr}`;
+    res[`AUDIT_CY${i + 1}`] = `CY ${yrStr}`;
+  });
+
+  return res;
 }
 // Filled in by the app (not typed in the working paper): from Audit Setup, and TABLEn_ITEMS from the AOM Tables.
-export const SETUP_VAR_NAMES = ['PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH', 'BARANGAY', 'MUNICIPALITY', 'TABLE1_ITEMS', 'TABLE2_ITEMS', 'TABLE3_ITEMS', 'TABLE1_COUNT', 'TABLE2_COUNT', 'TABLE3_COUNT', 'TABLE1_YEARS', 'TABLE2_YEARS', 'TABLE3_YEARS', 'TABLE1_PERIOD', 'TABLE2_PERIOD', 'TABLE3_PERIOD', 'TABLE1_PERIOD_START', 'TABLE2_PERIOD_START', 'TABLE3_PERIOD_START', 'TABLE1_PERIOD_END', 'TABLE2_PERIOD_END', 'TABLE3_PERIOD_END', 'TABLE1_PERIOD_LENGTH', 'TABLE2_PERIOD_LENGTH', 'TABLE3_PERIOD_LENGTH'];
-export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT|YEARS|PERIOD(_START|_END|_LENGTH)?)$/.test(n);
+export const SETUP_VAR_NAMES = [
+  'PERIOD_END_YEAR', 'PRIOR_YEAR', 'PRIOR_YEAR_2', 'AUDIT_YEAR', 'AUDIT_PERIOD', 'AUDIT_YEARS', 'PERIOD_LENGTH',
+  'AUDIT_PERIOD_START', 'AUDIT_PERIOD_END', 'AUDIT_ALL_YEARS', 'AUDIT_CY_PREFIX', 'AUDIT_CY_PERIOD', 'AUDIT_CY_ALL',
+  'AUDIT_YEARS_BETWEEN', 'AUDIT_CY_YEARS_BETWEEN',
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap((i) => [`AUDIT_YEAR_${i}`, `AUDIT_YEAR${i}`, `AUDIT_CY_${i}`, `AUDIT_CY${i}`]),
+  'BARANGAY', 'MUNICIPALITY',
+  ...[1, 2, 3].flatMap((n) => [
+    `TABLE${n}_ITEMS`, `TABLE${n}_COUNT`, `TABLE${n}_YEARS`, `TABLE${n}_PERIOD`,
+    `TABLE${n}_PERIOD_START`, `TABLE${n}_PERIOD_END`, `TABLE${n}_PERIOD_LENGTH`,
+    `TABLE${n}_FIRST_YEAR`, `TABLE${n}_LAST_YEAR`, `TABLE${n}_PRIOR_YEAR`,
+    `TABLE${n}_ALL_YEARS`, `TABLE${n}_CY_PREFIX`, `TABLE${n}_CY_PERIOD`, `TABLE${n}_CY_ALL`,
+    `TABLE${n}_YEARS_BETWEEN`, `TABLE${n}_CY_YEARS_BETWEEN`,
+    ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].flatMap((i) => [`TABLE${n}_YEAR_${i}`, `TABLE${n}_YEAR${i}`, `TABLE${n}_CY_${i}`, `TABLE${n}_CY${i}`])
+  ])
+];
+export const isTableVar = (n) => /^TABLE\d+_(ITEMS|COUNT|YEARS|YEARS_BETWEEN|PERIOD|PERIOD_START|PERIOD_END|PERIOD_LENGTH|FIRST_YEAR|LAST_YEAR|PRIOR_YEAR|ALL_YEARS|CY_PREFIX|CY_PERIOD|CY_ALL|CY_YEARS_BETWEEN|YEAR_?\d+|CY_?\d+)$/.test(n);
 // COA style for small numbers: 0 to 9 in words with the numeral, e.g. "two (2)"; 10 and up in numerals.
 const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine'];
 export const countWords = (n) => (n >= 0 && n <= 9 ? `${WORDS[n]} (${n})` : String(n));
@@ -109,14 +157,43 @@ export function tableVars(d) {
       if (m) ys.push(Number(m[0]));
     });
     if (ys.length) {
-      const a = Math.min(...ys), b = Math.max(...ys);
+      const uniqYs = [...new Set(ys)].sort((x, y) => x - y);
+      const a = uniqYs[0], b = uniqYs[uniqYs.length - 1];
       const yrsLabel = a === b ? String(a) : `${a} to ${b}`;
       out[`TABLE${n}_YEARS`]          = yrsLabel;                                       // "2022 to 2024" (kept for existing templates)
       out[`TABLE${n}_PERIOD`]         = yrsLabel;                                       // alias: same value, clearer name
       out[`TABLE${n}_PERIOD_START`]   = String(a);                                      // "2022"
       out[`TABLE${n}_PERIOD_END`]     = String(b);                                      // "2024"
+      out[`TABLE${n}_FIRST_YEAR`]     = String(a);
+      out[`TABLE${n}_LAST_YEAR`]      = String(b);
+      if (uniqYs.length > 1) out[`TABLE${n}_PRIOR_YEAR`] = String(uniqYs[uniqYs.length - 2]);
       const span = b - a + 1;
       out[`TABLE${n}_PERIOD_LENGTH`]  = `${countWords(span)} year${span === 1 ? '' : 's'}`; // "three (3) years"
+
+      // Sequential chronological years: TABLEn_YEAR_1, TABLEn_YEAR_2, ... and TABLEn_CY_1, TABLEn_CY_2, ...
+      uniqYs.slice(0, 10).forEach((y, i) => {
+        const yrStr = String(y);
+        out[`TABLE${n}_YEAR_${i + 1}`] = yrStr;
+        out[`TABLE${n}_YEAR${i + 1}`] = yrStr;
+        out[`TABLE${n}_CY_${i + 1}`] = `CY ${yrStr}`;
+        out[`TABLE${n}_CY${i + 1}`] = `CY ${yrStr}`;
+      });
+
+      // All years listed: e.g. "2020, 2021, 2022, 2023, 2024 and 2025" or "2024"
+      const allYrs = joinAnd(uniqYs.map(String));
+      out[`TABLE${n}_ALL_YEARS`] = allYrs;
+
+      // Smart CY prefixes: "CY 2024" (if 1 year) or "CYs 2020 to 2025" (if multiple years)
+      const isMulti = uniqYs.length > 1;
+      out[`TABLE${n}_CY_PREFIX`] = isMulti ? 'CYs' : 'CY';
+      out[`TABLE${n}_CY_PERIOD`] = `${isMulti ? 'CYs ' : 'CY '}${yrsLabel}`;
+      out[`TABLE${n}_CY_ALL`] = `${isMulti ? 'CYs ' : 'CY '}${allYrs}`;
+
+      // Intermediate years between start and end:
+      const betweenYrs = uniqYs.length > 2 ? uniqYs.slice(1, -1) : [];
+      const betweenStr = betweenYrs.length ? joinAnd(betweenYrs.map(String)) : '';
+      out[`TABLE${n}_YEARS_BETWEEN`] = betweenStr;
+      out[`TABLE${n}_CY_YEARS_BETWEEN`] = betweenStr ? `${betweenYrs.length > 1 ? 'CYs ' : 'CY '}${betweenStr}` : '';
     }
 
   });
@@ -205,6 +282,35 @@ export function titleAmount(n) {
 // A title that already carries an amount (typed, or a money placeholder) does not get it twice.
 export const titleHasAmount = (title) => /₱|\bP\s?\d/.test(String(title || '')) || [...String(title || '').matchAll(/\[([A-Z0-9_]+)\]/g)].some((m) => MONEY.test(m[1]) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(m[1]));
 
+// Grammar normalization for CY (singular) vs CYs (plural) and duplicate CY prefixes
+export function cleanCyText(str) {
+  if (!str || typeof str !== 'string') return str;
+  let s = str.replace(/\b(CYs?)\s+CY\b/gi, '$1');
+  s = s.replace(/\bCYs\s+((?:19|20)\d{2})\b(?!\s*(?:to|and|[-–]|,\s*(?:(?:19|20)\d{2})))/gi, 'CY $1');
+  s = s.replace(/\bCY\s+((?:19|20)\d{2}\s*(?:to|and|[-–]|,)\s*(?:(?:19|20)\d{2}))/gi, 'CYs $1');
+  return s;
+}
+
+export function normalizeCyRuns(runs) {
+  if (!runs || !runs.length) return runs;
+  for (let i = 0; i < runs.length; i++) {
+    const r = runs[i];
+    if (!r || typeof r.t !== 'string') continue;
+    if (i < runs.length - 1 && /\b(CYs?)\s*$/i.test(r.t)) {
+      const nextText = runs.slice(i + 1).map((x) => x.t).join('');
+      if (/^\s*CY\b/i.test(nextText)) {
+        r.t = r.t.replace(/\b(CYs?)\s*$/i, '');
+      } else if (/^\s*(?:19|20)\d{2}\b(?!\s*(?:to|and|[-–]|,\s*(?:19|20)\d{2}))/i.test(nextText)) {
+        r.t = r.t.replace(/\bCYs(\s*)$/i, 'CY$1');
+      } else if (/^\s*(?:19|20)\d{2}\s*(?:to|and|[-–]|,)\s*(?:19|20)\d{2}/i.test(nextText)) {
+        r.t = r.t.replace(/\bCY(\s*)$/i, 'CYs$1');
+      }
+    }
+    r.t = cleanCyText(r.t);
+  }
+  return runs;
+}
+
 // Split text into runs: plain text, filled placeholders and missing placeholders.
 export function fillRuns(text, vars) {
   const out = [];
@@ -222,7 +328,8 @@ export function fillRuns(text, vars) {
     last = re.lastIndex;
   }
   if (last < src.length) out.push({ t: src.slice(last) });
-  return boldMarks(out, src);
+  const bolded = boldMarks(out, src);
+  return normalizeCyRuns(bolded);
 }
 // Words typed between ** marks print in bold, e.g. **draw journal vouchers** (works within one paragraph).
 // A lone ** with no closing mark stays as typed. Plain-text uses (titles, SAOR, Part III) simply drop the marks.
@@ -789,7 +896,10 @@ function runsHTML(runs, mark) {
     let t = escH(r.t).replace(/\t/g, '<span class="tab"></span>');
     if (r.b) t = `<b>${t}</b>`;
     if (mark && r.missing) return `<span class="ph-miss" title="No value yet for ${escH(r.missing)}. Import the working paper or edit this sentence.">${t}</span>`;
-    if (mark && r.filled) return `<span class="ph-fill" title="${SETUP_VAR_NAMES.includes(r.filled) ? 'From Audit Setup' : 'From your working paper'} (${escH(r.filled)})">${t}</span>`;
+    if (mark && r.filled) {
+      const srcDesc = isTableVar(r.filled) ? 'From AOM Table' : SETUP_VAR_NAMES.includes(r.filled) ? 'From Audit Setup' : 'From your working paper';
+      return `<span class="ph-fill" title="${srcDesc} (${escH(r.filled)})">${t}</span>`;
+    }
     return t;
   }).join('');
 }

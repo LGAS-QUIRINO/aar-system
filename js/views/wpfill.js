@@ -16,7 +16,7 @@ const KINDS = ['Amount', 'Number', 'Date', 'Text'];
 /* ── What a finding's working paper needs ── */
 export function wpNeeds(d) {
   const def = d.wpDef || {};
-  const ph = [...new Set([...placeholders(d).filter((n) => !SETUP_VAR_NAMES.includes(n)), ...(def.ph || []).map((p) => p.name)])];
+  const ph = [...new Set([...placeholders(d).filter((n) => !SETUP_VAR_NAMES.includes(n) && !isTableVar(n)), ...(def.ph || []).map((p) => p.name)])];
   const tn = [...new Set([...(d.blocks || []).filter((b) => b.type === 'table' && !isFixedTable(b)).map((b) => Number(b.n) || 1), ...(def.tables || []).map((t) => t.n)])].sort((a, b) => a - b);
   return { ph, tn, def };
 }
