@@ -8,7 +8,7 @@ import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
 import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { has, myTeamIds, viewOnly } from '../refs.js';
-import { aomPreviewHTML, checksHTML, commentsHTML } from './aoms.js';
+import { aomPreviewHTML, checksHTML, commentsHTML, reviewTrailDialog } from './aoms.js';
 import { baarQueue } from './baarreview.js';
 import { saorQueue } from './saorreview.js';
 
@@ -172,7 +172,7 @@ export async function review(refs, params, q) {
       <a class="btn sm ghost" href="${i < list.length - 1 ? link(list[i + 1].id, view) : '#'}" ${i < list.length - 1 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Next AOM">›</a>
       <span class="hint">Single document editor · Click text to correct · Select text or a table cell to comment</span>
       ${view === 'review' ? '<div class="rv-nav" id="rv-nav"></div>' : ''}
-      <a class="btn sm ghost" style="margin-left:auto" href="#/audits/${ctx.rec.id}/aoms">Review History / Word</a><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/print?draft=1">Official Word / Print</a></div>`;
+      <a class="btn sm ghost" style="margin-left:auto" href="#" id="r-history">Review History / Word</a><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/print?draft=1">Official Word / Print</a></div>`;
   const body = view === 'review' ? `${head}
     <div class="panel" style="padding:10px 16px;flex-direction:row;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="mono" style="font-weight:600">${esc(aomNoText)}</span> · <b>${esc(fillText(cur.data.title, ctx.varsFor(cur)))}</b>
       <span class="hint">${esc(cur.data.poolCode || 'Not in Library')} · ${esc(cur.data.mode || 'Standard')}</span>
@@ -232,6 +232,7 @@ export async function review(refs, params, q) {
       if (lib) lib.onclick = () => updateFromAom(refs, cur, ctx.varsFor(cur), 'AOM No. ' + aomNoText + ' · ' + ctx.lgu.name);
       const vb = $('#r-var', root);
       if (vb) vb.onclick = () => variantFromAom(refs, cur, ctx.varsFor(cur), 'AOM No. ' + aomNoText + ' · ' + ctx.lgu.name);
+      $('#r-history',root)?.addEventListener('click',e=>{e.preventDefault();reviewTrailDialog(ctx,refs,list,N,cur.id);});
       let pane = null;
       if (view === 'review') {
         pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, navEl: $('#rv-nav', root),
