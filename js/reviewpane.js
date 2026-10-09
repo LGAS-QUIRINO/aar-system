@@ -87,7 +87,9 @@ export function mountReview(host, opts) {
 
     const partHTML = (blockId, before, after, k, cls, pre, letter, ini) => {
       // Paragraphs within a part are set apart by a blank line, as printed.
-      const html = /\b(quote|body)\b/.test(cls) ? inner(blockId, before, after, k).replace(/<br>/g, '<br><span class="pgap"></span>') : inner(blockId, before, after, k);
+      // A single newline is a line break, not a new paragraph with added spacing.
+      // Consecutive newlines retain intentional blank lines from the source text.
+      const html = inner(blockId, before, after, k);
       const changed = before !== after;
       return `<p class="${cls} ${canEditPart(k)?'rv-editable':''}" data-b="${blockId}" data-part="${k}" ${canEditPart(k)?'title="Click to edit wording" tabindex="0"':''}>${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
     };
