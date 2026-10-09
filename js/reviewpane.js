@@ -227,9 +227,9 @@ export function mountReview(host, opts) {
         keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
       }
       if (b.type === 'table') html += tableHTML(b, id);
-      // Block-type label: shown above each block so reviewers can orient themselves (omit for tables since rv-thead already labels them).
-      const bTypeLabel = b.type !== 'table' ? (BLOCK_LABELS[b.type] || '') : '';
-      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${bTypeLabel ? `<div class="rv-btype">${esc(bTypeLabel)}</div>` : ''}${b.label ? `<div class="rv-flabel">${esc(b.label)}</div>` : ''}${html}</div>`);
+      // Internal preparation labels never form part of the issued AOM.
+      // Keep the block ID for anchored comments and direct text editing.
+      docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${html}</div>`);
       const label = b.label || BLOCK_LABELS[b.type] || 'Block';
       if (base && (!old || !cur || blockPlain(old) !== blockPlain(cur))) correctionCard(id, label, fill(old ? blockPlain(old) : ''), fill(cur ? blockPlain(cur) : ''), !old ? 'added' : !cur ? 'removed' : '');
       (byBlock[id] || []).sort((a, c) => (found[a.id] ?? 1e9) - (found[c.id] ?? 1e9)).forEach(commentCard);
