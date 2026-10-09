@@ -57,6 +57,8 @@ export function mountReview(host, opts) {
   let items = [];
   let editing = null;
   let saving = false;
+  let cleanCopy = false;
+  let commentsVisible = true;
   const tokenRE = /\[[A-Z][A-Z0-9_]*(?::[^\]]+)?\]/g;
   const canEditPart = (k) => opts.canAct && !k.startsWith('cell:') && !k.startsWith('text_yr_') && k !== 'table';
   const rawPart = (id,k) => id === '_title' ? data.title : partVal(data.blocks.find(b=>b.id===id),k);
@@ -238,7 +240,7 @@ export function mountReview(host, opts) {
     const newCard = draft && !draft.corr ? `<div class="rv-card cmt on new" data-key="_new"><div class="who"><span class="ini">${esc(initials(me.name))}</span><b>New Comment</b></div>
       <div class="quote">${draft.part === 'table' ? esc(draft.quote) : `${draft.where ? esc(draft.where) + ': ' : ''}“${esc(short(draft.quote, 120))}”`}</div>${draftBox('Type your comment')}</div>` : '';
 
-    host.innerHTML = `<div class="rv-work">
+    host.innerHTML = `<div class="rv-toolbar"><button class="btn sm ghost" data-ui="clean">${cleanCopy ? "Show Changes" : "Clean Document"}</button><button class="btn sm ghost" data-ui="comments">${commentsVisible ? "Hide Comments" : "Show Comments"}</button><span class="hint">Select text to comment; click a paragraph to edit</span></div><div class="rv-work ${cleanCopy ? "rv-clean" : ""} ${commentsVisible ? "" : "rv-comments-hidden"}">
       <div class="rv-doc" id="rv-doc"><div class="rv-edit-hint">${opts.canAct ? 'Click a paragraph to edit; select words to comment. Working-paper tables are protected.' : 'Read-only document'}</div>${docParts.join('')}
         ${opts.canAct ? '<button class="btn sm primary rv-float" id="rv-float" hidden>💬 Comment</button>' : ''}</div>
       <aside class="rv-margin" id="rv-margin"><h3>Comments and Corrections</h3>
@@ -338,6 +340,8 @@ export function mountReview(host, opts) {
     }finally{saving=false;}
   }
   host.addEventListener('click', async (e) => {
+    const ui=e.target.closest('[data-ui]');
+    if(ui){if(ui.dataset.ui==='clean')cleanCopy=!cleanCopy;else commentsVisible=!commentsVisible;render();return;}
     const nav = e.target.closest('[data-nav]');
     const btn = e.target.closest('[data-act]');
     if (btn) {
