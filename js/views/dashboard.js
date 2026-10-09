@@ -8,8 +8,11 @@ export const STAGES = ['Setup', 'Financial Statements', 'Findings and AOMs', 'AO
 
 export async function auditRows(refs) {
   const teams = myTeamIds(refs.me, refs.teams);
-  const all = (await store.list('audits')).filter((a) => teams.includes(a.data.teamId) && !a.data.imported);
-  const mine = has(refs.me, 'member') && !has(refs.me, 'sa') && !has(refs.me, 'atl') ? all.filter((a) => a.data.memberId === refs.me.id) : all;
+  const [allAudits, aoms] = await Promise.all([store.list('audits'), store.list('aoms')]);
+  const all = allAudits.filter((a) => teams.includes(a.data.teamId) && !a.data.imported);
+  const mine = has(refs.me, 'member') && !has(refs.me, 'sa') && !has(refs.me, 'atl')
+    ? all.filter((a) => a.data.memberId === refs.me.id || aoms.some((x) => x.data.auditId === a.id && x.data.memberId === refs.me.id) || !a.data.memberId)
+    : all;
   return mine.map((a) => ({ rec: a, lgu: refs.lgu[a.data.lguId], mun: refs.lgu[(refs.lgu[a.data.lguId] || {}).data?.parentId] }))
     .sort((x, y) => (y.rec.data.auditYear - x.rec.data.auditYear) || String(x.lgu?.data.name).localeCompare(String(y.lgu?.data.name)));
 }
