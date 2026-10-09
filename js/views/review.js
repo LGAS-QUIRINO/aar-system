@@ -5,7 +5,7 @@ import { updateFromAom, variantFromAom } from './library.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
+import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot, buildLetter, paraHTML } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { has, myTeamIds, viewOnly } from '../refs.js';
 import { aomPreviewHTML, checksHTML, commentsHTML, reviewTrailDialog } from './aoms.js';
@@ -119,16 +119,17 @@ export async function review(refs, params, q) {
   if (!ctx) return { active: '#/review', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
   const me = refs.me;
   const iAmATL = ctx.team.atlUserId === me.id, iAmSA = ctx.team.saUserId === me.id;
-  // The document editor is strictly the logged-in reviewer's active queue.
-  // Final, returned, draft, and other reviewers' AOMs are not review items.
+  // Default to only documents assigned for action. Reference mode shows all
+  // AOMs in this audit without changing their existing editing permissions.
   const mineNow = (a) => ((a.data.status === ST.WITH_ATL || a.data.status === ST.ATL) && iAmATL) || ((a.data.status === ST.WITH_SA || a.data.status === ST.SA) && iAmSA);
-  const list = ctx.aoms.filter(mineNow);
-  if (!list.length) return { active: '#/review', crumbs: '<a href="#/review">For My Review</a> / <b>' + esc(ctx.title) + '</b>', body: '<section class="panel"><div class="empty">No AOMs currently assigned to you for review. Final and previously reviewed AOMs remain available in the AOM records.</div><div class="panel-body"><a class="btn ghost" href="#/review">Back to For My Review</a></div></section>' };
-  let cur = list.find((a) => a.id === q.get('aom')) || list[0];
+  const scope = q.get('scope') === 'all' ? 'all' : 'mine';
+  const pending = ctx.aoms.filter(mineNow);
+  const list = scope === 'all' ? ctx.aoms : pending;
+  if (!list.length) return { active: '#/review', crumbs: '<a href="#/review">For My Review</a> / <b>' + esc(ctx.title) + '</b>', body: '<section class="panel"><div class="panel-body"><div class="empty">No AOMs currently assigned to you for review.</div><a class="btn ghost" href="#/review/' + encodeURIComponent(ctx.rec.id) + '?scope=all">View All AOMs</a></div></section>' };
+  let cur = list.find((a) => a.id === q.get('aom')) || list.find(mineNow) || list[0];
   const i = list.indexOf(cur);
   const view = 'review';
   ensureIds(cur.data);
-
   // Opening an AOM starts the review.
   const s0 = cur.data.status;
   if ((s0 === ST.WITH_ATL && iAmATL) || (s0 === ST.WITH_SA && iAmSA)) {
@@ -161,7 +162,7 @@ export async function review(refs, params, q) {
   const willFinal = iAmSA || ctx.oneStep;
   const pendingMine = list.filter((a) => a.id !== cur.id && ((a.data.status === ST.ATL || a.data.status === ST.WITH_ATL) && iAmATL || (a.data.status === ST.SA || a.data.status === ST.WITH_SA) && iAmSA));
   const counts = { approved: list.filter((a) => (iAmATL && !iAmSA ? [ST.WITH_SA, ST.SA, ST.FINAL] : [ST.FINAL]).includes(a.data.status)).length };
-  const link = (id, v) => `#/review/${ctx.rec.id}?aom=${id}${v ? '&view=' + v : ''}`;
+  const link = (id, v) => `#/review/${ctx.rec.id}?scope=${scope}&aom=${id}${v ? '&view=' + v : ''}`;
 
   const aomNoText = aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
   const head = `<div class="page-head"><div><h1>Barangay ${esc(ctx.lgu.name)} · AOM Nos. ${esc(range)}</h1>
@@ -169,6 +170,7 @@ export async function review(refs, params, q) {
       <div class="btn-row">${pill(s, statusPill(s))}</div></div>
     ${cur.data.forwardNote && s !== ST.FINAL ? `<div class="note info"><span><b>Note from ${esc(fwdBy)}</b> · ${esc(when(cur.data.forwardedAt))}: ${esc(cur.data.forwardNote)}</span></div>` : ''}
     <div class="panel rv-bar">
+      <div class="seg" role="group" aria-label="AOM review filter"><a class="${scope === 'mine' ? 'on' : ''}" href="#/review/${ctx.rec.id}?scope=mine">For My Review (${pending.length})</a><a class="${scope === 'all' ? 'on' : ''}" href="#/review/${ctx.rec.id}?scope=all">All AOMs (${ctx.aoms.length})</a></div>
       <a class="btn sm ghost" href="${i > 0 ? link(list[i - 1].id, view) : '#'}" ${i > 0 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Previous AOM">‹</a>
       <b>AOM ${i + 1} of ${list.length}</b>
       <a class="btn sm ghost" href="${i < list.length - 1 ? link(list[i + 1].id, view) : '#'}" ${i < list.length - 1 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Next AOM">›</a>
@@ -237,7 +239,10 @@ export async function review(refs, params, q) {
       $('#r-history',root)?.addEventListener('click',e=>{e.preventDefault();reviewTrailDialog(ctx,refs,list,N,cur.id);});
       let pane = null;
       if (view === 'review') {
-        pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, navEl: $('#rv-nav', root),
+        const doc = buildLetter({ audit: ctx.audit, lgu: ctx.lgu, mun: ctx.mun, team: ctx.team, atl: ctx.atl, sa: ctx.sa, aoms: [cur], nums: ctx.nums, varsFor: ctx.varsFor, draft: s !== ST.FINAL });
+        const introEnd = doc.body.findIndex(p => p.runs && p.runs.some(r => String(r.t || '').includes('observed the following deficiencies:')));
+        const preface = (introEnd >= 0 ? doc.body.slice(0, introEnd + 1) : doc.body.slice(0, 12)).map(p => paraHTML(p, false)).join('');
+        pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, preface, navEl: $('#rv-nav', root),
           onChange: (d) => { const c = reviewCounts(clone(d)); $('#rv-counts', root).innerHTML = (c.corrections ? pill(c.corrections + ' correction' + (c.corrections > 1 ? 's' : ''), 'grey') : '') + (c.comments ? pill(c.comments + ' comment' + (c.comments > 1 ? 's' : ''), 'grey') : ''); } });
       }
       if (!reviewing) return;
