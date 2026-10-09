@@ -124,7 +124,7 @@ export async function review(refs, params, q) {
   if (!list.length) return { active: '#/review', crumbs: '<a href="#/review">For My Review</a> / <b>' + esc(ctx.title) + '</b>', body: '<section class="panel"><div class="empty">No AOMs of this Barangay are in review.</div></section>' };
   let cur = list.find((a) => a.id === q.get('aom')) || list.find(mineNow) || list[0];
   const i = list.indexOf(cur);
-  const view = ['edit', 'page'].includes(q.get('view')) ? q.get('view') : 'review';
+  const view = 'review';
   ensureIds(cur.data);
 
   // Opening an AOM starts the review.
