@@ -319,7 +319,7 @@ export function mountReview(host, opts) {
     const id=p.dataset.b,k=p.dataset.part,value=String(rawPart(id,k)||'');
     const box=document.createElement('textarea');
     box.className='input be-text rv-inline-editor';box.value=value;
-    box.rows=Math.max(2,Math.min(14,value.split('\\n').length+Math.ceil(value.length/100)));
+    box.rows=Math.max(2,Math.min(14,value.split('\n').length+Math.ceil(value.length/100)));
     p.replaceWith(box);editing={id,k,value,box};box.focus();
     setDirty(true,async()=>{await commitInline();return true;});
     box.addEventListener('keydown',e=>{if(e.key==='Escape'){editing=null;setDirty(false);render();}});
@@ -332,8 +332,9 @@ export function mountReview(host, opts) {
     if(!sameTokens(e.value,v)){toast('Working-paper placeholders are protected. Update their source instead.','warn');e.box.focus();return;}
     saving=true;
     try{
+      editing=null;
       await act(d=>{putPart(d,e.id,e.k,v);d.editedBy={...(d.editedBy||{}),[e.id]:me.email};},'Edited AOM wording during review');
-      editing=null;setDirty(false);toast('Correction saved.','ok');
+      setDirty(false);toast('Correction saved.','ok');
     }finally{saving=false;}
   }
   host.addEventListener('click', async (e) => {
