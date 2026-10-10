@@ -17,6 +17,7 @@ export async function findings(refs, params, q) {
   const allAoms = await store.list('aoms');
   let F = null; try { F = await loadFS(ctx); } catch (e) { F = null; }
   const wpMode = {};   // finding id → 'fill' | 'import'
+  const detailTabs = {};
 
   // Working list (saved on Save only)
   const items = ctx.aoms.map((a) => ({ id: a.id, data: clone(a.data), orig: JSON.stringify(a.data) }));
@@ -57,8 +58,16 @@ export async function findings(refs, params, q) {
           <span><select class="input" style="height:36px" data-sec="${i}" aria-label="Part II Section" ${canEdit && !lock ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${d.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></span>
           <span>${w.k === 'ok' ? pill('✓ ' + w.t, 'ok') : w.k === 'none' ? pill(w.t, 'grey') : w.k === 'warn' ? pill(w.t, 'warn') : `<button class="btn sm ghost" data-imp="${it.id}">${esc(w.t)}</button>`}</span>
           <span>${canEdit && !lock ? `<button class="x sm" data-rm="${i}" aria-label="Remove ${esc(d.title)}" title="Remove">✕</button>` : ''}</span></div>
-          ${it.id === sel ? `<div class="panel" style="margin:0 12px 14px;border:1px solid var(--line);border-radius:10px"><div class="panel-body" style="padding:8px 14px"><b>Working Paper</b> · <span class="hint">${esc(w.t)}</span></div><div id="f-inline-wp">${wpPanelHTML()}</div></div>` : ''}`;
+          ${it.id === sel ? `<div class="panel" style="grid-column:1/-1;margin:10px 0 0;border:1px solid var(--line);border-radius:10px" data-finding-details="${it.id}"><div class="panel-body"><div class="seg" role="group" aria-label="Finding details">${["Overview","AOM Tables","Working Paper"].map((name,j)=>`<button type="button" class="${(detailTabs[it.id]||"Working Paper")===name?"on":""}" data-detail-tab="${name}">${name}</button>`).join("")}</div></div><div id="f-inline-wp">${detailContent(it,n)}</div></div>` : ''}`;
       }).join('') || '<div class="empty">No findings yet. Click <b>+ Add</b> on a template from the AOM Library.</div>'}`;
+  }
+
+  function detailContent(it,n) {
+    const d=it.data, tab=detailTabs[it.id]||'Working Paper';
+    if(tab==='Working Paper') return wpPanelHTML();
+    if(tab==='Overview') return '<div class="panel-body"><div class="kv"><div><span>AOM Number</span><b>'+esc(aomNo(audit.auditYear,n.n,audit.periodFrom,audit.periodTo))+'</b></div><div><span>Review Status</span><b>'+esc(d.status||'Draft')+'</b></div><div><span>Part II</span><b>'+esc(SECTIONS[d.section]||'—')+'</b></div><div><span>Working Paper</span><b>'+esc(wpState(it).t)+'</b></div></div></div>';
+    const tables=(d.blocks||[]).filter(b=>b.type==='table');
+    return '<div class="panel-body"><h3>AOM Tables · '+tables.length+'</h3>'+tables.map(b=>{const t=(d.wpData?.tables||{})[b.n];return '<div class="t-row" style="grid-template-columns:1fr auto"><span><b>Table '+esc(b.n)+'</b><br><small class="hint">'+(t?.rows?.length ? t.rows[0].length+' columns · '+(t.rows.length-1)+' rows' : 'No data yet')+'</small></span><button class="btn sm ghost" type="button" data-detail-tab="Working Paper">Edit in Working Paper</button></div>';}).join('')+'<p class="hint">Existing working-paper data and table placement are retained.</p></div>';
   }
 
   function wpPanelHTML() {
@@ -151,10 +160,12 @@ export async function findings(refs, params, q) {
         }
         const imp = e.target.closest('[data-imp]');
         if (imp) { e.stopPropagation(); sel = imp.dataset.imp; wpMode[sel] = 'import'; redraw(); const f = $('#wp-file', root); if (f) f.click(); return; }
+        const dt = e.target.closest('[data-detail-tab]');
+        if(dt && sel){ detailTabs[sel]=dt.dataset.detailTab; $('#f-sel',root).innerHTML=selectedHTML(); wireWp(); return; }
         const row = e.target.closest('[data-sel]');
         if (row && !e.target.closest('select,button,input')) { sel = sel === row.dataset.sel ? null : row.dataset.sel; $('#f-sel', root).innerHTML = selectedHTML(); wireWp(); }
         const md = e.target.closest('[data-wpmode]');
-        if (md && sel) { wpMode[sel] = md.dataset.wpmode; $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
+        if (md && sel) { wpMode[sel] = md.dataset.wpmode; $('#f-sel', root).innerHTML = selectedHTML(); wireWp(); }
       });
       root.addEventListener('change', (e) => {
         const s = e.target.closest('[data-sec]');
