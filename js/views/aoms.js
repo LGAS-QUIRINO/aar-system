@@ -66,7 +66,7 @@ export async function aoms(refs, params, q) {
   // Once submitted, always use the unified document pane. The former Edit
   // Text tab is removed; lock/edit permissions still follow the AOM status.
   const forwarded = !!cur.data.submitted;
-  const isReview = forwarded;
+  const isReview = true; // one document interface for all AOM statuses
   const toggle = '';
   const aomNoText = aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
   const userName = (e) => nice(refs.users.find((u) => u.data.email === e)?.data.name || e || '');
@@ -81,9 +81,9 @@ export async function aoms(refs, params, q) {
     <div class="panel rv-bar">${toggle}<div class="rv-nav" id="rv-nav"></div>
       <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="a-trail" type="button">Review Trail</button>${prevA ? `<a class="btn sm ghost" href="${aomLink(prevA)}">‹ Previous AOM</a>` : ''}<span class="hint">AOM ${idx + 1} of ${list.length}</span>${nextA ? `<a class="btn sm ghost" href="${aomLink(nextA)}">Next AOM ›</a>` : ''}</span></div>
     <div id="rv-host"></div>
-    ${s === ST.RETURNED && editable ? `<div class="panel rv-foot"><div id="rv-block" style="max-width:260px"></div>
+    ${[ST.DRAFT, ST.RETURNED].includes(s) && editable ? `<div class="panel rv-foot"><div id="rv-block" style="max-width:260px"></div>
       <textarea class="input" id="rv-note" aria-label="Note to the ${esc(reviewerName)}" placeholder="Note to the ${esc(reviewerName)} (optional), e.g. Kept the amount, see my reply on the topic sentence.">${esc(cur.data.forwardNoteDraft || '')}</textarea>
-      <button class="btn ghost" id="rv-save">Save</button><button class="btn success" id="rv-fwd">Forward Again to ${esc(reviewerName)}</button></div>` : ''}`;
+      <button class="btn ghost" id="rv-save">Save</button><button class="btn success" id="rv-fwd">${s === ST.RETURNED ? "Forward Again" : "Forward"} to ${esc(reviewerName)}</button>${s === ST.DRAFT && sendable.length > 1 ? `<button class="btn ghost" id="rv-fwd-all">Forward All ${sendable.length} as Batch →</button>` : ""}</div>` : ''}`;
 
   const body = isReview ? reviewBody : `${stepsBar(ctx, 'AOM Review')}
     <div class="page-head"><div><h1>Barangay ${esc(ctx.lgu.name)} AOMs</h1><p>${list.length} AOM${list.length > 1 ? 's' : ''} · ${esc(first === last ? aomNo(ctx.audit.auditYear, first, ctx.audit.periodFrom, ctx.audit.periodTo) : aomRange(ctx.audit.auditYear, first, last, ctx.audit.periodFrom, ctx.audit.periodTo))} ${nc.ok ? '' : '· <b style="color:var(--bad-ink)">Numbering has gaps or duplicates</b>'}</p></div>
@@ -120,7 +120,7 @@ export async function aoms(refs, params, q) {
       const tr = $('#a-trail', root);
       if (tr) tr.onclick = () => reviewTrailDialog(ctx, refs, list, N, cur.id);
       if (isReview) {
-        const canAct = editable && s === ST.RETURNED;
+        const canAct = editable && [ST.DRAFT, ST.RETURNED].includes(s);
         const foot = (d) => {
           const n = openComments(d, refs.me.email).length;
           const bl = $('#rv-block', root), fw = $('#rv-fwd', root);
@@ -139,15 +139,41 @@ export async function aoms(refs, params, q) {
         };
         if (note) note.oninput = () => setDirty(true, saveNote);
         const sb = $('#rv-save', root); if (sb) sb.onclick = async () => { await saveNote(); toast('Saved.', 'ok'); };
-        const fb = $('#rv-fwd', root);
-        if (fb) fb.onclick = async () => {
-          await saveNote();
-          const fresh = await store.get('aoms', cur.id);
-          state.aom = ensureIds(clone(fresh.data));
-          const n = openComments(state.aom, refs.me.email).length;
-          if (n) { toast(`Answer or mark resolved ${n} comment${n > 1 ? 's' : ''} first.`, 'bad'); foot(state.aom); return; }
-          await forward([cur], note ? note.value.trim() : '');
+        const forwardUnified = async (recs, noteText = '') => {
+          if (!(await saveNote())) return;
+          const freshList = [];
+          for (const a of recs) {
+            const latest = await store.get('aoms', a.id);
+            if (!latest) { toast('Unable to load AOM for forwarding.', 'bad'); return; }
+            freshList.push({ ...a, data: ensureIds(clone(latest.data)) });
+          }
+          const blocked = freshList.filter(a => openComments(a.data, refs.me.email).length);
+          if (blocked.length) { toast('Answer or resolve every open comment before forwarding.', 'bad'); return; }
+          const problems = freshList.filter(a => allChecks(a, a.data).some(c => c.st === 'bad'));
+          if (problems.length) { toast('Fill missing working-paper values or tables before forwarding.', 'bad'); return; }
+          if (!(await confirmBox('Forward for Review', `Forward ${freshList.length} AOM${freshList.length > 1 ? 's' : ''} to ${esc(nice(ctx.atl ? ctx.atl.name : 'the reviewer'))}?`, 'Forward', 'success'))) return;
+          const now = new Date().toISOString();
+          for (const a of freshList) {
+            const d = a.data, again = d.status === ST.RETURNED;
+            d.status = ST.WITH_ATL; d.forwardedAt = now; d.forwardedBy = refs.me.email;
+            d.submitted = d.returnedVersion ? clone(d.returnedVersion) : { title:d.title, blocks:clone(d.blocks) };
+            delete d.returnedVersion;
+            stampEdits(d,d,refs.me.email,{prune:true});
+            const n = a.id === cur.id ? noteText : (d.forwardNoteDraft || '');
+            d.forwardNote = n; delete d.forwardNoteDraft;
+            d.history = [...(d.history || []),{at:now,by:refs.me.email,action:(again?'Forwarded again after corrections':'Forwarded for review')+(n?': '+n:'')}];
+            snapshot(d,again?'Member revision, forwarded again':'Draft forwarded for review',refs.me.email);
+            await store.save('aoms',a.id,d,{silent:true});
+          }
+          await advanceStage(ctx,'AOM Review');
+          await store.log('forwarded AOMs for review',`${ctx.lgu.name} · ${freshList.length}`,ctx.teamId,refs.me.email);
+          setDirty(false); emitChange('local'); toast(`Forwarded ${freshList.length} AOM${freshList.length>1?'s':''}.`,'ok');
+          location.hash = `#/audits/${ctx.rec.id}/aoms?aom=${cur.id}`;
         };
+        const fb = $('#rv-fwd', root);
+        if (fb) fb.onclick = () => forwardUnified([cur],note?.value.trim() || '');
+        const batch = $('#rv-fwd-all',root);
+        if (batch) batch.onclick = () => forwardUnified(sendable,note?.value.trim() || '');
         return;
       }
       if (!editable && s !== ST.WITH_ATL) return;
