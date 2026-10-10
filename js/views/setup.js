@@ -42,7 +42,7 @@ export async function setup(refs, params) {
     const name = String(refs.lgu[munId]?.data.municipalAccountant || '').trim();
     if (!name || !isNew) return;
     const accountant = s.officials.find(o => /^Municipal Accountant$/i.test(String(o.pos || '').trim()));
-    if (accountant && !String(accountant.name || '').trim()) accountant.name = name;
+    if (accountant && !String(accountant.name || '').trim()) { accountant.name = name.replace(/^(Hon\.|Mr\.|Ms\.|Mrs\.|Atty\.|Engr\.|Dr\.)\s+/i, ''); accountant.title = refs.lgu[munId]?.data.municipalAccountantTitle || (name.match(/^(Hon\.|Mr\.|Ms\.|Mrs\.|Atty\.|Engr\.|Dr\.)\s+/i)||[])[1] || accountant.title; }
   };
   const prevAudit = (lguId) => allAudits.filter((a) => a.data.lguId === lguId && Number(a.data.auditYear) < Number(s.auditYear) && a.id !== params.id)
     .sort((a, b) => b.data.auditYear - a.data.auditYear)[0];
