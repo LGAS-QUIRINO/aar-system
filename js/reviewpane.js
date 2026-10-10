@@ -3,7 +3,7 @@
 // Red strikethrough = removed, green underline = added (with initials), yellow = words someone commented on.
 import { store, emitChange } from './store.js';
 import { esc, toast, setDirty } from './ui.js';
-import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, tableLayout, isYearHead, yearGroups } from './aom.js';
+import { BLOCK_LABELS, clone, diffWords, fillText, letterOf, ensureIds, answered, blockPlain, topicVars, tableData, tableLayout, isYearHead, yearGroups, isSplitTable, tableRowsForYear } from './aom.js';
 import { initials, nice } from './format.js';
 
 const br = (h) => h.replace(/\n/g, '<br>');
@@ -94,9 +94,11 @@ export function mountReview(host, opts) {
       return `<p class="${cls} ${canEditPart(k)?'rv-editable':''}" data-b="${blockId}" data-part="${k}" ${canEditPart(k)?'title="Click to edit wording" tabindex="0"':''}>${letter ? `<span class="lt">${letter}</span>` : ''}${pre ? esc(pre) : ''}${html || '&nbsp;'}${changed && ini ? `<span class="ini" title="Changed by ${esc(nameOf(data.editedBy?.[blockId] || ''))}">${esc(ini)}</span>` : ''}</p>`;
     };
     // The working-paper table, cell by cell, so a number or a name in any cell can be commented on.
-    const tableHTML = (b, id) => {
-      const t = tableOf(b);
-      const head = `<div class="rv-thead"><span>AOM Table ${esc(b.n || 1)}${b.annex ? ' · printed as an annex' : ''}${t ? ' · from sheet “' + esc(t.sheet || '') + '”' : ''}</span>
+    const tableHTML = (b, id, year = null) => {
+      const source = tableOf(b);
+      const t = year && source ? { ...source, rows: tableRowsForYear(source, b, vars, year) } : source;
+      if (year && (!t?.rows || t.rows.length < 2)) return '';
+      const head = `<div class="rv-thead rv-review-control"><span>${year ? 'CY ' + esc(year) + ' · ' : ''}Protected working-paper table</span>
         ${opts.canAct && t ? `<button class="btn sm ghost" data-act="tblc" data-b="${id}">💬 Comment on this table</button>` : ''}</div>`;
       if (!t) return head + '<p class="tbl">[Not imported yet. Import the working paper on the Findings screen.]</p>';
       const num = (c) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(c ?? '').trim());
@@ -213,7 +215,8 @@ export function mountReview(host, opts) {
       const keys = partsOf(b);
       if (cur && old && cur.type === 'recommendation') partsOf(old).forEach((p) => { if (!keys.some((x) => x.k === p.k)) keys.push(p); });
       let html = '';
-      // Per-year blocks: expand one lettered paragraph per year group, exactly as the print view does.
+      // Per-year narratives must display their respective tables immediately
+      // underneath, matching the official AOM's split-table placement.
       if (b.perYear) {
         const groups = yearGroups(data, Number(b.perYearTable) || 1);
         const rawOld = old ? (old.text || '').replace(/\s*\n\s*/g, ' ').trim() : '';
@@ -222,6 +225,11 @@ export function mountReview(host, opts) {
           groups.forEach((g, gi) => {
             const mv = { ...vars, ...g };
             html += partHTML(id, rawOld ? fillText(rawOld, mv) : '', rawCur ? fillText(rawCur, mv) : '', 'text_yr_' + gi, 'item', null, letterOf(gi) + '.', gi === 0 ? ini : '');
+            const tbl = data.blocks.find(x => x.type === 'table' && (Number(x.n) || 1) === (Number(b.perYearTable) || 1));
+            if (tbl && !tbl.annex && isSplitTable(data, tbl)) {
+              const table = tableHTML(tbl, tbl.id, g.YEAR);
+              if (table) html += '<div class="rv-split-table">' + table + '</div>';
+            }
           });
         } else {
           html += partHTML(id, fill(rawOld), fill(rawCur), 'text', 'body', '', '', ini);
@@ -229,7 +237,7 @@ export function mountReview(host, opts) {
       } else {
         keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
       }
-      if (b.type === 'table') html += tableHTML(b, id);
+      if (b.type === 'table' && !(isSplitTable(data, b) && !b.annex && data.blocks.some(x => x.perYear && (Number(x.perYearTable) || 1) === (Number(b.n) || 1)) && yearGroups(data, Number(b.n) || 1).length)) html += tableHTML(b, id);
       // Internal preparation labels never form part of the issued AOM.
       // Keep the block ID for anchored comments and direct text editing.
       docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${html}</div>`);
