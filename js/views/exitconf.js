@@ -106,7 +106,7 @@ export async function exitconf(refs, params, q) {
         const id = `exit-${munId}-${year}-${n}-${Date.now().toString(36)}`;
         const auditIds = list.filter((a) => status(a).allFinal && !inLetter(a.id)).map((a) => a.id);
         await store.save('letters', id, { type: 'exit', teamId, munId, auditYear: year, n, auditIds, letterDate: '', confDate: '', time: '10:00 in the morning', venue: '',
-          addrName: mun.abcPresident || '', addrPos: 'ABC President', salutation: mun.abcSalutation || 'Dear Sir:', ...Object.fromEntries(WORDING_KEYS.map((k) => [k, standard[k]])), createdBy: me.email, createdAt: new Date().toISOString() }, { silent: true });
+          addrName: [mun.abcPresidentTitle || '', mun.abcPresident || ''].filter(Boolean).join(' '), addrPos: 'ABC President', salutation: mun.abcSalutation || 'Dear Sir:', ...Object.fromEntries(WORDING_KEYS.map((k) => [k, standard[k]])), createdBy: me.email, createdAt: new Date().toISOString() }, { silent: true });
         await store.log('made an exit conference letter', `${mun.name} · Letter ${n}`, teamId, me.email);
         setDirty(false); location.hash = go({ l: id });
       };
