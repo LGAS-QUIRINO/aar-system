@@ -63,17 +63,16 @@ export async function aoms(refs, params, q) {
       : s === ST.FINAL ? '<div class="note ok">Final. The AOM number is locked. Only the Supervising Auditor can reopen it.</div>'
         : !draftLike(cur) ? `<div class="note info">${esc(s)}. You can view it while it is being reviewed.</div>` : '';
 
-  // Review View (Word-style corrections and comments) once the AOM has been forwarded at least once.
+  // Once submitted, always use the unified document pane. The former Edit
+  // Text tab is removed; lock/edit permissions still follow the AOM status.
   const forwarded = !!cur.data.submitted;
-  const view = q.get('view') || (s === ST.RETURNED ? 'review' : 'edit');
-  const isReview = forwarded && view === 'review';
-  const vlink = (v) => `#/audits/${ctx.rec.id}/aoms?aom=${cur.id}&view=${v}`;
-  const toggle = forwarded ? `<div class="seg" role="group" aria-label="View"><a class="${isReview ? 'on' : ''}" href="${vlink('review')}">Review View</a><a class="${isReview ? '' : 'on'}" href="${vlink('edit')}">Edit Text</a></div>` : '';
+  const isReview = forwarded;
+  const toggle = '';
   const aomNoText = aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
   const userName = (e) => nice(refs.users.find((u) => u.data.email === e)?.data.name || e || '');
   const countPills = (d) => { const c = reviewCounts(clone(d)); return `${c.corrections ? pill(c.corrections + ' correction' + (c.corrections > 1 ? 's' : ''), 'grey') : ''} ${c.comments ? pill(`${c.comments} comment${c.comments > 1 ? 's' : ''} · ${c.answered} answered or resolved`, 'grey') : ''}`; };
   const prevA = list[idx - 1], nextA = list[idx + 1];
-  const aomLink = (a) => `#/audits/${ctx.rec.id}/aoms?aom=${a.id}&view=${a.data.submitted ? 'review' : 'edit'}`;
+  const aomLink = (a) => `#/audits/${ctx.rec.id}/aoms?aom=${a.id}`;
   const reviewBody = `${stepsBar(ctx, 'AOM Review')}
     <div class="rv-banner" ${s === ST.RETURNED ? '' : 'style="background:#fff;border-color:var(--line)"'}>${pill(s, statusPill(s))}<h1>AOM No. ${esc(aomNoText)} · ${esc(fillText(cur.data.title, vars))}</h1>
       <span id="rv-counts" style="margin-left:auto;display:flex;gap:6px">${countPills(cur.data)}</span>
@@ -92,7 +91,7 @@ export async function aoms(refs, params, q) {
     <div class="split-3 ed">
       <section class="panel" style="align-self:start"><div class="panel-head" style="display:flex;align-items:center;justify-content:space-between"><h2>AOMs</h2><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/findings" title="Add or select findings">+ Add AOM</a></div>${leftHTML()}</section>
       <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
-        ${toggle ? `<div class="panel rv-bar">${toggle}<span class="hint">Review View shows the reviewer's corrections and comments.</span></div>` : ''}
+        ${toggle ? `<div class="panel rv-bar">${toggle}<span class="hint">Review comments and corrections are shown in the document.</span></div>` : ''}
         <section class="panel"><div class="panel-head"><div><span class="label">AOM No.</span><div class="mono" style="font-size:18px;font-weight:600">${esc(aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}${N[cur.id].locked ? ' 🔒' : ''}</div>
             <span class="hint">${esc(cur.data.poolCode || 'Not in Library')}${cur.data.poolVersion ? ' Version ' + cur.data.poolVersion : ''} · Part II ${esc(SECTIONS[cur.data.section] || '')}</span></div>
             <div style="display:flex;gap:6px">${pill(s, statusPill(s))}${pill(cur.data.mode || 'Standard', cur.data.mode === 'Modified' ? 'warn' : 'grey')}</div></div>
