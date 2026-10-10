@@ -108,7 +108,7 @@ export function mountReview(host, opts) {
       const L = tableLayout(t.rows || [], 9360);
       const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / 9360) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
       const tStyle = L ? ` style="font-size:${L.size}pt"` : '';
-      return head + `<div class="rv-tablewrap"><table class="rv-table"${tStyle}>${cg}${t.rows.map((r, ri) => {
+      return head + `<div class="rv-tablewrap rv-commentable-table" data-table-id="${esc(id)}" data-table-year="${year ? esc(year) : ''}">${opts.canAct ? `<button type="button" class="rv-table-comment btn sm ghost" data-act="tblc" data-b="${esc(id)}" data-year="${year ? esc(year) : ''}" title="Comment on entire table">💬 Comment on table</button>` : ''}<table class="rv-table"${tStyle}>${cg}${t.rows.map((r, ri) => {
         if (ri === 0) {
           return `<tr>${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? '');
             return `<th data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</th>`; }).join('')}</tr>`;
@@ -389,7 +389,11 @@ export function mountReview(host, opts) {
           toast('Original wording restored.', 'ok'); return;
         }
         case 'replyx': draft = { corr: b, text: '' }; focus = 'x:' + b; render(); return;
-        case 'tblc': { const tb = data.blocks.find((x) => x.id === b); draft = { blockId: b, part: 'table', quote: `AOM Table ${tb ? tb.n || 1 : ''} (whole table)`, text: '' }; focus = '_new'; render(); return; }
+        case 'tblc': {
+          const tb = data.blocks.find(x => x.id === b);
+          draft = { blockId:b, part:'table', quote:`Entire AOM Table ${tb?.n || 1}${btn.dataset.year ? ' · CY ' + btn.dataset.year : ''}`, text:'' };
+          focus = '_new'; render(); return;
+        }
         case 'adddraft': if (!(draft && (draft.text || '').trim())) { toast('Type your comment first.', 'warn'); return; } await flush(); toast('Comment added.', 'ok'); return;
         case 'canceldraft': draft = null; dirtyCheck(); render(); return;
       }
@@ -405,6 +409,19 @@ export function mountReview(host, opts) {
     const m = e.target.closest('mark[data-c]'), x = e.target.closest('[data-x]');
     if (m && m.dataset.c !== '_new') { focus = 'c:' + m.dataset.c; applyFocus(); return; }
     if (x) { focus = 'x:' + x.dataset.x; applyFocus(); return; }
+    const cell = e.target.closest('.rv-commentable-table td[data-part],.rv-commentable-table th[data-part]');
+    if (cell && opts.canAct && !window.getSelection()?.toString().trim()) {
+      const wrap = cell.closest('.rv-commentable-table');
+      const tb = data.blocks.find(b => b.id === cell.dataset.b);
+      const rows = [...cell.closest('table').rows];
+      const ri = rows.indexOf(cell.parentElement);
+      const ci = [...cell.parentElement.cells].indexOf(cell);
+      const heading = rows[0]?.cells[ci]?.textContent?.trim() || 'Column ' + (ci + 1);
+      const label = ri ? rows[ri]?.cells[0]?.textContent?.trim() : 'Header';
+      draft = { blockId:cell.dataset.b, part:cell.dataset.part, quote:cell.textContent.trim() || '(empty cell)',
+        where:`AOM Table ${tb?.n || 1}${wrap.dataset.tableYear ? ' · CY ' + wrap.dataset.tableYear : ''} · ${heading}${ri ? ' · ' + short(label,60) : ''}`,text:'' };
+      focus='_new'; render(); return;
+    }
     if(e.target.closest('.rv-editable') && !window.getSelection()?.toString().trim()){beginInline(e.target.closest('.rv-editable'));return;}
     const card = e.target.closest('.rv-card[data-key]');
     if (card && card.dataset.key !== '_new' && !e.target.closest('textarea')) { if (focus !== card.dataset.key) { focus = card.dataset.key; applyFocus(); } }
