@@ -234,6 +234,29 @@ export function formatVar(name, raw) {
 const MONEY = /AMOUNT|BALANCE|COST|VALUE|TOTAL|BUDGET|UTILIZED|TAX|RECEIVABLE|APPROPRIATION|FUND/i;
 export const isMoneyName = (n) => MONEY.test(n) && !/YEAR|DAYS|NO_OF|COUNT|RATE|PERCENT/.test(n);
 // Values for the title and the topic sentence: amounts follow the COA figures rule (see titleAmount).
+// Finding-specific period: applies only when filling an individual AOM.
+// Audit Setup remains authoritative for the overall audit and official letter header.
+export function aomPeriodVars(vars, aom) {
+  const o = aom?.periodOverride;
+  if (!o) return vars;
+  const from = Number(o.from), to = Number(o.to);
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1900 || to > 2200 || from > to) return vars;
+  const years = Array.from({ length: to - from + 1 }, (_, i) => String(from + i));
+  const period = from === to ? String(from) : from + ' to ' + to;
+  const all = years.length === 1 ? years[0] : years.length === 2 ? years.join(' and ') : years.slice(0, -1).join(', ') + ' and ' + years[years.length - 1];
+  const middle = years.slice(1, -1);
+  const between = middle.length === 1 ? middle[0] : middle.length ? middle.slice(0, -1).join(', ') + ' and ' + middle[middle.length - 1] : '';
+  const prefix = years.length === 1 ? 'CY ' : 'CYs ';
+  return { ...vars,
+    AUDIT_PERIOD: period, AUDIT_YEARS: period,
+    AUDIT_PERIOD_START: String(from), AUDIT_PERIOD_END: String(to),
+    AUDIT_ALL_YEARS: all, AUDIT_CY_PERIOD: prefix + period,
+    AUDIT_CY_ALL: prefix + all,
+    AUDIT_YEARS_BETWEEN: between,
+    AUDIT_CY_YEARS_BETWEEN: between ? (middle.length === 1 ? 'CY ' : 'CYs ') + between : '',
+    AUDIT_CY_PREFIX: years.length === 1 ? 'CY' : 'CYs'
+  };
+}
 export function topicVars(vars) {
   const out = { ...(vars || {}) };
   Object.keys(out).forEach((k) => {
