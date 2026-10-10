@@ -828,3 +828,12 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-letter-preface .lh2 img.name{position:relative;display:block;margin:0 auto}
 .rv-letter-preface .bl{min-height:.14in;margin:0!important}
 .rv-doc .rv-thead{font-family:var(--sans)}
+
+/* Year-specific AOM tables align with their lettered narratives, not the
+   browser-width working-paper grid. */
+.rv-doc .rv-split-table{margin:8px 0 16px 76px;max-width:calc(100% - 76px)}
+.rv-doc .rv-split-table .rv-tablewrap{max-width:100%;overflow-x:auto}
+.rv-doc .rv-split-table .rv-table{width:100%;table-layout:fixed;font-family:"Times New Roman",Times,serif}
+.rv-doc .rv-split-table .rv-table th,.rv-doc .rv-split-table .rv-table td{overflow-wrap:anywhere;white-space:normal;vertical-align:top}
+.rv-doc .rv-review-control{font-size:11px;margin:0 0 4px;opacity:.8}
+@media(max-width:640px){.rv-doc .rv-split-table{margin-left:14px;max-width:calc(100% - 14px)}}
