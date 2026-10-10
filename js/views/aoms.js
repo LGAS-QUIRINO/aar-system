@@ -65,7 +65,6 @@ export async function aoms(refs, params, q) {
 
   // Once submitted, always use the unified document pane. The former Edit
   // Text tab is removed; lock/edit permissions still follow the AOM status.
-  const forwarded = !!cur.data.submitted;
   const isReview = true; // one document interface for all AOM statuses
   const toggle = '';
   const aomNoText = aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo);
@@ -77,7 +76,7 @@ export async function aoms(refs, params, q) {
     <div class="rv-banner" ${s === ST.RETURNED ? '' : 'style="background:#fff;border-color:var(--line)"'}>${pill(s, statusPill(s))}<h1>AOM No. ${esc(aomNoText)} · ${esc(fillText(cur.data.title, vars))}</h1>
       <span id="rv-counts" style="margin-left:auto;display:flex;gap:6px">${countPills(cur.data)}</span>
       ${s === ST.RETURNED ? `<div class="msg">Returned by <b>${esc(userName(cur.data.returnedBy))}</b> · ${esc(when(cur.data.returnedAt))}${cur.data.returnNote ? ': “' + esc(cur.data.returnNote) + '”' : ''}</div>`
-        : `<div class="msg" style="color:var(--muted)">${esc(s)}. You can read the corrections and comments while it is being reviewed.</div>`}</div>
+        : `<div class="msg" style="color:var(--muted)">${esc(s)}. ${s === ST.DRAFT ? 'Prepare the AOM directly in the document, then forward it individually or as a batch.' : 'You can read the corrections and comments while it is being reviewed.'}</div>`}</div>
     <div class="panel rv-bar">${toggle}<div class="rv-nav" id="rv-nav"></div>
       <span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="a-trail" type="button">Review Trail</button>${prevA ? `<a class="btn sm ghost" href="${aomLink(prevA)}">‹ Previous AOM</a>` : ''}<span class="hint">AOM ${idx + 1} of ${list.length}</span>${nextA ? `<a class="btn sm ghost" href="${aomLink(nextA)}">Next AOM ›</a>` : ''}</span></div>
     <div id="rv-host"></div>
@@ -168,7 +167,7 @@ export async function aoms(refs, params, q) {
           await advanceStage(ctx,'AOM Review');
           await store.log('forwarded AOMs for review',`${ctx.lgu.name} · ${freshList.length}`,ctx.teamId,refs.me.email);
           setDirty(false); emitChange('local'); toast(`Forwarded ${freshList.length} AOM${freshList.length>1?'s':''}.`,'ok');
-          location.hash = `#/audits/${ctx.rec.id}/aoms?aom=${cur.id}`;
+          location.hash = `#/audits/${ctx.rec.id}/aoms?aom=${cur.id}&updated=${Date.now()}`;
         };
         const fb = $('#rv-fwd', root);
         if (fb) fb.onclick = () => forwardUnified([cur],note?.value.trim() || '');
@@ -201,7 +200,7 @@ export async function aoms(refs, params, q) {
       async function forward(recs, note = '') {
         if (guard.dirty && !(await save())) return;
         const blocked = recs.filter((a) => openComments(a.id === cur.id ? state.aom : a.data, refs.me.email).length);
-        if (blocked.length) { toast(`Answer or mark resolved every comment first: ${blocked.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. Open Review View to reply.`, 'bad'); return; }
+        if (blocked.length) { toast(`Answer or mark resolved every comment first: ${blocked.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. Open the document to reply.`, 'bad'); return; }
         const problems = recs.filter((a) => allChecks(a, a.id === cur.id ? state.aom : a.data).some((c) => c.st === 'bad'));
         // Every placeholder must have its value (and every table its data) before an AOM goes for review.
         if (problems.length) { toast(`Fill in the missing values or tables first: ${problems.map((a) => fillText(a.data.title, ctx.varsFor(a))).join(', ')}. See Draft Results.`, 'bad'); return; }
