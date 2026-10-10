@@ -857,3 +857,10 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-doc .rv-commentable-table td[data-part]:hover,.rv-doc .rv-commentable-table th[data-part]:hover{background:#edf4ff}
 @media (hover:none){.rv-doc .rv-table-comment{position:static;opacity:1;pointer-events:auto;display:block;margin:0 0 5px auto}}
 @media print{.rv-table-comment{display:none!important}}
+
+/* Keep table comments accessible outside the horizontal scrolling surface. */
+.rv-doc .rv-commentable-table{position:relative}
+.rv-doc .rv-table-actions{display:flex;justify-content:flex-end;min-height:0}
+.rv-doc .rv-table-actions .rv-table-comment{position:static;opacity:1;pointer-events:auto;display:inline-flex;margin:0 0 5px;transition:none}
+.rv-doc .rv-commentable-table .rv-tablewrap{position:relative}
+@media print{.rv-table-actions{display:none!important}}
