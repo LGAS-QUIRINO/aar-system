@@ -37,6 +37,13 @@ export async function setup(refs, params) {
   let munId = s.lguId ? refs.lgu[s.lguId]?.data.parentId : (muns.find((m) => m.data.loaded) || muns[0])?.id || '';
   let base = null;           // officials of the previous audit, to show what changed
 
+  // Only fill blank accountant names on new audits; never overwrite manual entries.
+  const applyMunicipalAccountant = () => {
+    const name = String(refs.lgu[munId]?.data.municipalAccountant || '').trim();
+    if (!name || !isNew) return;
+    const accountant = s.officials.find(o => /^Municipal Accountant$/i.test(String(o.pos || '').trim()));
+    if (accountant && !String(accountant.name || '').trim()) accountant.name = name;
+  };
   const prevAudit = (lguId) => allAudits.filter((a) => a.data.lguId === lguId && Number(a.data.auditYear) < Number(s.auditYear) && a.id !== params.id)
     .sort((a, b) => b.data.auditYear - a.data.auditYear)[0];
   const duplicate = () => allAudits.find((a) => a.id !== params.id && a.data.lguId === s.lguId && Number(a.data.auditYear) === Number(s.auditYear) && !a.data.imported);
@@ -185,6 +192,7 @@ export async function setup(refs, params) {
         base = p ? p.data : null;
         if (isNew && p) { s.officials = clone(p.data.officials || DEFAULT_OFFICIALS); s.kagawads = clone(p.data.kagawads || DEFAULT_KAGAWADS); s.notesInfo = { loc: (p.data.notesInfo || {}).loc || '', workforce: (p.data.notesInfo || {}).workforce ?? N1_WORKFORCE, issued: '' }; }
         else if (isNew) { s.officials = clone(DEFAULT_OFFICIALS); s.kagawads = clone(DEFAULT_KAGAWADS); }
+        applyMunicipalAccountant();
         s.teamId = refs.lgu[s.lguId]?.data.teamId || '';
         redrawOfficials();
         $$('[data-ni]', root).forEach((el) => { el.value = el.dataset.ni === 'workforce' ? ((s.notesInfo || {}).workforce ?? N1_WORKFORCE) : ((s.notesInfo || {})[el.dataset.ni] || ''); });
