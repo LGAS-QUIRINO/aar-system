@@ -848,3 +848,12 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-doc .rv-block.t-table.in-sub > .rv-tablewrap{margin-left:1in;width:calc(100% - 1in)}
 .rv-doc .rv-split-table{margin-left:0.939583in;max-width:calc(100% - 0.939583in)}
 .rv-doc .rv-block.in-sub .rv-split-table{margin-left:1.25in;max-width:calc(100% - 1.25in)}
+
+/* Review-only contextual table commenting: hidden in the printed AOM appearance. */
+.rv-doc .rv-commentable-table{position:relative}
+.rv-doc .rv-table-comment{position:absolute;right:4px;top:-30px;z-index:3;opacity:0;pointer-events:none;transition:opacity .12s;white-space:nowrap;font-family:var(--sans)}
+.rv-doc .rv-commentable-table:hover .rv-table-comment,.rv-doc .rv-commentable-table:focus-within .rv-table-comment{opacity:1;pointer-events:auto}
+.rv-doc .rv-commentable-table td[data-part],.rv-doc .rv-commentable-table th[data-part]{cursor:copy}
+.rv-doc .rv-commentable-table td[data-part]:hover,.rv-doc .rv-commentable-table th[data-part]:hover{background:#edf4ff}
+@media (hover:none){.rv-doc .rv-table-comment{position:static;opacity:1;pointer-events:auto;display:block;margin:0 0 5px auto}}
+@media print{.rv-table-comment{display:none!important}}
