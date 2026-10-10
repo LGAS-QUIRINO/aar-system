@@ -56,7 +56,8 @@ export async function findings(refs, params, q) {
           <span><b>${esc(d.title)}</b><br><small class="hint">${esc(d.poolCode || 'Not in Library')}${d.poolVersion ? ' · version ' + d.poolVersion : ''} · ${esc(d.mode || 'Standard')}</small> ${d.status && d.status !== ST.DRAFT ? pill(d.status, statusPill(d.status)) : ''}</span>
           <span><select class="input" style="height:36px" data-sec="${i}" aria-label="Part II Section" ${canEdit && !lock ? '' : 'disabled'}>${Object.entries(SECTIONS).map(([k, v]) => `<option value="${k}" ${d.section === k ? 'selected' : ''}>${v}</option>`).join('')}</select></span>
           <span>${w.k === 'ok' ? pill('✓ ' + w.t, 'ok') : w.k === 'none' ? pill(w.t, 'grey') : w.k === 'warn' ? pill(w.t, 'warn') : `<button class="btn sm ghost" data-imp="${it.id}">${esc(w.t)}</button>`}</span>
-          <span>${canEdit && !lock ? `<button class="x sm" data-rm="${i}" aria-label="Remove ${esc(d.title)}" title="Remove">✕</button>` : ''}</span></div>`;
+          <span>${canEdit && !lock ? `<button class="x sm" data-rm="${i}" aria-label="Remove ${esc(d.title)}" title="Remove">✕</button>` : ''}</span></div>
+          ${it.id === sel ? `<div class="panel" style="margin:0 12px 14px;border:1px solid var(--line);border-radius:10px"><div class="panel-body" style="padding:8px 14px"><b>Working Paper</b> · <span class="hint">${esc(w.t)}</span></div><div id="f-inline-wp">${wpPanelHTML()}</div></div>` : ''}`;
       }).join('') || '<div class="empty">No findings yet. Click <b>+ Add</b> on a template from the AOM Library.</div>'}`;
   }
 
@@ -114,7 +115,6 @@ export async function findings(refs, params, q) {
       </section>
       <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
         <section class="panel" id="f-sel">${selectedHTML()}</section>
-        <section class="panel" id="f-wp">${wpPanelHTML()}</section>
         <div id="f-wplist">${wpListHTML(items, F, ctx)}</div>
         ${canEdit ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
           <div class="btn-row" style="margin-left:auto"><button class="btn primary" id="f-save">Save</button><button class="btn ghost" id="f-open">Save and Open AOM Drafts →</button></div></div>` : ''}
@@ -123,7 +123,7 @@ export async function findings(refs, params, q) {
   return {
     active: '#/audits', crumbs: `<a href="#/audits">My Audit</a> / <a href="#/audits/${ctx.rec.id}/setup">${esc(ctx.title)}</a> / <b>Findings</b>`, body,
     mount(root) {
-      const redraw = () => { $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); $('#f-wplist', root).innerHTML = wpListHTML(items, F, ctx); $('#f-pool', root).innerHTML = poolHTML($('#f-find', root).value); wireWp(); };
+      const redraw = () => { $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wplist', root).innerHTML = wpListHTML(items, F, ctx); $('#f-pool', root).innerHTML = poolHTML($('#f-find', root).value); wireWp(); };
       const dirty = () => { setDirty(true, save); redraw(); };
       $('#f-find', root).oninput = (e) => { $('#f-pool', root).innerHTML = poolHTML(e.target.value); };
       const addItem = (data) => {
@@ -152,7 +152,7 @@ export async function findings(refs, params, q) {
         const imp = e.target.closest('[data-imp]');
         if (imp) { e.stopPropagation(); sel = imp.dataset.imp; wpMode[sel] = 'import'; redraw(); const f = $('#wp-file', root); if (f) f.click(); return; }
         const row = e.target.closest('[data-sel]');
-        if (row && !e.target.closest('select,button,input')) { sel = row.dataset.sel; $('#f-sel', root).innerHTML = selectedHTML(); $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
+        if (row && !e.target.closest('select,button,input')) { sel = sel === row.dataset.sel ? null : row.dataset.sel; $('#f-sel', root).innerHTML = selectedHTML(); wireWp(); }
         const md = e.target.closest('[data-wpmode]');
         if (md && sel) { wpMode[sel] = md.dataset.wpmode; $('#f-wp', root).innerHTML = wpPanelHTML(); wireWp(); }
       });
@@ -180,7 +180,7 @@ export async function findings(refs, params, q) {
       };
       function wireWp() {
         const cur = items.find((x) => x.id === sel);
-        if (cur) wireFill($('#f-wp', root), cur.data, refs.me, () => dirty(), F, ctx.varsFor({ data: cur.data }));
+        if (cur) wireFill($('#f-inline-wp', root), cur.data, refs.me, () => dirty(), F, ctx.varsFor({ data: cur.data }));
         const dl = $('#wp-dl', root);
         if (dl && cur) dl.onclick = async () => { try { await downloadWp(cur.data, ctx); } catch (err) { toast('Excel failed: ' + err.message, 'bad'); } };
         const nw = $('#wp-new', root);
