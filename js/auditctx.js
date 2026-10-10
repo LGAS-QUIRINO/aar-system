@@ -1,6 +1,6 @@
 // Everything a screen needs about one audit: the Barangay, team, reviewers, its AOMs and their numbers.
 import { store } from './store.js';
-import { setupVars, formatVar, numberAoms, SETUP_VAR_NAMES, ST, tableVars } from './aom.js';
+import { setupVars, formatVar, numberAoms, SETUP_VAR_NAMES, ST, tableVars, aomPeriodVars } from './aom.js';
 import { has } from './refs.js';
 import { esc } from './ui.js';
 import { periodYears } from './format.js';
@@ -24,7 +24,7 @@ export async function loadAudit(refs, auditId) {
     if (wp && wp.vars) Object.entries(wp.vars).forEach(([k, x]) => { v[k] = formatVar(k, x.raw); });
     Object.assign(v, base);
     Object.assign(v, tableVars(a.data || a));
-    return v;
+    return aomPeriodVars(v, a.data || a);
   };
   const me = refs.me;
   const oneStep = !!(team.atlUserId && team.atlUserId === team.saUserId);
