@@ -840,3 +840,11 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 
 /* Lettered per-year audit discussions follow the official Word output: regular weight. */
 .rv-doc .rv-block.t-paragraph p.item,.rv-doc .rv-block.t-condition p.item,.rv-doc .rv-block.t-cause p.item,.rv-doc .rv-block.t-effect p.item{font-weight:400}
+
+/* Review-only table alignment mirrors findingParas()' Word indentation.
+   BODY=993 twips; SUB=1440 twips; split-year tables add 360 twips.
+   1 inch = 1440 twips. Existing table layout, data, and typography stay intact. */
+.rv-doc .rv-block.t-table:not(.in-sub) > .rv-tablewrap{margin-left:0.689583in;width:calc(100% - 0.689583in)}
+.rv-doc .rv-block.t-table.in-sub > .rv-tablewrap{margin-left:1in;width:calc(100% - 1in)}
+.rv-doc .rv-split-table{margin-left:0.939583in;max-width:calc(100% - 0.939583in)}
+.rv-doc .rv-block.in-sub .rv-split-table{margin-left:1.25in;max-width:calc(100% - 1.25in)}
