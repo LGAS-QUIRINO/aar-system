@@ -39,7 +39,7 @@ export async function lgus(refs, params, q) {
       <div style="display:flex;flex-direction:column;gap:20px">
       ${mun ? `<section class="panel" id="m-panel"><div class="panel-head"><h2>Municipality of ${esc(mun.data.name)}</h2></div><div class="panel-body">
         <div class="grid-2"><div class="field"><label class="label" for="m-abc">ABC President</label><input class="input" id="m-abc" value="${esc(mun.data.abcPresident || '')}" placeholder="e.g. Hon. Juan A. Dela Cruz" ${dis}></div>
-          <div class="field"><label class="label" for="m-sal">Salutation</label><select class="input" id="m-sal" ${dis}><option ${mun.data.abcSalutation !== 'Dear Madam:' ? 'selected' : ''}>Dear Sir:</option><option ${mun.data.abcSalutation === 'Dear Madam:' ? 'selected' : ''}>Dear Madam:</option></select></div></div>
+          <div class="field"><label class="label" for="m-accountant">Municipal Accountant</label><input class="input" id="m-accountant" value="${esc(mun.data.municipalAccountant || '')}" placeholder="Full name of Municipal Accountant" ${dis}></div><div class="field"><label class="label" for="m-sal">Salutation</label><select class="input" id="m-sal" ${dis}><option ${mun.data.abcSalutation !== 'Dear Madam:' ? 'selected' : ''}>Dear Sir:</option><option ${mun.data.abcSalutation === 'Dear Madam:' ? 'selected' : ''}>Dear Madam:</option></select></div></div>
         <span class="hint">Used on the Exit Conference invitation letter. Type it once here.</span>
         ${isAdmin ? '<div class="btn-row"><button class="btn primary" id="m-save">Save</button></div>' : ''}</div></section>` : ''}
       ${sel ? `<section class="panel"><div class="panel-head"><h2>Barangay ${esc(sel.data.name)}</h2></div><div class="panel-body">
@@ -79,8 +79,8 @@ export async function lgus(refs, params, q) {
       const ms = $('#m-save', root);
       if (ms) {
         const saveMun = async () => {
-          await store.save('lgus', munId, { ...mun.data, abcPresident: $('#m-abc', root).value.trim(), abcSalutation: $('#m-sal', root).value });
-          await store.log('edited a municipality', mun.data.name + ' · ABC President', '', refs.me.email);
+          await store.save('lgus', munId, { ...mun.data, abcPresident: $('#m-abc', root).value.trim(), municipalAccountant: $('#m-accountant', root).value.trim(), abcSalutation: $('#m-sal', root).value });
+          await store.log('edited a municipality', mun.data.name + ' · Municipality officials', '', refs.me.email);
           setDirty(false); toast('Saved.', 'ok'); return true;
         };
         ms.onclick = saveMun;
