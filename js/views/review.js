@@ -175,6 +175,7 @@ export async function review(refs, params, q) {
       <b>AOM ${i + 1} of ${list.length}</b>
       <a class="btn sm ghost" href="${i < list.length - 1 ? link(list[i + 1].id, view) : '#'}" ${i < list.length - 1 ? '' : 'aria-disabled="true" style="pointer-events:none;opacity:.4"'} aria-label="Next AOM">›</a>
       <span class="hint">Single document editor · Click text to correct · Select text or a table cell to comment</span>
+      ${reviewing ? '<button class="btn sm ghost" id="r-period" type="button">Finding Period</button>' : ''}
       ${view === 'review' ? '<div class="rv-nav" id="rv-nav"></div>' : ''}
       <a class="btn sm ghost" style="margin-left:auto" href="#" id="r-history">Review History / Word</a><a class="btn sm ghost" href="#/audits/${ctx.rec.id}/print?draft=1">Official Word / Print</a></div>`;
   const body = view === 'review' ? `${head}
@@ -237,6 +238,26 @@ export async function review(refs, params, q) {
       const vb = $('#r-var', root);
       if (vb) vb.onclick = () => variantFromAom(refs, cur, ctx.varsFor(cur), 'AOM No. ' + aomNoText + ' · ' + ctx.lgu.name);
       $('#r-history',root)?.addEventListener('click',e=>{e.preventDefault();reviewTrailDialog(ctx,refs,list,N,cur.id);});
+      $('#r-period',root)?.addEventListener('click',async()=>{
+        const current = cur.data.periodOverride || {};
+        const from = current.from ?? ctx.audit.periodFrom, to = current.to ?? ctx.audit.periodTo;
+        const result = await modal({ title:'Finding-Specific Period', body:
+          '<div class="field"><label class="label">This AOM only — not Audit Setup</label>'+
+          '<div class="btn-row"><label>From <input id="fp-from" class="input" type="number" min="1900" max="2200" value="'+esc(from)+'"></label>'+
+          '<label>To <input id="fp-to" class="input" type="number" min="1900" max="2200" value="'+esc(to)+'"></label></div>'+
+          '<p class="hint">Updates period placeholders in this AOM and its Word output. Does not alter the audit-wide coverage or working papers.</p></div>',
+          buttons:[{label:'Cancel',cls:'ghost',value:null},{label:'Save Finding Period',cls:'primary',value:'save',check:bg=>{
+            const a=Number($('#fp-from',bg).value),b=Number($('#fp-to',bg).value);
+            if(!Number.isInteger(a)||!Number.isInteger(b)||a<1900||b>2200||a>b){toast('Enter a valid start and end year.','warn');return false;}
+            review.periodDraft={from:a,to:b};return true;
+          }}] });
+        if(result!=='save')return;
+        const d=clone((await store.get('aoms',cur.id)).data);
+        d.periodOverride={...review.periodDraft,sourcePeriod:ctx.audit.periodFrom+' to '+ctx.audit.periodTo,updatedAt:new Date().toISOString(),updatedBy:me.email};
+        d.history=[...(d.history||[]),{at:new Date().toISOString(),by:me.email,action:'Set finding-specific period '+d.periodOverride.from+' to '+d.periodOverride.to}];
+        await store.save('aoms',cur.id,d);
+        toast('Finding period saved for this AOM.','ok');
+      });
       let pane = null;
       if (view === 'review') {
         pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, navEl: $('#rv-nav', root),
