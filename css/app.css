@@ -864,3 +864,9 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-doc .rv-table-actions .rv-table-comment{position:static;opacity:1;pointer-events:auto;display:inline-flex;margin:0 0 5px;transition:none}
 .rv-doc .rv-commentable-table .rv-tablewrap{position:relative}
 @media print{.rv-table-actions{display:none!important}}
+
+/* Table comments added an outer .rv-commentable-table wrapper.
+   Apply the Word-based body indent to that wrapper, not its inner scroll area. */
+.rv-doc .rv-block.t-table:not(.in-sub) > .rv-commentable-table{margin-left:0.689583in;width:calc(100% - 0.689583in)}
+.rv-doc .rv-block.t-table.in-sub > .rv-commentable-table{margin-left:1in;width:calc(100% - 1in)}
+.rv-doc .rv-block.t-table > .rv-commentable-table > .rv-tablewrap{margin-left:0;width:100%}
