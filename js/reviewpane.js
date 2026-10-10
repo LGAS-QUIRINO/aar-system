@@ -108,7 +108,7 @@ export function mountReview(host, opts) {
       const L = tableLayout(t.rows || [], 9360);
       const cg = L ? `<colgroup>${L.widths.map((w) => `<col style="width:${((w / 9360) * 100).toFixed(2)}%">`).join('')}</colgroup>` : '';
       const tStyle = L ? ` style="font-size:${L.size}pt"` : '';
-      return head + `<div class="rv-tablewrap rv-commentable-table" data-table-id="${esc(id)}" data-table-year="${year ? esc(year) : ''}">${opts.canAct ? `<button type="button" class="rv-table-comment btn sm ghost" data-act="tblc" data-b="${esc(id)}" data-year="${year ? esc(year) : ''}" title="Comment on entire table">💬 Comment on table</button>` : ''}<table class="rv-table"${tStyle}>${cg}${t.rows.map((r, ri) => {
+      return head + `<div class="rv-commentable-table" data-table-id="${esc(id)}" data-table-year="${year ? esc(year) : ''}">${opts.canAct ? `<div class="rv-table-actions"><button type="button" class="rv-table-comment btn sm ghost" data-act="tblc" data-b="${esc(id)}" data-year="${year ? esc(year) : ''}" title="Comment on entire table">💬 Comment on entire table</button></div>` : ''}<div class="rv-tablewrap"><table class="rv-table"${tStyle}>${cg}${t.rows.map((r, ri) => {
         if (ri === 0) {
           return `<tr>${r.map((c, ci) => { const k = `cell:${ri}:${ci}`, v = String(c ?? '');
             return `<th data-b="${id}" data-part="${k}">${inner(id, v, v, k) || '&nbsp;'}</th>`; }).join('')}</tr>`;
@@ -126,7 +126,7 @@ export function mountReview(host, opts) {
           const alignCls = /^(19|20)\d{2}$/.test(v) ? 'yr' : isDate(v) ? 'date' : isRef(v) ? 'ref' : /^[-–—]$/.test(v) ? 'center' : num(v) ? 'num' : '';
           return `<td class="${alignCls}" data-b="${id}" data-part="${k}">${inner(id, String(c ?? ''), String(c ?? ''), k) || '&nbsp;'}</td>`;
         }).join('')}</tr>`;
-      }).join('')}</table></div>`;
+      }).join('')}</table></div></div>`;
     };
     const inner = (blockId, before, after, k) => {
       const marks = [];
@@ -261,7 +261,7 @@ export function mountReview(host, opts) {
         ${newCard}${cards.join('') || '<div class="hint">No corrections or comments.</div>'}</aside></div>`;
     navUpdate();
     if (focus) applyFocus(false);
-    const d = host.querySelector('#rv-draft'); if (d) d.focus();
+    const d = host.querySelector('#rv-draft'); if (d) { d.focus(); d.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }
   }
 
   function navUpdate() {
