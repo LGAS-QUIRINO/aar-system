@@ -874,7 +874,7 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 /* AOM Review table indentation is applied to the TABLE BLOCK itself.
    The body paragraph uses 60px padding at desktop sizes; do not rely on
    the inner wrapper, which changes when commenting controls are mounted. */
-.rv-doc .rv-block.t-table:not(.in-sub){padding-left:0;box-sizing:border-box}
+.rv-doc .rv-block.t-table:not(.in-sub){padding-left:75px;box-sizing:border-box}
 .rv-doc .rv-block.t-table.in-sub{padding-left:0;box-sizing:border-box}
 .rv-doc .rv-block.t-table > .rv-commentable-table,
 .rv-doc .rv-block.t-table > .rv-tablewrap{margin-left:0;width:100%;max-width:100%;box-sizing:border-box}
