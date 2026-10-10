@@ -837,3 +837,6 @@ details.mgrp>.pf{margin:0 14px 10px;width:calc(100% - 28px)}
 .rv-doc .rv-split-table .rv-table th,.rv-doc .rv-split-table .rv-table td{overflow-wrap:anywhere;white-space:normal;vertical-align:top}
 .rv-doc .rv-review-control{font-size:11px;margin:0 0 4px;opacity:.8}
 @media(max-width:640px){.rv-doc .rv-split-table{margin-left:14px;max-width:calc(100% - 14px)}}
+
+/* Lettered per-year audit discussions follow the official Word output: regular weight. */
+.rv-doc .rv-block.t-paragraph p.item,.rv-doc .rv-block.t-condition p.item,.rv-doc .rv-block.t-cause p.item,.rv-doc .rv-block.t-effect p.item{font-weight:400}
