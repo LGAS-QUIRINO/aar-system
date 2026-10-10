@@ -5,7 +5,7 @@ import { updateFromAom, variantFromAom } from './library.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
-import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot, buildLetter, paraHTML } from '../aom.js';
+import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
 import { has, myTeamIds, viewOnly } from '../refs.js';
 import { aomPreviewHTML, checksHTML, commentsHTML, reviewTrailDialog } from './aoms.js';
@@ -239,10 +239,7 @@ export async function review(refs, params, q) {
       $('#r-history',root)?.addEventListener('click',e=>{e.preventDefault();reviewTrailDialog(ctx,refs,list,N,cur.id);});
       let pane = null;
       if (view === 'review') {
-        const doc = buildLetter({ audit: ctx.audit, lgu: ctx.lgu, mun: ctx.mun, team: ctx.team, atl: ctx.atl, sa: ctx.sa, aoms: [cur], nums: ctx.nums, varsFor: ctx.varsFor, draft: s !== ST.FINAL });
-        const introEnd = doc.body.findIndex(p => p.runs && p.runs.some(r => String(r.t || '').includes('observed the following deficiencies:')));
-        const preface = (introEnd >= 0 ? doc.body.slice(0, introEnd + 1) : doc.body.slice(0, 12)).map(p => paraHTML(p, false)).join('');
-        pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, preface, navEl: $('#rv-nav', root),
+        pane = mountReview($('#rv-host', root), { rec: cur, vars: ctx.varsFor(cur), me, users: refs.users, canAct: reviewing, heading: 'AOM No. ' + aomNoText, navEl: $('#rv-nav', root),
           onChange: (d) => { const c = reviewCounts(clone(d)); $('#rv-counts', root).innerHTML = (c.corrections ? pill(c.corrections + ' correction' + (c.corrections > 1 ? 's' : ''), 'grey') : '') + (c.comments ? pill(c.comments + ' comment' + (c.comments > 1 ? 's' : ''), 'grey') : ''); } });
       }
       if (!reviewing) return;
