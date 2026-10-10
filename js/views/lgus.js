@@ -46,11 +46,11 @@ export async function lgus(refs, params, q) {
             const name=match && !mun.data[key+'Title'] ? match[2] : stored;
             return `<div style="border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0">
               <div style="font-weight:700;margin-bottom:12px">${label}</div>
-              <div style="display:grid;grid-template-columns:minmax(100px,125px) minmax(0,1fr);gap:10px">
+              <div style="display:grid;grid-template-columns:90px minmax(0,1fr);gap:10px">
                 <div class="field"><label class="label" for="${id}-title">Title</label>
-                  <select class="input" id="${id}-title" ${dis}>${['','Hon.','Mr.','Ms.','Mrs.','Atty.','Engr.','Dr.'].map(t=>`<option value="${t}" ${title===t?'selected':''}>${t||'None'}</option>`).join('')}</select></div>
+                  <select class="input" id="${id}-title" style="width:100%;min-width:0;padding-left:8px;padding-right:4px" ${dis}>${['','Hon.','Mr.','Ms.','Mrs.','Atty.','Engr.','Dr.'].map(t=>`<option value="${t}" ${title===t?'selected':''}>${t||'None'}</option>`).join('')}</select></div>
                 <div class="field"><label class="label" for="${id}">Name</label>
-                  <input class="input" id="${id}" value="${esc(name)}" placeholder="Full name" ${dis}></div>
+                  <input class="input" id="${id}" style="width:100%;min-width:0;box-sizing:border-box" value="${esc(name)}" placeholder="Full name" ${dis}></div>
               </div>
             </div>`;
           }).join('')}
