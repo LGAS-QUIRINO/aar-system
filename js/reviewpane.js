@@ -98,8 +98,7 @@ export function mountReview(host, opts) {
       const source = tableOf(b);
       const t = year && source ? { ...source, rows: tableRowsForYear(source, b, vars, year) } : source;
       if (year && (!t?.rows || t.rows.length < 2)) return '';
-      const head = `<div class="rv-thead rv-review-control"><span>${year ? 'CY ' + esc(year) + ' · ' : ''}Protected working-paper table</span>
-        ${opts.canAct && t ? `<button class="btn sm ghost" data-act="tblc" data-b="${id}">💬 Comment on this table</button>` : ''}</div>`;
+      const head = ''; // Source-sheet metadata and comment controls are not part of the official AOM.
       if (!t) return head + '<p class="tbl">[Not imported yet. Import the working paper on the Findings screen.]</p>';
       const num = (c) => /^\(?-?₱?\s*-?[\d,]+(\.\d+)?%?\)?$/.test(String(c ?? '').trim());
       const isDate = (s) => /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(String(s ?? '').trim());
@@ -237,7 +236,10 @@ export function mountReview(host, opts) {
       } else {
         keys.forEach((p) => { if (b.type === 'table' && !partVal(old, p.k) && !partVal(cur, p.k)) return; const f = b.type === 'topic' ? fillT : fill; html += partHTML(id, f(partVal(old, p.k)), cur ? f(partVal(cur, p.k)) : '', p.k, p.cls, p.pre, p.letter, ini); });
       }
-      if (b.type === 'table' && !(isSplitTable(data, b) && !b.annex && data.blocks.some(x => x.perYear && (Number(x.perYearTable) || 1) === (Number(b.n) || 1)) && yearGroups(data, Number(b.n) || 1).length)) html += tableHTML(b, id);
+      // The Word renderer inserts a split table after each per-year narrative.
+      // Never render its original combined working-paper grid a second time.
+      const attachedYearNarrative = data.blocks.some(x => x.perYear && (Number(x.perYearTable) || 1) === (Number(b.n) || 1));
+      if (b.type === 'table' && !(attachedYearNarrative && isSplitTable(data, b) && !b.annex && yearGroups(data, Number(b.n) || 1).length)) html += tableHTML(b, id);
       // Internal preparation labels never form part of the issued AOM.
       // Keep the block ID for anchored comments and direct text editing.
       docParts.push(`<div class="rv-block t-${b.type} ${cur && cur.sub ? 'in-sub' : ''}" data-block="${id}">${html}</div>`);
