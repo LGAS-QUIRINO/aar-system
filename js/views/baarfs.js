@@ -6,7 +6,7 @@ import { esc, toast, setDirty, confirmBox, modal, pill, $, $$ } from '../ui.js';
 import { has } from '../refs.js';
 import { nice, longDate, aomNo } from '../format.js';
 import { normTitle, rowKey, loadChart, CHART_NAME } from '../coa.js';
-import { interChoice, isCombined, keyCode, zeroRow, fundsOf, ALL_FUNDS, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, needsFix, decSide, hasDec, headingCheck, yearFigures,
+import { interChoice, isCombined, keyCode, zeroRow, fundsOf, ALL_FUNDS, tbId, fsId, loadTb, loadFsRec, rememberedChoices, tbState, isTbSummaryRow, needsFix, decSide, hasDec, headingCheck, yearFigures,
   posTotals, equityMoves, buildPerf, buildPos, buildScne, buildScf, scfVal, scfFromTb, SCF, scbaaRows, scbaaPrintRows, scbaaLine, inTb, scbaaNotSubmitted,
   money, shown, rawText, parseAmt, cents, amtText } from '../fs.js';
 import { readTbFile, readTbPaste } from '../tbimport.js';
@@ -263,9 +263,10 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
     const fixed = (x) => !!(x.r.use && x.res.acct);
     const h = headingCheck(t, ctx.lgu.name, cur.yr);
     const ft = t.file && t.file.totals;
+    const ignoredTotals = t.rows.filter(r => !r.del && isTbSummaryRow(r)).length;
     if (t.rows.length && postClosing(F, cur, t, s)) content += `<div class="note bad" style="display:block"><b>This looks like a post-closing trial balance</b> (${h.post ? 'the heading says Post-Closing' : 'it has no revenue or expense accounts'}). The statements need the <b>pre-closing</b> trial balance, with the revenue and expense accounts. Ask the bookkeeper for it, then Clear this one and import it. Confirm stays locked until then.</div>`;
     content += `<div class="note ${h.known && !(h.okName && h.okYear) ? 'warn' : 'ok'}" style="display:block;font-weight:400">${t.file && t.file.name ? `Imported <b>${esc(t.file.name)}</b>` : 'Pasted rows'}${h.known ? ` · ${esc(h.text)}${h.okName && h.okYear ? ' ✓' : ''}` : ''} · ${t.rows.length} accounts${t.file && t.file.byName ? ` · by ${esc(nice(t.file.byName))}, ${esc(longDate((t.file.at || '').slice(0, 10)))}` : ''}
-      ${ft ? `<br><span class="hint">Grand totals in the file: debit ${esc(shown(ft.dr))} · credit ${esc(shown(ft.cr))}</span>` : ''}</div>
+      ${ft ? `<br><span class="hint">Grand totals in the file: debit ${esc(shown(ft.dr))} · credit ${esc(shown(ft.cr))}</span>` : ''}${ignoredTotals ? `<br><span class="hint">${ignoredTotals} TOTAL summary row(s) excluded from accounts and balances.</span>` : ''}</div>
       <div class="sumc" style="grid-template-columns:repeat(5,1fr)"><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart === 'manual').length}</b>Manual</div><div><b>${s.rows.filter((x) => x.res.m.st === 'ok' && x.res.m.chart !== 'manual').length}</b>COA Circular 2015-009${s.rows.some((x) => x.res.m.chart === 'added') ? ' / Added' : ''}</div><div><b style="color:var(--warn-ink)">${s.rows.filter((x) => x.res.m.st === 'check' && !fixed(x)).length}</b>Check</div><div><b style="color:var(--bad-ink)">${s.rows.filter((x) => x.res.m.st === 'ver' && !fixed(x)).length}</b>For Verification</div><div><b style="color:var(--ok-ink)">${s.rows.filter(fixed).length}</b>Corrected</div></div>`;
     // Amounts with more than 2 decimals
     const decRows = s.rows.filter((x) => hasDec(x.r.dr) || hasDec(x.r.cr));
@@ -311,7 +312,7 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
     const flink = (f, label) => `<a href="${base}&s=input&t=${cur.key}&f=${f}" class="${filter === f ? 'on' : ''}">${label}</a>`;
     content += `<div class="lr-row"><span class="fl">Showing: ${flink('all', 'All')} · ${flink('open', 'To fix')} · ${flink('check', 'Check')} · ${flink('ver', 'For Verification')} · ${flink('fixed', 'Corrected')}</span><input class="input" id="tb-find" placeholder="Find an account" aria-label="Find an account" style="width:240px;height:34px"></div>
       <div class="tbwrap"><table class="tbt fixed"><colgroup><col style="width:96px"><col><col style="width:106px"><col style="width:106px"><col style="width:250px"></colgroup><thead><tr><th>Code</th><th>Account Title</th><th class="n">Debit</th><th class="n">Credit</th><th>Status</th></tr></thead>
-        <tbody>${s.rows.map(rowHTML).join('')}</tbody>
+        <tbody>${s.rows.filter(x => !isTbSummaryRow(x.r)).map(rowHTML).join('')}</tbody>
         <tfoot><tr><td></td><td>Totals${s.decOpen ? ' (amounts as shown in Excel)' : ''}</td><td class="n">${money(s.dr)}</td><td class="n">${money(s.cr)}</td><td>${s.balanced ? pill('✓ Balanced', 'ok') : pill(`Off by ₱${money(Math.abs(s.dr - s.cr))}${s.decOpen ? ' after rounding' : ''}`, 'warn')}</td></tr></tfoot></table></div>
       ${s.deleted ? `<div class="lr-row" style="justify-content:flex-start;gap:10px"><span class="hint">${s.deleted} zero-balance row${s.deleted > 1 ? 's' : ''} deleted (${esc(t.rows.filter((r) => r.del).map((r) => r.title).join(', '))})</span>${editable ? '<button class="reset" type="button" id="tb-putback">Put back</button>' : ''}</div>` : ''}`;
   }
@@ -350,11 +351,12 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
       const take = async (got, file) => {
         if (t && !t.none && t.rows.length && !(await confirmBox('Replace Trial Balance', `Replace the ${t.rows.length} accounts of ${esc(tabLabel(F, cur))} with the ${got.rows.length} in this ${file ? 'file' : 'paste'}? Corrections made before for the same code and title are put back; decimal amounts are checked again.`, 'Replace'))) return;
         const mem = await rememberedChoices(F.lguId);
-        const rs = got.rows.map((r) => { const key = rowKey(r); const x = { code: r.code, title: r.title, dr: r.dr, cr: r.cr, key }; if (mem[key] && acctOfKey(F.chart, mem[key])) { x.use = mem[key]; x.rem = true; } return x; });
+        const summaryRows = got.rows.filter(isTbSummaryRow);
+        const rs = got.rows.filter(r => !isTbSummaryRow(r)).map((r) => { const key = rowKey(r); const x = { code: r.code, title: r.title, dr: r.dr, cr: r.cr, key }; if (mem[key] && acctOfKey(F.chart, mem[key])) { x.use = mem[key]; x.rem = true; } return x; });
         await save({ type: 'tb', teamId: ctx.teamId, lguId: F.lguId, fund: cur.fund, year: cur.yr, kind: cur.cmp ? 'comparative' : 'current', auditId: ctx.rec.id,
           file: { name: file ? file.name : '', heading: got.heading, totals: got.totals, at: new Date().toISOString(), by: me.email, byName: me.name }, rows: rs },
           `${file ? 'imported' : 'pasted'} the trial balance`);
-        toast(`${rs.length} accounts ${file ? 'imported' : 'pasted'}.`, 'ok');
+        toast(`${rs.length} accounts ${file ? 'imported' : 'pasted'}.${summaryRows.length ? ' Excluded ' + summaryRows.length + ' TOTAL summary row(s).' : ''}`, 'ok');
       };
       const fileIn = $('#tb-file', root);
       if (fileIn) fileIn.onchange = async () => {
