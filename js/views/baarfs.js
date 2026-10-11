@@ -584,7 +584,7 @@ export function afsScreen({ F, ctx, me, q, base, canEdit: canEdit0, start, mode 
       root.addEventListener('input', (e) => {
         const el = e.target;
         if (el.dataset.b) { const r = work.scbaa.rows[el.dataset.b] = work.scbaa.rows[el.dataset.b] || {}; r[el.dataset.f] = el.value.trim(); if (!r.ob && !r.adj && !r.act) delete work.scbaa.rows[el.dataset.b]; changed(); }
-        else if (el.dataset.c) { (el.dataset.c === 'Y' ? work.scfY : work.scfP)[el.dataset.k] = el.value.trim(); changed(); }
+        else if (el.dataset.c) { const dest = el.dataset.c === 'Y' ? work.scfY : work.scfP; const value = el.value.trim(); dest[el.dataset.k] = !value && SCF.some(d => d.k === el.dataset.k && d.from) ? '0' : value; changed(); }
       });
       root.addEventListener('change', (e) => {
         const el = e.target;
