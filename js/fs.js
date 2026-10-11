@@ -104,10 +104,17 @@ export function isCombined(r, a) {
 const lineVal = (a, c) => (LINE[a.line].side === 'dr' ? c.dr - c.cr : c.cr - c.dr);
 
 // The state of one trial balance: totals, what is left to fix, and the amounts by line and by account (accts keyed by account key).
+// Summary lines are not ledger accounts and must never be summed or matched.
+export function isTbSummaryRow(r) {
+  const code = String(r?.code || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  const title = String(r?.title || '').trim().replace(/\s+/g, ' ').toUpperCase();
+  return /^(?:GRAND\s+)?TOTALS?\s*:?$/i.test(code) || /^(?:GRAND\s+)?TOTALS?\s*:?$/i.test(title);
+}
 export function tbState(tb, chart) {
   const out = { rows: [], dr: 0, cr: 0, open: 0, dec: 0, decOpen: 0, check: 0, ver: 0, ok: 0, byChart: { manual: 0, c2015: 0, added: 0 }, lines: {}, accts: {}, revexp: false, fix: 0, balanced: true };
   if (!tb || !tb.rows) return out;
   tb.rows.forEach((r, i) => {
+    if (isTbSummaryRow(r)) return;
     if (r.del) { out.deleted = (out.deleted || 0) + 1; return; }
     const res = resolveRow(r, chart);
     const c = rowCents(r);
