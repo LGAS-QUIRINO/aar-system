@@ -5,6 +5,7 @@ import { loadScript } from './wp.js';
 import { parseAmt } from './fs.js';
 
 const CODE = /^\d-\d{2}-\d{2}-\d{3}/;
+const TOTAL_LINE = /^(?:GRAND\s+)?TOTALS?\s*:?$/i;
 const txt = (c) => (c ? String(c.w !== undefined ? c.w : c.v !== undefined ? c.v : '').trim() : '');
 const num = (c) => {
   if (!c || c.v === undefined || c.v === null || c.v === '') return null;
@@ -46,7 +47,7 @@ export async function readTbFile(file) {
     for (let r = head.r + 1; r <= rg.e.r; r++) {
       const title = txt(at(r, head.title)).replace(/\s+/g, ' ').trim(), code = txt(at(r, head.code)).replace(/\s+/g, '');
       const dr = num(at(r, head.dr)), cr = num(at(r, head.cr));
-      if (/^(GRAND\s+)?TOTALS?\b/i.test(title) || (!code && /TOTAL/i.test(title))) { totals = { dr: dr || 0, cr: cr || 0 }; break; }
+      if (TOTAL_LINE.test(title) || TOTAL_LINE.test(code) || (!code && /TOTAL/i.test(title))) { totals = { dr: dr || 0, cr: cr || 0 }; break; }
       if (!code && !title) continue;
       if (!code && dr === null && cr === null) continue;          // a section label
       rows.push({ code, title, dr, cr });
@@ -63,6 +64,7 @@ export function readTbPaste(text) {
   String(text || '').split(/\r?\n/).forEach((line) => {
     if (!line.trim()) return;
     const cells = line.split('\t').map((x) => x.trim());
+    if (cells.some((x) => TOTAL_LINE.test(x))) return;
     const ci = cells.findIndex((x) => CODE.test(x));
     if (ci < 0) return;
     const nums = [];
