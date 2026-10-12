@@ -9,7 +9,7 @@ export const BLOCK_LABELS = {
 };
 export const ADDABLE = ['criteria', 'condition', 'paragraph', 'table', 'subheading', 'cause', 'effect', 'recommendation'];
 
-export const ST = { DRAFT: 'Draft', WITH_ATL: 'With ATL', ATL: 'Under ATL Review', WITH_SA: 'With SA', SA: 'Under SA Review', RETURNED: 'Returned', FINAL: 'Final' };
+export const ST = { DRAFT: 'Draft', WITH_ATL: 'With ATL', ATL: 'Under ATL Review', WITH_SA: 'With SA', SA: 'Under SA Review', RETURNED: 'Returned', FINAL: 'Final', WITHDRAWN: 'Withdrawn' };
 export const statusPill = (s) => ({ Draft: 'grey', 'With ATL': 'violet', 'Under ATL Review': 'violet', 'With SA': 'violet', 'Under SA Review': 'violet', Returned: 'warn', Final: 'ok' }[s] || 'grey');
 
 export const clone = (x) => JSON.parse(JSON.stringify(x));
