@@ -22,7 +22,7 @@ export async function print(refs, params, q) {
     <div class="page-head"><div><h1>Print · Barangay ${esc(ctx.lgu.name)} AOMs</h1><p>Long bond (8.5" × 13") · Times New Roman 12. Final copies print only when every chosen AOM is Final; otherwise it prints as a DRAFT.</p></div>
       <div class="btn-row"><a class="btn ghost" href="#/audits/${ctx.rec.id}/aoms">← Back to AOMs</a></div></div>
     <div class="split" style="grid-template-columns:320px minmax(0,1fr)">
-      <section class="panel" style="align-self:start"><div class="panel-head"><h2>AOMs to Include</h2></div>
+      <section class="panel" style="align-self:start"><div class="panel-head"><h2>AOMs to Include</h2><label class="check" style="margin-left:auto;min-height:0;white-space:nowrap"><input type="checkbox" id="pr-all"> Select All</label></div>
         ${list.map((a) => `<label class="t-row click" style="grid-template-columns:24px 1fr;padding:10px 16px"><input type="checkbox" data-pick="${a.id}" ${chosen.has(a.id) ? "checked" : ""}>
           <span><span class="mono" style="font-size:12px">${esc(aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}</span> ${pill(a.data.status || 'Draft', statusPill(a.data.status || 'Draft'))}<br><b>${esc(fillText(a.data.title, ctx.varsFor(a)))}</b></span></label>`).join('')}
         <div class="panel-body"><div id="pr-mode"></div>
@@ -44,7 +44,20 @@ export async function print(refs, params, q) {
         if (my !== seq) return;
         $('#pr-prev', root).innerHTML = pages.map((h) => `<div class="sheet pv-page">${h}</div>`).join('');
       };
-      $$('[data-pick]', root).forEach((c) => { c.onchange = () => { c.checked ? chosen.add(c.dataset.pick) : chosen.delete(c.dataset.pick); draw(); }; });
+      const allBox = $('#pr-all', root);
+      const updateAll = () => {
+        allBox.checked = list.length > 0 && chosen.size === list.length;
+        allBox.indeterminate = chosen.size > 0 && chosen.size < list.length;
+      };
+      allBox.onchange = () => {
+        $('[data-pick]', root).forEach(c => {
+          c.checked = allBox.checked;
+          if (c.checked) chosen.add(c.dataset.pick); else chosen.delete(c.dataset.pick);
+        });
+        updateAll(); draw();
+      };
+      $('[data-pick]', root).forEach((c) => { c.onchange = () => { c.checked ? chosen.add(c.dataset.pick) : chosen.delete(c.dataset.pick); updateAll(); draw(); }; });
+      updateAll();
       draw();
       $('#pr-print', root).onclick = async () => {
         const d = doc();
