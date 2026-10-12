@@ -12,7 +12,8 @@ export async function print(refs, params, q) {
   if (!ctx) return { active: '#/audits', crumbs: '<b>Not Found</b>', body: '<div class="note bad">This audit was not found.</div>' };
   const list = ctx.aoms;
   const forceDraft = q.get('draft') === '1';
-  const chosen = new Set(list.map((a) => a.id));
+  const requestedAom = q.get('aom');
+  const chosen = new Set(requestedAom && list.some(a => a.id === requestedAom) ? [requestedAom] : list.map(a => a.id));
   const allFinal = () => [...chosen].every((id) => list.find((a) => a.id === id).data.status === ST.FINAL);
   const isDraft = () => forceDraft || !allFinal();
   const doc = () => buildLetter({ audit: ctx.audit, lgu: ctx.lgu, mun: ctx.mun, team: ctx.team, atl: ctx.atl, sa: ctx.sa, aoms: list.filter((a) => chosen.has(a.id)), nums: ctx.nums, varsFor: ctx.varsFor, draft: isDraft() });
@@ -22,7 +23,7 @@ export async function print(refs, params, q) {
       <div class="btn-row"><a class="btn ghost" href="#/audits/${ctx.rec.id}/aoms">← Back to AOMs</a></div></div>
     <div class="split" style="grid-template-columns:320px minmax(0,1fr)">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>AOMs to Include</h2></div>
-        ${list.map((a) => `<label class="t-row click" style="grid-template-columns:24px 1fr;padding:10px 16px"><input type="checkbox" data-pick="${a.id}" checked>
+        ${list.map((a) => `<label class="t-row click" style="grid-template-columns:24px 1fr;padding:10px 16px"><input type="checkbox" data-pick="${a.id}" ${chosen.has(a.id) ? "checked" : ""}>
           <span><span class="mono" style="font-size:12px">${esc(aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}</span> ${pill(a.data.status || 'Draft', statusPill(a.data.status || 'Draft'))}<br><b>${esc(fillText(a.data.title, ctx.varsFor(a)))}</b></span></label>`).join('')}
         <div class="panel-body"><div id="pr-mode"></div>
           <button class="btn primary" id="pr-print">Print</button><button class="btn ghost" id="pr-word">Download Word</button>
