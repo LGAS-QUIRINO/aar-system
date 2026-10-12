@@ -158,7 +158,7 @@ export function saorHTML(m, head) {
     <p class="c b">REGIONAL OFFICE NO. II</p><p class="c">PROVINCE OF QUIRINO</p><p class="c">PROVINCIAL SATELLITE AUDITING OFFICE</p><p class="c" style="font-size:9pt">Capitol Hills, Cabarroguis, Quirino</p>
     <p class="c b rule">Office of the Auditor – Audit Team ${escH(head.officeCode || '')}</p>
     <p class="c b" style="margin-top:12pt;text-decoration:underline">SUMMARY OF AUDIT OBSERVATIONS AND RECOMMENDATIONS</p>
-    <p class="c" style="font-style:italic">Barangays of ${escH(head.mun)}, Quirino</p><p class="c" style="font-style:italic">For Audit Year ${escH(head.year)}</p>
+    <p class="c" style="font-style:italic">${head.barangay ? `Barangay ${escH(head.barangay)}, ${escH(head.mun)}, Quirino` : `Barangays of ${escH(head.mun)}, Quirino`}</p><p class="c" style="font-style:italic">For Audit Year ${escH(head.year)}</p>
     <table class="saor-t"><colgroup><col style="width:4%"><col style="width:13%"><col style="width:27%"><col style="width:22.6%"><col style="width:17.8%"><col style="width:15.6%"></colgroup>
       <thead><tr><th>No.</th><th>Reference No.</th><th>Observations</th><th>Recommendations</th><th>Management Comments</th><th>Auditor's Rejoinder</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" style="text-align:center;padding:16pt">No Final AOMs yet.</td></tr>'}</tbody></table>${head.draft ? `<p class="saor-draft-foot">${DRAFT_FOOT}</p>` : ''}</div>`;
@@ -224,7 +224,7 @@ export async function saorWord(m, head) {
   const children = [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 230, after: 0 }, children: lh }),
     C('REGIONAL OFFICE NO. II', { b: true }), C('PROVINCE OF QUIRINO'), C('PROVINCIAL SATELLITE AUDITING OFFICE'), C('Capitol Hills, Cabarroguis, Quirino', { size: 18 }),
     C(''), C('Office of the Auditor – Audit Team ' + (head.officeCode || ''), { b: true, rule: true }), C(''),
-    C('SUMMARY OF AUDIT OBSERVATIONS AND RECOMMENDATIONS', { b: true, u: true }), C(`Barangays of ${head.mun}, Quirino`, { i: true }), C(`For Audit Year ${head.year}`, { i: true }), C(''),
+    C('SUMMARY OF AUDIT OBSERVATIONS AND RECOMMENDATIONS', { b: true, u: true }), C(head.barangay ? `Barangay ${head.barangay}, ${head.mun}, Quirino` : `Barangays of ${head.mun}, Quirino`, { i: true }), C(`For Audit Year ${head.year}`, { i: true }), C(''),
     new Table({ width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, margins: { top: 80, bottom: 80, left: 115, right: 115 }, rows })];
   const doc = new Document({ creator: 'Annual Audit Report System', title: 'SAOR', styles: { default: { document: { run: { font: FONT, size: 21 } } } },
     sections: [{ properties: { page: { size: { width: 12240, height: 18720, orientation: PageOrientation.LANDSCAPE }, margin: { top: 1080, right: 1080, bottom: 1080, left: 1080, header: 500, footer: 500 } } },
@@ -237,7 +237,7 @@ export async function saorWord(m, head) {
       children }] });
   const blob = await Packer.toBlob(doc);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `${String(head.mun).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_SAOR_Audit_Year_${head.year}${head.draft ? '_DRAFT' : ''}.docx`;
+  a.href = URL.createObjectURL(blob); a.download = `${String(head.barangay ? head.barangay+'_'+head.mun : head.mun).toUpperCase().replace(/[^A-Z0-9]+/g, '')}_SAOR_Audit_Year_${head.year}${head.draft ? '_DRAFT' : ''}.docx`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
