@@ -15,8 +15,10 @@ export async function loadAudit(refs, auditId) {
   const team = teamRec ? teamRec.data : {};
   const userOf = (id) => (refs.user[id] ? { id, ...refs.user[id].data } : null);
   const atl = userOf(team.atlUserId), sa = userOf(team.saUserId), member = userOf(audit.memberId);
-  const aoms = (await store.list('aoms')).filter((a) => a.data.auditId === auditId).sort((a, b) => (a.data.seq || 0) - (b.data.seq || 0));
-  const nums = numberAoms(aoms);
+  const auditAoms = (await store.list('aoms')).filter((a) => a.data.auditId === auditId).sort((a, b) => (a.data.seq || 0) - (b.data.seq || 0));
+  // Withdrawn findings are hidden from reports, but their locked AOM numbers remain reserved.
+  const nums = numberAoms(auditAoms);
+  const aoms = auditAoms.filter((a) => a.data.status !== ST.WITHDRAWN);
   const base = setupVars(audit, lgu, mun);
   const varsFor = (a) => {
     const v = {};
