@@ -130,6 +130,7 @@ export const SAOR_CSS = `
 .saor-t td.ref p{margin:0}
 .saor-t td p.li{padding-left:.25in;text-indent:-.25in}
 .saor-t td p.li .lt{display:inline-block;width:.25in;text-indent:0}
+.saor-t tr.sec{break-after:avoid;page-break-after:avoid;break-inside:avoid;page-break-inside:avoid}
 .saor-t tr.sec td{font-weight:700;background:#F2F2F2}
 .saor-t tr.tot td{font-weight:700}
 .saor-t .amt{float:right;padding-left:6pt}
@@ -204,7 +205,7 @@ export async function saorWord(m, head) {
   const amtPara = (brgy, amt, b, sign = true) => new Paragraph({ spacing: { after: 0 }, tabStops: [{ type: 'right', position: W[2] - 240 }], children: [R(brgy, { b }), ...(amt !== null ? [new TextRun({ text: '\t' }), new TextRun({ text: amtTxt(amt, sign), font: FONT, size: 21, bold: !!b, underline: b ? { type: 'double' } : undefined })] : [])] });
   const rows = [new TableRow({ tableHeader: true, cantSplit: true, children: ['No.', 'Reference No.', 'Observations', 'Recommendations', 'Management Comments', "Auditor's Rejoinder"].map((h, i) => cell([new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [R(h, { b: true })] })], i, { bd: { bottom: { style: BorderStyle.SINGLE, size: 12, color: '000000' } } })) })];
   m.sections.forEach((s) => {
-    rows.push(new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 6, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
+    rows.push(new TableRow({ cantSplit: true, children: [new TableCell({ columnSpan: 6, shading: { type: ShadingType.CLEAR, fill: 'F2F2F2', color: 'auto' }, children: [new Paragraph({ keepNext: true, keepLines: true, children: [R(`${s.code}. ${s.title.toUpperCase()}`, { b: true })] })] })] }));
     s.obs.forEach((o) => {
       if (o.single) {
         const l = o.lines[0];
