@@ -72,7 +72,17 @@ export async function aoms(refs, params, q) {
   const countPills = (d) => { const c = reviewCounts(clone(d)); return `${c.corrections ? pill(c.corrections + ' correction' + (c.corrections > 1 ? 's' : ''), 'grey') : ''} ${c.comments ? pill(`${c.comments} comment${c.comments > 1 ? 's' : ''} · ${c.answered} answered or resolved`, 'grey') : ''}`; };
   const prevA = list[idx - 1], nextA = list[idx + 1];
   const aomLink = (a) => `#/audits/${ctx.rec.id}/aoms?aom=${a.id}`;
+  const returnedAoms = list.filter(a => a.data.status === ST.RETURNED);
+  const otherAoms = list.filter(a => a.data.status !== ST.RETURNED);
+  const memberGroups = ctx.isMember ? `<section class="panel" style="padding:12px 16px">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><b>Member AOMs</b><span class="hint">Returned: ${returnedAoms.length} · Other AOMs: ${otherAoms.length}</span></div>
+    <details ${s === ST.RETURNED ? 'open' : ''} style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Returned AOMs (${returnedAoms.length})</summary>
+      ${returnedAoms.length ? returnedAoms.map(a=>`<a class="t-row click" href="${aomLink(a)}" style="grid-template-columns:1fr auto;text-decoration:none;color:inherit"><span><b>${esc(fillText(a.data.title,ctx.varsFor(a)))}</b><br><small class="hint">${esc(a.data.returnNote || 'Returned for correction')}</small></span><span>${a.id === cur.id ? 'Viewing' : 'Open →'}</span></a>`).join('') : '<div class="hint" style="padding:10px">No returned AOMs.</div>'}</details>
+    <details ${s !== ST.RETURNED ? 'open' : ''} style="margin-top:10px"><summary style="cursor:pointer;font-weight:600">Other AOMs (${otherAoms.length})</summary>
+      ${otherAoms.map(a=>`<a class="t-row click" href="${aomLink(a)}" style="grid-template-columns:1fr auto;text-decoration:none;color:inherit"><span><b>${esc(fillText(a.data.title,ctx.varsFor(a)))}</b><br><small class="hint">${esc(a.data.status || 'Draft')}</small></span><span>${a.id===cur.id?'Viewing':'Open →'}</span></a>`).join('')}</details>
+  </section>` : '';
   const reviewBody = `${stepsBar(ctx, 'AOM Review')}
+    ${memberGroups}
     <div class="rv-banner" ${s === ST.RETURNED ? '' : 'style="background:#fff;border-color:var(--line)"'}>${pill(s, statusPill(s))}<h1>AOM No. ${esc(aomNoText)} · ${esc(fillText(cur.data.title, vars))}</h1>
       <span id="rv-counts" style="margin-left:auto;display:flex;gap:6px">${countPills(cur.data)}</span>
       ${s === ST.RETURNED ? `<div class="msg">Returned by <b>${esc(userName(cur.data.returnedBy))}</b> · ${esc(when(cur.data.returnedAt))}${cur.data.returnNote ? ': “' + esc(cur.data.returnNote) + '”' : ''}</div>`
