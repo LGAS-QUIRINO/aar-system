@@ -50,13 +50,13 @@ export async function print(refs, params, q) {
         allBox.indeterminate = chosen.size > 0 && chosen.size < list.length;
       };
       allBox.onchange = () => {
-        $('[data-pick]', root).forEach(c => {
+        $$('[data-pick]', root).forEach(c => {
           c.checked = allBox.checked;
           if (c.checked) chosen.add(c.dataset.pick); else chosen.delete(c.dataset.pick);
         });
         updateAll(); draw();
       };
-      $('[data-pick]', root).forEach((c) => { c.onchange = () => { c.checked ? chosen.add(c.dataset.pick) : chosen.delete(c.dataset.pick); updateAll(); draw(); }; });
+      $$('[data-pick]', root).forEach((c) => { c.onchange = () => { c.checked ? chosen.add(c.dataset.pick) : chosen.delete(c.dataset.pick); updateAll(); draw(); }; });
       updateAll();
       draw();
       $('#pr-print', root).onclick = async () => {
