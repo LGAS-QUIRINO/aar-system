@@ -5,7 +5,8 @@ import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, confirmBox, pill, $, $$ } from '../ui.js';
 import { has, myTeamIds, canEditAudits } from '../refs.js';
 import { ST, statusPill } from '../aom.js';
-import { saorHTML, printSaor, saorWord } from '../saor.js';
+import { buildSaor, saorHTML, printSaor, saorWord } from '../saor.js';
+import { loadAudit } from '../auditctx.js';
 import { loadSaor, saveSaor, OPEN, forwardSaor, retrieveSaor, reopenSaor, trailModal } from './saorreview.js';
 
 const longD = (iso) => { const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); };
@@ -22,6 +23,7 @@ export async function saorview(refs, params, q) {
   const years = [...new Set(audits.filter((a) => munOf(a) === munId).map((a) => Number(a.data.auditYear)))].sort((a, b) => b - a);
   const year = years.includes(Number(q.get('y'))) ? Number(q.get('y')) : years[0];
   let ctx = await loadSaor(refs, munId, year);
+  if (q.get('scope') === 'barangay') return barangaySaor(refs, ctx, q, munId, year, munIds, years);
   const { mun, list, aoms, model, allObs, S, status, head, teamId } = ctx;
   const R = S.review;
   const open = OPEN.includes(status), final = status === ST.FINAL;
@@ -99,6 +101,7 @@ export async function saorview(refs, params, q) {
   const body = `<div class="page-head"><div style="display:flex;flex-direction:column;gap:8px"><h1>SAOR · ${esc(mun.name)}</h1>${steps}</div>
       <div class="btn-row"><label class="sr-only" for="s-m">Municipality</label><select class="input" id="s-m" style="width:160px">${munIds.map((id) => `<option value="${id}" ${id === munId ? 'selected' : ''}>${esc(refs.lgu[id]?.data.name || id)}</option>`).join('')}</select>
         <label class="sr-only" for="s-y">Audit Year</label><select class="input" id="s-y" style="width:170px">${years.map((y) => `<option value="${y}" ${y === year ? 'selected' : ''}>Audit Year ${y}</option>`).join('')}</select></div></div>
+    <div class="panel rv-bar"><div class="seg"><a class="on" href="${go()}">Consolidated SAOR</a><a href="#/saor?scope=barangay&m=${encodeURIComponent(munId)}&y=${year}">Per Barangay SAOR</a></div></div>
     ${topnote}
     <div class="saor-lay">
       <section class="panel mc-panel" style="align-self:start"><div class="panel-head"><h2>Management Comments</h2></div>
@@ -183,4 +186,49 @@ export async function saorview(refs, params, q) {
       setDirty(false, saveAll);
     }
   };
+}
+
+
+async function barangaySaor(refs, parent, q, munId, year, munIds, years) {
+  const eligible = parent.list.slice().sort((a,b)=>(refs.lgu[a.data.lguId]?.data.name||'').localeCompare(refs.lgu[b.data.lguId]?.data.name||''));
+  const selected = eligible.find(a=>a.id===q.get('audit')) || eligible[0];
+  const goto = (aid=selected?.id, y=year, m=munId) => '#/saor?scope=barangay&m='+encodeURIComponent(m)+'&y='+y+'&audit='+encodeURIComponent(aid||'');
+  if (!selected) return { active:'#/saor', crumbs:'<b>SAOR · Per Barangay</b>', body:'<div class="panel"><div class="empty">No Barangay audits in the selected municipality and year.</div></div>' };
+  const ctx = await loadAudit(refs,selected.id);
+  const recId = 'saor-brgy-'+selected.id;
+  const saved = await store.get('letters',recId);
+  const data = saved && !saved.deleted ? saved.data : {type:'saor_barangay', auditId:selected.id, munId, teamId:selected.data.teamId, auditYear:year, overrides:{}, status:'Draft'};
+  const src = parent.aoms.filter(a=>a.data.auditId===selected.id);
+  const build = (overrides=data.overrides||{}) => buildSaor({
+    audits:[{rec:selected,lgu:ctx.lgu.name,vars:a=>ctx.varsFor(a)}],
+    aoms:src,templates:parent.templates,overrides
+  });
+  const model = build();
+  const entries = model.sections.flatMap(sec=>sec.obs);
+  const head = {mun:parent.mun.name,barangay:ctx.lgu.name,year,officeCode:parent.team.officeCode || '',draft:true};
+  const canEdit = canEditAudits(refs.me) && (ctx.isMember || ctx.atl?.id===refs.me.id || ctx.sa?.id===refs.me.id);
+  const nav = '<div class="seg" role="group"><a href="#/saor?m='+encodeURIComponent(munId)+'&y='+year+'">Consolidated SAOR</a><a class="on" href="'+goto()+'">Per Barangay SAOR</a></div>';
+  const obsRows = entries.map(o=>'<section class="panel" data-entry="'+esc(o.key)+'"><div class="panel-head"><h2>'+o.n+'. '+esc(o.title)+'</h2></div><div class="panel-body"><div class="field"><label class="label">Observation</label><textarea class="input be-text" data-field="obs" rows="4" '+(canEdit?'':'readonly')+'>'+esc(o.obs)+'</textarea></div><div class="field"><label class="label">Recommendation</label><textarea class="input be-text" data-field="rec" rows="4" '+(canEdit?'':'readonly')+'>'+esc(o.rec)+'</textarea></div></div></section>').join('');
+  const body = '<div class="page-head"><div><h1>SAOR · Per Barangay</h1><p>'+esc(ctx.lgu.name)+' · Audit Year '+year+' · '+model.obsCount+' Final AOM(s) included</p></div></div>'
+    +'<div class="panel rv-bar">'+nav+'<span class="btn-row" style="margin-left:auto"><label class="label" for="bs-m">Municipality</label><select class="input" id="bs-m">'+munIds.map(id=>'<option value="'+esc(id)+'" '+(id===munId?'selected':'')+'>'+esc(refs.lgu[id]?.data.name||id)+'</option>').join('')+'</select><select class="input" id="bs-y">'+years.map(y=>'<option value="'+y+'" '+(y===year?'selected':'')+'>Audit Year '+y+'</option>').join('')+'</select></span></div>'
+    +'<section class="panel"><div class="panel-body"><div class="field"><label class="label" for="bs-a">Barangay</label><select class="input" id="bs-a">'+eligible.map(a=>'<option value="'+esc(a.id)+'" '+(a.id===selected.id?'selected':'')+'>'+esc(refs.lgu[a.data.lguId]?.data.name||'')+'</option>').join('')+'</select></div>'
+    +'<div class="note info">This Barangay report has its own saved wording and does not change the Consolidated SAOR or approved AOMs. Only Final AOMs are included. Its output remains a draft pending a dedicated approval workflow.</div>'
+    +(model.notFinal.length?'<div class="note warn">'+model.notFinal.length+' non-Final AOM(s) excluded.</div>':'')
+    +'</div></section><div class="panel rv-bar"><div class="seg"><button class="on" type="button" data-bs-tab="edit">Wording</button><button type="button" data-bs-tab="print">Print View</button></div><span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" id="bs-save" '+(!canEdit?'disabled':'')+'>Save</button><button class="btn sm ghost" id="bs-print" '+(!entries.length?'disabled':'')+'>Print Draft</button><button class="btn sm primary" id="bs-word" '+(!entries.length?'disabled':'')+'>Word Draft</button></span></div>'
+    +'<div id="bs-edit">'+(obsRows||'<section class="panel"><div class="empty">No Final AOMs yet.</div></section>')+'</div>'
+    +'<div id="bs-preview" hidden class="paper-wrap big"><div class="sheet saor-sheet">'+saorHTML(model,head)+'</div></div>';
+  return {active:'#/saor',crumbs:'<b>SAOR · Per Barangay</b>',body,mount(root){
+    $('#bs-m',root).onchange=e=>{location.hash=goto('',year,e.target.value)};
+    $('#bs-y',root).onchange=e=>{location.hash=goto('',Number(e.target.value))};
+    $('#bs-a',root).onchange=e=>{location.hash=goto(e.target.value)};
+    const overrides={...(data.overrides||{})};
+    const current=()=>build(overrides);
+    const collect=()=>{ $$('[data-entry]',root).forEach(card=>{ const key=card.dataset.entry; overrides[key]={obs:$('[data-field="obs"]',card).value.trim(),rec:$('[data-field="rec"]',card).value.trim(),by:refs.me.email,at:new Date().toISOString()}; }); };
+    const save=async()=>{if(!canEdit)return;collect();await store.save('letters',recId,{...data,overrides,savedAt:new Date().toISOString()});setDirty(false);toast('Barangay SAOR saved.','ok');return true};
+    const b=$('#bs-save',root);if(b)b.onclick=save;
+    $$('[data-entry] textarea',root).forEach(el=>el.oninput=()=>{setDirty(true,save)});
+    $$('[data-bs-tab]',root).forEach(b=>b.onclick=()=>{const preview=b.dataset.bsTab==='print';$('#bs-edit',root).hidden=preview;$('#bs-preview',root).hidden=!preview;$$('[data-bs-tab]',root).forEach(x=>x.classList.toggle('on',x===b));if(preview){collect();$('#bs-preview',root).innerHTML='<div class="sheet saor-sheet">'+saorHTML(current(),head)+'</div>';}});
+    $('#bs-print',root).onclick=async()=>{collect();await printSaor(current(),head)};
+    $('#bs-word',root).onclick=async()=>{collect();try{await saorWord(current(),head)}catch(e){toast('Word file failed: '+e.message,'bad')}};
+  }};
 }
