@@ -92,7 +92,7 @@ export async function aoms(refs, params, q) {
     <div id="rv-host"></div>
     ${[ST.DRAFT, ST.RETURNED].includes(s) && editable ? `<div class="panel rv-foot"><div id="rv-block" style="max-width:260px"></div>
       <textarea class="input" id="rv-note" aria-label="Note to the ${esc(reviewerName)}" placeholder="Note to the ${esc(reviewerName)} (optional), e.g. Kept the amount, see my reply on the topic sentence.">${esc(cur.data.forwardNoteDraft || '')}</textarea>
-      <button class="btn ghost" id="rv-save">Save</button><button class="btn success" id="rv-fwd">${s === ST.RETURNED ? "Forward Again" : "Forward"} to ${esc(reviewerName)}</button>${s === ST.DRAFT && sendable.length > 1 ? `<button class="btn ghost" id="rv-fwd-all">Forward All ${sendable.length} as Batch →</button>` : ""}</div>` : ''}`;
+      <button class="btn ghost" id="rv-save">Save</button>${s === ST.RETURNED && ctx.isMember ? `<button class="btn ghost" id="rv-remove" type="button">Remove Returned AOM</button>` : ""}<button class="btn success" id="rv-fwd">${s === ST.RETURNED ? "Forward Again" : "Forward"} to ${esc(reviewerName)}</button>${s === ST.DRAFT && sendable.length > 1 ? `<button class="btn ghost" id="rv-fwd-all">Forward All ${sendable.length} as Batch →</button>` : ""}</div>` : ''}`;
 
   const body = isReview ? reviewBody : `${stepsBar(ctx, 'AOM Review')}
     <div class="page-head"><div><h1>Barangay ${esc(ctx.lgu.name)} AOMs</h1><p>${list.length} AOM${list.length > 1 ? 's' : ''} · ${esc(first === last ? aomNo(ctx.audit.auditYear, first, ctx.audit.periodFrom, ctx.audit.periodTo) : aomRange(ctx.audit.auditYear, first, last, ctx.audit.periodFrom, ctx.audit.periodTo))} ${nc.ok ? '' : '· <b style="color:var(--bad-ink)">Numbering has gaps or duplicates</b>'}</p></div>
@@ -178,6 +178,27 @@ export async function aoms(refs, params, q) {
           await store.log('forwarded AOMs for review',`${ctx.lgu.name} · ${freshList.length}`,ctx.teamId,refs.me.email);
           setDirty(false); emitChange('local'); toast(`Forwarded ${freshList.length} AOM${freshList.length>1?'s':''}.`,'ok');
           location.hash = `#/audits/${ctx.rec.id}/aoms?aom=${cur.id}&updated=${Date.now()}`;
+        };
+        const removal = $('#rv-remove', root);
+        if (removal) removal.onclick = async () => {
+          const fresh = await store.get('aoms', cur.id);
+          if (!fresh || fresh.data.auditId !== ctx.rec.id || fresh.data.status !== ST.RETURNED || !ctx.isMember) {
+            toast('This AOM is not eligible for member removal.', 'bad'); return;
+          }
+          if (!(await confirmBox('Remove Returned AOM',
+            'Remove this returned AOM from active findings and reports? The original record, official number and review history will be retained for audit purposes.',
+            'Remove AOM'))) return;
+          const now = new Date().toISOString();
+          const d = clone(fresh.data);
+          d.status = ST.WITHDRAWN;
+          d.withdrawnBy = refs.me.email;
+          d.withdrawnAt = now;
+          d.history = [...(d.history || []), {at: now, by: refs.me.email, action:'Returned AOM withdrawn by Team Member'}];
+          await store.save('aoms', cur.id, d);
+          await store.log('withdrew a returned AOM', ctx.lgu.name + ' · ' + cur.data.title, ctx.teamId, refs.me.email);
+          setDirty(false);
+          toast('Returned AOM removed from active findings.', 'ok');
+          location.hash = '#/audits/' + ctx.rec.id + '/aoms?refresh=' + Date.now();
         };
         const fb = $('#rv-fwd', root);
         if (fb) fb.onclick = () => forwardUnified([cur],note?.value.trim() || '');
