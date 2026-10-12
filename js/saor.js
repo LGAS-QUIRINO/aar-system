@@ -116,6 +116,9 @@ export const SAOR_CSS = `
 .saor-doc .rule::after{content:'';position:absolute;left:0;right:0;bottom:-5px;border-bottom:1px solid #000}
 .saor-t{border-collapse:collapse;width:100%;margin-top:10pt;table-layout:fixed}
 .saor-t th,.saor-t td{border:1px solid #000;padding:.06in .08in;vertical-align:top;text-align:left}
+/* Keep each AOM row intact when paginating the printed SAOR. */
+.saor-t tbody tr{break-inside:avoid;page-break-inside:avoid}
+.saor-t tbody td{break-inside:avoid;page-break-inside:avoid}
 .saor-t th{text-align:center;font-weight:700;border-bottom:2px solid #000}
 .saor-t tr.in td{border-top:1px dotted #555;border-bottom:1px dotted #555}
 .saor-t tr.in td.rec,.saor-t td.rec{border-top:1px solid #000}
@@ -205,7 +208,7 @@ export async function saorWord(m, head) {
     s.obs.forEach((o) => {
       if (o.single) {
         const l = o.lines[0];
-        rows.push(new TableRow({ children: [cell(noP(o.n), 0), cell(refP(l.ref), 1), cell(lines(o.obs, [R(`Barangay ${l.brgy}: `, { b: true })]), 2),
+        rows.push(new TableRow({ cantSplit: true, children: [cell(noP(o.n), 0), cell(refP(l.ref), 1), cell(lines(o.obs, [R(`Barangay ${l.brgy}: `, { b: true })]), 2),
           cell(lines(o.rec), 3), cell(lines(l.comment), 4), cell(lines(l.rejoinder), 5)] }));
         return;
       }
@@ -213,7 +216,7 @@ export async function saorWord(m, head) {
       const last = o.lines.length - 1 + (o.money ? 1 : 0);   // index of the group's last inner row
       const bd = (k) => k === last ? top : both;
       const cont = (k) => cell([], 3, { vm: VerticalMergeType.CONTINUE, bd: { top: SOL } });
-      rows.push(new TableRow({ children: [cell(noP(o.n), 0, { bd: bot }), cell([], 1, { bd: bot }), cell(lines(o.obs), 2, { bd: bot }), cell(lines(o.rec), 3, { vm: VerticalMergeType.RESTART }), cell([], 4, { bd: bot }), cell([], 5, { bd: bot })] }));
+      rows.push(new TableRow({ cantSplit: true, children: [cell(noP(o.n), 0, { bd: bot }), cell([], 1, { bd: bot }), cell(lines(o.obs), 2, { bd: bot }), cell(lines(o.rec), 3, { vm: VerticalMergeType.RESTART }), cell([], 4, { bd: bot }), cell([], 5, { bd: bot })] }));
       o.lines.forEach((l, k) => rows.push(new TableRow({ cantSplit: true, children: [cell([], 0, { bd: bd(k) }), cell(refP(l.ref), 1, { bd: bd(k) }), cell([amtPara(l.brgy, l.amount, false, fa === k)], 2, { bd: bd(k) }), cont(k), cell(lines(l.comment), 4, { bd: bd(k) }), cell(lines(l.rejoinder), 5, { bd: bd(k) })] })));
       if (o.money) { const k = last; rows.push(new TableRow({ cantSplit: true, children: [cell([], 0, { bd: bd(k) }), cell([], 1, { bd: bd(k) }), cell([amtPara(`Total · ${o.lines.length} Barangay${o.lines.length > 1 ? 's' : ''}`, o.total, true)], 2, { bd: bd(k) }), cont(k), cell([], 4, { bd: bd(k) }), cell([], 5, { bd: bd(k) })] })); }
     });
