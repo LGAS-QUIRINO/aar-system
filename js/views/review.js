@@ -217,6 +217,7 @@ export async function review(refs, params, q) {
           <span class="hint">Batch: ${counts.approved} approved · ${list.filter((a) => a.data.status === ST.RETURNED).length} returned · ${pendingMine.length} others waiting for you</span>
           ${pendingMine.length ? `<button class="btn primary" id="r-all">${willFinal ? 'Approve Remaining as Final' : 'Approve Remaining and Forward to SA'} →</button>` : ''}</div></section>`
           : s === ST.FINAL && iAmSA ? `<section class="panel"><div class="panel-head"><h2>Final</h2></div><div class="panel-body"><span class="hint">Locked as AOM No. ${esc(aomNo(ctx.audit.auditYear, N[cur.id].n, ctx.audit.periodFrom, ctx.audit.periodTo))}.</span><button class="btn ghost" id="r-reopen">Reopen for Correction</button></div></section>` : ''}
+        ${iAmSA && (s === ST.FINAL || (s === ST.SA && !!cur.data.finalAt) || (s === ST.RETURNED && !!cur.data.finalAt)) ? `<section class="panel"><div class="panel-head"><h2>Withdraw AOM</h2></div><div class="panel-body"><span class="hint">SA-only action. Excludes this AOM from active reports while retaining its official number and review history.</span><button class="btn ghost" id="r-withdraw" type="button">Withdraw AOM</button></div></section>` : ''}
         ${s === ST.FINAL && canManage && cur.data.poolCode ? `<section class="panel"><div class="panel-head"><h2>AOM Library</h2><span class="hint mono">${esc(cur.data.poolCode)}</span></div><div class="panel-body">
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><button class="btn primary" id="r-lib">Update</button><span class="hint">Apply corrections to the template (new version, for everyone)</span></div>
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="r-var">Save as Variant</button><span class="hint">Keep this wording as a separate template beside it (for a different case)</span></div>
@@ -227,6 +228,21 @@ export async function review(refs, params, q) {
   return {
     active: '#/review', crumbs: `<a href="#/review">For My Review</a> / <b>${esc(ctx.title)}</b>`, body,
     mount(root) {
+      const withdraw = $('#r-withdraw', root);
+      if (withdraw) withdraw.onclick = async () => {
+        const fresh = await store.get('aoms', cur.id);
+        if (!fresh || ![ST.FINAL,ST.SA,ST.RETURNED].includes(fresh.data.status) || !fresh.data.finalAt) {
+          toast('Only a previously finalized AOM can be withdrawn here.','bad'); return;
+        }
+        if (!(await confirmBox('Withdraw Final AOM', 'Withdraw AOM No. '+esc(aomNo(ctx.audit.auditYear, N[cur.id].n,ctx.audit.periodFrom,ctx.audit.periodTo))+'? It will be excluded from active AOMs, SAOR and printing. Its number and history will be kept. This action does not permanently erase it.', 'Withdraw'))) return;
+        const d = clone(fresh.data), now = new Date().toISOString();
+        d.status = ST.WITHDRAWN; d.withdrawnAt = now; d.withdrawnBy = me.email;
+        d.history = [...(d.history || []), {at:now, by:me.email, action:'Withdrawn by Supervising Auditor; official number retained'}];
+        await store.save('aoms',cur.id,d);
+        await store.log('withdrew a finalized AOM',ctx.lgu.name+' · '+aomNo(ctx.audit.auditYear,N[cur.id].n,ctx.audit.periodFrom,ctx.audit.periodTo),ctx.teamId,me.email);
+        toast('AOM withdrawn; history and number retained.','ok');
+        location.hash = '#/review/'+ctx.rec.id+'?scope=all&withdrawn='+Date.now();
+      };
       const reopen = $('#r-reopen', root);
       if (reopen) reopen.onclick = async () => {
         if (!(await confirmBox('Reopen Final AOM', 'Reopen this AOM for correction? It keeps its number. Approve it again when done.', 'Reopen'))) return;
