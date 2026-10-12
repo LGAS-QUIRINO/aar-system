@@ -94,18 +94,6 @@ export async function reviewList(refs) {
   const sq = await saorQueue(refs);
   const sRows = sq.map((x) => { const by = refs.users.find((u) => u.data.email === x.review.forwardedBy)?.data.name;
     return `<a class="t-row click" href="#/saor-review?m=${encodeURIComponent(x.munId)}&y=${x.year}" style="grid-template-columns:minmax(160px,1fr) 120px 1fr 140px;text-decoration:none;color:inherit"><span><b>${esc(refs.lgu[x.munId]?.data.name || '?')}</b><br><small class="hint">SAOR · Audit Year ${esc(x.year)}</small></span><span>${esc(x.review.status)}</span><span>Forwarded by ${esc(nice(by || ''))}<br><small class="hint">${esc(timeAgo(x.review.forwardedAt))}</small></span><span><span class="btn sm primary">Review →</span></span></a>`; }).join('');
-  const returned = (await store.list('aoms')).filter(a =>
-    a.data.status === ST.RETURNED &&
-    (myTeamIds(refs.me,refs.teams).includes(a.data.teamId) || a.data.memberId === refs.me.id));
-  const returnedAudits = await Promise.all([...new Set(returned.map(a=>a.data.auditId))].map(id=>store.get('audits',id)));
-  const returnedByAudit = new Map(returnedAudits.filter(Boolean).map(a=>[a.id,a]));
-  const returnedRows = returned.slice().sort((a,b)=>String(b.data.returnedAt||'').localeCompare(String(a.data.returnedAt||''))).map(a => {
-    const au=returnedByAudit.get(a.data.auditId);
-    const name=refs.lgu[au?.data.lguId]?.data.name || 'Barangay';
-    const title=a.data.title || 'AOM';
-    const note=a.data.returnNote ? '<br><small class="hint">'+esc(a.data.returnNote)+'</small>' : '';
-    return '<a class="t-row click" href="#/audits/'+encodeURIComponent(a.data.auditId)+'/aoms?aom='+encodeURIComponent(a.id)+'" style="grid-template-columns:minmax(140px,1fr) minmax(180px,2fr) auto;text-decoration:none;color:inherit"><span><b>'+esc(name)+'</b><br><small class="hint">Audit Year '+esc(au?.data.auditYear||'')+'</small></span><span><b>'+esc(title)+'</b>'+note+'</span><span class="btn sm ghost">Open AOM →</span></a>';
-  }).join('');
   const finals = (await store.list('aoms')).filter((a) => a.data.status === ST.FINAL && refs.team[a.data.teamId]?.data.saUserId === refs.me.id);
   const rows = q.map((x, i) => {
     const au = audits[i]?.data; if (!au) return '';
@@ -119,7 +107,6 @@ export async function reviewList(refs) {
     active: '#/review', crumbs: '<b>For My Review</b>',
     body: `<div class="page-head"><div><h1>For My Review</h1><p>AOMs forwarded to you. Opening an AOM starts the review, and the member can no longer retrieve it.</p></div></div>
       <section class="panel">${rows || (bRows || sRows ? '<div class="empty">No AOMs waiting for your review.</div>' : '<div class="empty">Nothing waiting for your review.</div>')}</section>
-      ${returnedRows ? `<section class="panel"><div class="panel-head"><h2>Returned AOMs · ${returned.length}</h2><span class="hint">Returned to the member for correction; not in your active review queue.</span></div>${returnedRows}</section>` : ''}
       ${sRows ? `<section class="panel"><div class="panel-head"><h2>SAORs for Review · ${sq.length}</h2></div>${sRows}</section>` : ''}
       ${bRows ? `<section class="panel"><div class="panel-head"><h2>BAARs for Review · ${bq.length}</h2></div>${bRows}</section>` : ''}
       ${has(refs.me, 'sa') && finals.length ? `<section class="panel"><div class="panel-head"><h2>Final AOMs · ${finals.length}</h2><span class="hint">Open one to reopen it if a correction is needed.</span></div>
