@@ -37,6 +37,7 @@ export async function activeTemplates(entity = 'barangay') {
 
 export async function pool(refs, params, q) {
   const canManage = has(refs.me, 'admin') || has(refs.me, 'sa');
+  const canContribute = canManage || has(refs.me, 'member');
   const groups = await poolGroups();
   const selCode = q.get('code') || groups[0]?.code;
   const g = groups.find((x) => x.code === selCode);
@@ -45,7 +46,8 @@ export async function pool(refs, params, q) {
   const usage = (await store.list('aoms')).reduce((m, a) => { m[a.data.poolCode] = (m[a.data.poolCode] || 0) + 1; return m; }, {});
   const userName = (email) => nice(refs.users.find((u) => u.data.email === email)?.data.name || email || '');
   const state = rec ? { aom: clone(rec.data) } : null;
-  const editable = canManage && rec && ['Draft', 'Proposed', 'Active'].includes(rec.data.status) && rec.id === g.latest.id;
+  const ownDraft = !!rec && rec.data.status === 'Draft' && rec.data.createdBy === refs.me.email;
+  const editable = rec && rec.id === g.latest.id && (canManage && ['Draft', 'Proposed', 'Active'].includes(rec.data.status) || !canManage && ownDraft);
   const go = (code, v) => `#/library?code=${encodeURIComponent(code)}${v ? '&v=' + encodeURIComponent(v) : ''}`;
   const q0 = (q.get('find') || '').toLowerCase();
 
@@ -60,7 +62,7 @@ export async function pool(refs, params, q) {
     <section class="panel"><div class="panel-head"><div><h2>${esc(rec.data.code)} · Version ${rec.data.version}</h2><span class="hint">${esc(rec.data.title)}</span></div>${pill(rec.data.status, STATUS_KIND[rec.data.status])}</div>
       <div class="panel-body">
         ${rec.data.status === 'Active' && editable ? '<div class="note info">Editing an Active template creates the next version as a Draft. This version stays in use until the new one is approved.</div>' : ''}
-        ${!canManage ? '<div class="note info">Only the Supervising Auditor or the Admin can change templates. You can use any Active template on the Findings screen.</div>' : ''}
+        ${!canManage ? '<div class="note info">Team Members may create and edit their own draft templates. Only the Supervising Auditor or Admin can approve and activate templates.</div>' : ''}
         ${rec.data.status === 'Superseded' ? `<div class="note info" style="align-items:center"><span>This is an older version. Only the Active version is offered on the Findings screen.</span>
           ${canManage ? '<span style="margin-left:auto;display:flex;align-items:center;gap:10px"><span class="hint">Use this version again</span><button class="btn sm primary" id="p-again">Use Again</button></span>' : ''}</div>` : ''}
         ${rec.data.status === 'Retired' ? '<div class="note warn">Retired. It is no longer offered on the Findings screen. AOMs that used it keep their text. Its code is never given to a new template.</div>' : ''}
@@ -78,7 +80,7 @@ export async function pool(refs, params, q) {
       </div></section>
     <section class="panel"><div class="panel-head"><h2>AOM Wording</h2><span class="hint">Edited the same way as an AOM draft. Put ** before and after words to print them in bold, e.g. **draw journal vouchers**.</span></div><div class="panel-body" id="p-blocks">${blocksHTML(state.aom, { editable, template: true })}</div></section>
     ${editable ? `<div class="panel savebar"><span class="save-state saved"><span class="d"></span>All Changes Saved</span>
-      <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="p-save">Save Draft</button><button class="btn success" id="p-approve">Approve and Make Active</button></div></div>` : ''}
+      <div class="btn-row" style="margin-left:auto"><button class="btn ghost" id="p-save">Save Draft</button>${canManage ? '<button class="btn success" id="p-approve">Approve and Make Active</button>' : '<span class="hint">SA/Admin approval required before the template becomes available for findings.</span>'}</div></div>` : ''}
     <section class="panel"><div class="panel-head"><h2>Version History</h2>${canManage && rec.data.status === 'Active' && !editable ? '' : ''}</div>
       ${g.versions.map((v) => `<a class="t-row click ${v.id === rec.id ? 'sel' : ''}" href="${go(g.code, v.id)}" style="grid-template-columns:1fr auto;text-decoration:none;color:inherit">
         <span><b>Version ${v.data.version}</b> · ${esc(v.data.note || '')}<br><small class="hint">${v.data.approvedAt ? 'Approved by ' + esc(userName(v.data.approvedBy)) + ' · ' + esc(longDate(v.data.approvedAt.slice(0, 10))) : 'Saved by ' + esc(userName(v.updatedBy))}</small></span>
@@ -88,7 +90,7 @@ export async function pool(refs, params, q) {
     </section>` : '<section class="panel"><div class="empty">No templates yet.</div></section>';
 
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
-      <div class="btn-row"><button class="btn ghost" disabled title="Comes in Phase 5">Import Issued AOMs (Word)</button>${canManage ? '<button class="btn primary" id="p-new">+ New Template</button>' : ''}</div></div>
+      <div class="btn-row"><button class="btn ghost" disabled title="Comes in Phase 5">Import Issued AOMs (Word)</button>${canContribute ? '<button class="btn primary" id="p-new">+ New Template</button>' : ''}</div></div>
     <div class="split" style="grid-template-columns:340px minmax(0,1fr)">
       <section class="panel" style="align-self:start"><div class="panel-head"><h2>Templates · ${groups.length}</h2></div>
         <div class="panel-body" style="padding:12px 16px"><input class="input" id="p-find" placeholder="Search templates" value="${esc(q.get('find') || '')}" aria-label="Search templates"></div>
@@ -107,7 +109,7 @@ export async function pool(refs, params, q) {
         const r = await modal({ title: 'New Template', body: `<div class="field"><label class="label" for="nt">Finding Title</label><input class="input" id="nt"></div><span class="hint">Code: ${code}. It starts as a Draft.</span>`,
           buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Create', cls: 'primary', value: 'ok', check: (bg) => { pool.nt = $('#nt', bg).value.trim(); return !!pool.nt; } }] });
         if (r !== 'ok') return;
-        await store.save('aom_library', `obs-${code}-v1`, { code, version: 1, status: 'Draft', title: pool.nt, area: '', section: 'B', wp: '', entityTypes: ['barangay'], saor: '', note: 'New template',
+        await store.save('aom_library', `obs-${code}-v1`, { code, version: 1, status: 'Draft', createdBy: refs.me.email, title: pool.nt, area: '', section: 'B', wp: '', entityTypes: ['barangay'], saor: '', note: 'New template',
           blocks: [{ type: 'topic', text: '' }, { type: 'criteria', lead: '', text: '', quoted: true }, { type: 'condition', text: '' }, { type: 'effect', text: '' }, { type: 'recommendation', lead: '', items: [], text: 'We recommend that Management ' }] });
         location.hash = go(code);
       };
@@ -162,7 +164,7 @@ export async function pool(refs, params, q) {
         return true;
       }
       $('#p-save', root).onclick = () => save(false);
-      $('#p-approve', root).onclick = async () => { if (await confirmBox('Approve Template', 'Make this version Active? It will be offered on the Findings screen from now on.', 'Approve', 'success')) save(true); };
+      if ($('#p-approve', root)) $('#p-approve', root).onclick = async () => { if (await confirmBox('Approve Template', 'Make this version Active? It will be offered on the Findings screen from now on.', 'Approve', 'success')) save(true); };
       setDirty(false, () => save(false));
     }
   };
