@@ -46,7 +46,7 @@ export async function dashboard(refs) {
   const pendingSetup = rows.filter((r) => (r.rec.data.stage || 'Setup') === 'Setup').length;
   const canCreate = has(refs.me, 'member') || has(refs.me, 'atl') || has(refs.me, 'sa') || has(refs.me, 'staff');
   const ids = new Set(rows.map((r) => r.rec.id));
-  const am = (await store.list('aoms')).filter((a) => ids.has(a.data.auditId));
+  const am = (await store.list('aoms')).filter((a) => ids.has(a.data.auditId) && a.data.status !== ST.WITHDRAWN);
   const cnt = (f) => am.filter(f).length;
   const nDraft = cnt((a) => (a.data.status || ST.DRAFT) === ST.DRAFT), nRet = cnt((a) => a.data.status === ST.RETURNED);
   const nAtl = cnt((a) => [ST.WITH_ATL, ST.ATL].includes(a.data.status)), nSa = cnt((a) => [ST.WITH_SA, ST.SA].includes(a.data.status));
