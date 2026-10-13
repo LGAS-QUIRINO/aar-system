@@ -391,12 +391,12 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
         if (el.value) await choose(i, el.value);
       }; });
       $$('[data-inter]', root).forEach((el) => { el.onchange = async () => { const rs = rows(); rs[+el.dataset.inter].inter = el.value; await put(rs); }; });
-      $('[data-change]', root).forEach((b) => { b.onclick = async () => {
+      $$('[data-change]', root).forEach((b) => { b.onclick = async () => {
         const i = +b.dataset.change, r = t.rows[i];
         const c = await pickAccount({ title: 'Change Matched Account', hintText: r.code + ' · ' + r.title, start: normTitle(r.title)[0] || '' });
         if (c) await choose(i, c);
       }; });
-      $('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
+      $$('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
       $$('[data-del]', root).forEach((b) => { b.onclick = async () => {
         const rs = rows(), r = rs[+b.dataset.del];
         r.del = true; await save({ ...t, rows: rs }, `deleted the zero-balance row ${r.code} ${r.title} from`);
