@@ -86,7 +86,9 @@ function withTotal(d, n, cols, rows) {
     [...new Set(rows.map(yearOf))].sort().forEach((y) => {
       const rs = rows.filter((r) => yearOf(r) === y);
       if (y) out.push(cols.map((_, i) => (i === hc ? `CY ${y}` : '')));
-      out.push(...rs, sumRow('Sub-Total', rs));
+      // A single detail line needs no yearly subtotal; the Total row already shows the amount.
+      out.push(...rs);
+      if (rs.length > 1) out.push(sumRow('Sub-Total', rs));
     });
     out.push(sumRow('Total', rows));
     return { sheet: FILLED, filled: true, rows: dropYear ? out.map((r) => r.slice(1)) : out, data: rows, cols };
