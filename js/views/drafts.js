@@ -8,7 +8,8 @@ export async function drafts(refs) {
   const teams = myTeamIds(refs.me, refs.teams);
   const audits = (await store.list('audits')).filter((a) => teams.includes(a.data.teamId) && !a.data.imported);
   const mineOnly = has(refs.me, 'member') && !has(refs.me, 'atl') && !has(refs.me, 'sa');
-  const aoms = await store.list('aoms');
+  // Withdrawn AOMs retain their records for the audit trail but are not active findings.
+  const aoms = (await store.list('aoms')).filter(x => x.data.status !== ST.WITHDRAWN);
   const rows = audits.filter((a) => !mineOnly || a.data.memberId === refs.me.id || aoms.some((x) => x.data.auditId === a.id && x.data.memberId === refs.me.id)).map((a) => {
     const list = aoms.filter((x) => x.data.auditId === a.id);
     const c = (st) => list.filter((x) => (x.data.status || ST.DRAFT) === st).length;
