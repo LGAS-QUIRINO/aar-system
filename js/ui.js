@@ -62,7 +62,6 @@ const NAV = [
   { href: '#/drafts', label: 'AOM Drafts', icon: '✎', count: 'drafts' },
   { href: '#/review', label: 'For My Review', icon: '✓', count: 'review', reviewer: true },
   { href: '#/saor', label: 'SAOR', icon: '☰' },
-  { href: '#/sk-saor', label: 'SK SAOR & Transmittal', icon: '▤' },
   { href: '#/exit', label: 'Exit Conference', icon: '✉' },
   { href: '#/baar', label: 'BAAR Reports', icon: '▣' },
   { href: '#/library', label: 'AOM Library', icon: '❏' }
