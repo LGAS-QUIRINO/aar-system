@@ -1,7 +1,7 @@
 // Screen 4 · AOM Drafts: edit each AOM, see it as printed, run the checks, forward for review.
 import { store, emitChange } from '../store.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
-import { loadAudit, stepsBar, advanceStage } from '../auditctx.js';
+import { compactActiveAomNumbers, loadAudit, stepsBar, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks } from '../blockeditor.js';
 import { clone, checks, findingParas, paraHTML, ST, statusPill, SECTIONS, numberingCheck, fillText, ensureIds, stampEdits, openComments, answered, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
@@ -195,6 +195,7 @@ export async function aoms(refs, params, q) {
           d.withdrawnAt = now;
           d.history = [...(d.history || []), {at: now, by: refs.me.email, action:'Returned AOM withdrawn by Team Member'}];
           await store.save('aoms', cur.id, d);
+          await compactActiveAomNumbers(ctx.rec.id, refs.me.email);
           await store.log('withdrew a returned AOM', ctx.lgu.name + ' · ' + cur.data.title, ctx.teamId, refs.me.email);
           setDirty(false);
           toast('Returned AOM removed from active findings.', 'ok');
