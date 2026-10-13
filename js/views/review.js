@@ -18,10 +18,13 @@ const sel = { text: '', wired: false };
 export async function reviewQueue(refs) {
   const me = refs.me;
   if (!has(me, 'atl') && !has(me, 'sa')) return [];
-  const teams = myTeamIds(me, refs.teams);
-  const aoms = (await store.list('aoms')).filter((a) => teams.includes(a.data.teamId));
+  // The audit's team is authoritative: old AOM records may lack or retain an outdated teamId.
+  const audits = Object.fromEntries((await store.list('audits')).map(a => [a.id, a.data]));
+  const aoms = (await store.list('aoms')).filter(a => a.data.status !== ST.WITHDRAWN);
   const mine = aoms.filter((a) => {
-    const t = refs.team[a.data.teamId]?.data || {};
+    const audit = audits[a.data.auditId];
+    if (!audit) return false;
+    const t = refs.team[audit.teamId]?.data || {};
     const s = a.data.status;
     return ((s === ST.WITH_ATL || s === ST.ATL) && t.atlUserId === me.id) || ((s === ST.WITH_SA || s === ST.SA) && t.saUserId === me.id);
   });
