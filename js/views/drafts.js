@@ -13,7 +13,7 @@ export async function drafts(refs) {
   const rows = audits.filter((a) => !mineOnly || a.data.memberId === refs.me.id || aoms.some((x) => x.data.auditId === a.id && x.data.memberId === refs.me.id)).map((a) => {
     const list = aoms.filter((x) => x.data.auditId === a.id);
     const c = (st) => list.filter((x) => (x.data.status || ST.DRAFT) === st).length;
-    return { a, list, draft: c(ST.DRAFT), ret: c(ST.RETURNED), rev: list.length - c(ST.DRAFT) - c(ST.RETURNED) - c(ST.FINAL), fin: c(ST.FINAL), lgu: refs.lgu[a.data.lguId]?.data.name || '?' };
+    return { a, list, draft: c(ST.DRAFT), ret: c(ST.RETURNED), rev: [ST.WITH_ATL, ST.ATL, ST.WITH_SA, ST.SA].reduce((n, st) => n + c(st), 0), fin: c(ST.FINAL), lgu: refs.lgu[a.data.lguId]?.data.name || '?' };
   }).sort((x, y) => (y.ret - x.ret) || x.lgu.localeCompare(y.lgu));
   const cols = 'grid-template-columns:minmax(160px,1fr) repeat(4, 110px) 170px';
   return {
