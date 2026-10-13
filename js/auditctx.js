@@ -5,6 +5,25 @@ import { has } from './refs.js';
 import { esc } from './ui.js';
 import { periodYears } from './format.js';
 
+// Release withdrawn AOM numbers and close gaps in the remaining active sequence.
+// Earlier numbers stay documented in each AOM's numberHistory and the withdrawn record.
+export async function compactActiveAomNumbers(auditId, actor = 'System') {
+  const all = (await store.list('aoms')).filter(a => a.data.auditId === auditId && !a.deleted);
+  if (!all.some(a => a.data.status === ST.WITHDRAWN)) return;
+  const active = all.filter(a => a.data.status !== ST.WITHDRAWN)
+    .sort((a,b) => (a.data.number || Infinity) - (b.data.number || Infinity) || (a.data.seq || 0) - (b.data.seq || 0));
+  for (let i = 0; i < active.length; i++) {
+    const a = active[i], old = Number(a.data.number) || null, next = i + 1;
+    if (old === next || !old) continue;
+    const at = new Date().toISOString();
+    await store.save('aoms', a.id, {
+      ...a.data, number: next,
+      numberHistory: [...(a.data.numberHistory || []), { previous: old, current: next, at, by: actor, reason: 'Automatic compaction after AOM withdrawal' }],
+      history: [...(a.data.history || []), { at, by: actor, action: 'AOM number changed from ' + old + ' to ' + next + ' after withdrawal' }]
+    }, { silent: true });
+  }
+}
+
 export async function loadAudit(refs, auditId) {
   const rec = await store.get('audits', auditId);
   if (!rec || rec.deleted) return null;
@@ -15,10 +34,11 @@ export async function loadAudit(refs, auditId) {
   const team = teamRec ? teamRec.data : {};
   const userOf = (id) => (refs.user[id] ? { id, ...refs.user[id].data } : null);
   const atl = userOf(team.atlUserId), sa = userOf(team.saUserId), member = userOf(audit.memberId);
+  await compactActiveAomNumbers(auditId);
   const auditAoms = (await store.list('aoms')).filter((a) => a.data.auditId === auditId).sort((a, b) => (a.data.seq || 0) - (b.data.seq || 0));
   // Withdrawn findings are hidden from reports, but their locked AOM numbers remain reserved.
-  const nums = numberAoms(auditAoms);
   const aoms = auditAoms.filter((a) => a.data.status !== ST.WITHDRAWN);
+  const nums = numberAoms(aoms);
   const base = setupVars(audit, lgu, mun);
   const varsFor = (a) => {
     const v = {};
