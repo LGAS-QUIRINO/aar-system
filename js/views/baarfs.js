@@ -295,7 +295,7 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
       if (r.use && a) {
         chart = `${pill('✓ Corrected', 'ok')}${src}${r.rem ? ' <span class="hint">remembered from before</span>' : ''}${editable ? ` <button class="reset" type="button" data-undo="${i}">Change</button>` : ''}${inFile}${inter}`;
       } else if (m.st === 'ok' && a) {
-        chart = `${pill('✓ Matched', 'ok')}${src}${inFile}${inter}`;
+        chart = `${pill('✓ Matched', 'ok')}${src}${editable ? ` <button class="reset" type="button" data-change="${i}">Change</button>` : ''}${inFile}${inter}`;
       } else if (m.st === 'check') {
         chart = `${pill('Check', 'warn')}<div class="hint" style="margin:4px 0">${m.acct ? `The code may not have been updated. ${esc(m.acct.code)} is <b>${esc(m.acct.title)}</b> in the ${esc(CHART_NAME[m.acct.chart])}; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`
           : `Code ${esc(r.code)} is not in the Manual nor in COA Circular 2015-009; the title points to <b>${esc(m.sugg.code)} ${esc(m.sugg.title)}</b>.`}</div>
@@ -391,7 +391,12 @@ export function inputScreen({ F, ctx, me, q, base, canEdit }) {
         if (el.value) await choose(i, el.value);
       }; });
       $$('[data-inter]', root).forEach((el) => { el.onchange = async () => { const rs = rows(); rs[+el.dataset.inter].inter = el.value; await put(rs); }; });
-      $$('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
+      $('[data-change]', root).forEach((b) => { b.onclick = async () => {
+        const i = +b.dataset.change, r = t.rows[i];
+        const c = await pickAccount({ title: 'Change Matched Account', hintText: r.code + ' · ' + r.title, start: normTitle(r.title)[0] || '' });
+        if (c) await choose(i, c);
+      }; });
+      $('[data-undo]', root).forEach((b) => { b.onclick = async () => { const rs = rows(); delete rs[+b.dataset.undo].use; delete rs[+b.dataset.undo].rem; await put(rs); }; });
       $$('[data-del]', root).forEach((b) => { b.onclick = async () => {
         const rs = rows(), r = rs[+b.dataset.del];
         r.del = true; await save({ ...t, rows: rs }, `deleted the zero-balance row ${r.code} ${r.title} from`);
