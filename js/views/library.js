@@ -86,7 +86,7 @@ export async function pool(refs, params, q) {
         <span><b>Version ${v.data.version}</b> · ${esc(v.data.note || '')}<br><small class="hint">${v.data.approvedAt ? 'Approved by ' + esc(userName(v.data.approvedBy)) + ' · ' + esc(longDate(v.data.approvedAt.slice(0, 10))) : 'Saved by ' + esc(userName(v.updatedBy))}</small></span>
         ${pill(v.data.status, STATUS_KIND[v.data.status])}</a>`).join('')}
       <div class="panel-body"><span class="hint">Used in ${usage[g.code] || 0} AOM${usage[g.code] === 1 ? '' : 's'}.</span>
-      ${canManage && rec.data.status === 'Active' ? '<div class="btn-row"><button class="btn sm ghost" id="p-variant">+ Make a Variant</button><button class="btn sm ghost" id="p-retire">Retire Template</button></div>' : ''}</div>
+      ${canManage ? '<div class="btn-row"><button class="btn sm ghost" id="p-linkvariant">Set Variant Of…</button>' + (rec.data.status === 'Active' ? '<button class="btn sm ghost" id="p-variant">+ Make a Variant</button><button class="btn sm ghost" id="p-retire">Retire Template</button>' : '') + '</div>' : ''}</div>
     </section>` : '<section class="panel"><div class="empty">No templates yet.</div></section>';
 
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
@@ -121,6 +121,27 @@ export async function pool(refs, params, q) {
       ph();
       const vbtn = $('#p-variant', root), rbtn = $('#p-retire', root), again = $('#p-again', root);
       if (vbtn) vbtn.onclick = () => makeVariant(rec, groups, refs);
+      const linkVariant = $('#p-linkvariant', root);
+      if (linkVariant) linkVariant.onclick = async () => {
+        const options = groups.filter(x => x.code !== g.code).map(x => x.code);
+        let target = rec.data.variantOf || '';
+        const result = await modal({
+          title: 'Set Existing Template Variant',
+          body: '<p class="hint">Keep this template code, wording and tables. Select the parent template; the relationship will apply to all versions of this code.</p><div class="field"><label class="label" for="variant-parent">Variant of</label><select class="input" id="variant-parent"><option value="">Independent (no parent)</option>' +
+            options.map(code => '<option value="' + esc(code) + '"' + (target === code ? ' selected' : '') + '>' + esc(code) + '</option>').join('') + '</select></div>',
+          buttons: [{label:'Cancel',cls:'ghost',value:null},{label:'Save Relationship',cls:'primary',value:'save',check:bg=>{target=$('#variant-parent',bg).value;return true;}}]
+        });
+        if (result !== 'save' || (rec.data.variantOf || '') === target) return;
+        for (const version of g.versions) {
+          const data = { ...version.data };
+          if (target) data.variantOf = target; else delete data.variantOf;
+          await store.save('aom_library',version.id,data,{silent:true});
+        }
+        await store.log('updated AOM Library variant relationship',g.code+(target?' → '+target:' → independent'),'',refs.me.email);
+        toast(g.code+(target?' is now a variant of '+target:' is now independent')+'.','ok');
+        location.hash = '#/library?code='+encodeURIComponent(g.code)+'&refresh='+Date.now();
+      };
+
       if (rbtn) rbtn.onclick = async () => {
         if (!(await confirmBox('Retire Template', `${esc(rec.data.code)} will no longer be offered on the Findings screen. AOMs that used it keep their text.`, 'Retire'))) return;
         setDirty(false);
