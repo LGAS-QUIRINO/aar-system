@@ -3,7 +3,7 @@ import { store, emitChange } from '../store.js';
 import { mountReview, reviewCounts, when } from '../reviewpane.js';
 import { updateFromAom, variantFromAom } from './library.js';
 import { esc, toast, setDirty, guard, confirmBox, modal, pill, $, $$ } from '../ui.js';
-import { loadAudit, advanceStage } from '../auditctx.js';
+import { compactActiveAomNumbers, loadAudit, advanceStage } from '../auditctx.js';
 import { blocksHTML, wireBlocks, diffHTML } from '../blockeditor.js';
 import { clone, checks, ST, statusPill, numberingCheck, fillText, ensureIds, stampEdits, snapshot } from '../aom.js';
 import { aomNo, aomRange, nice, timeAgo, initials } from '../format.js';
@@ -242,6 +242,7 @@ export async function review(refs, params, q) {
         d.status = ST.WITHDRAWN; d.withdrawnAt = now; d.withdrawnBy = me.email;
         d.history = [...(d.history || []), {at:now, by:me.email, action:'Withdrawn by Supervising Auditor; official number retained'}];
         await store.save('aoms',cur.id,d);
+        await compactActiveAomNumbers(ctx.rec.id, me.email);
         await store.log('withdrew a finalized AOM',ctx.lgu.name+' · '+aomNo(ctx.audit.auditYear,N[cur.id].n,ctx.audit.periodFrom,ctx.audit.periodTo),ctx.teamId,me.email);
         toast('AOM withdrawn; history and number retained.','ok');
         location.hash = '#/review/'+ctx.rec.id+'?scope=all&withdrawn='+Date.now();
