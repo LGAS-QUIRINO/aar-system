@@ -68,7 +68,7 @@ export async function readPart2(file) {
     if (management(t) || /^Management (?:committed|informed|assured|took note|admitted|promised)\b/i.test(t)) {
       mode = 'comments'; continue;
     }
-    if (p.ital && !p.bold && !recommendation(t)) {
+    if (p.ital && !p.bold && !recommendation(t) && !/^(?:Section\s+\d|Due to LGUs\.|\d+(?:\.\d+)*\s)/i.test(t) && (mode === 'title' || mode === 'comments' || (mode === 'body' && t.length < 95))) {
       title = t; mode = 'obs'; obs = null; lead = ''; continue;
     }
     if (mode === 'comments') continue;
