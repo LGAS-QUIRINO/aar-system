@@ -50,30 +50,49 @@ export async function readPart2(file) {
   const ps = await docxParas(file);
   const recs = [];
   const years = {};
-  let started = false, sec = '', mode = 'title', title = '', obs = null, n = 0, colonItem = null;
-  ps.forEach((p) => {
+  let started = false, sec = '', mode = 'title', title = '', obs = null, n = 0, lead = '', lastRec = null;
+  const heading = t => /^(?:PART II\s*[-–—]\s*)?OBSERVATIONS AND RECOMMENDATIONS$/i.test(t);
+  const section = t => SEC.test(t.replace(/^\s*[A-C]\.\s*/, ''));
+  const management = t => /^(?:Management['’]?s?\s+Comments?(?:\/s)?|Auditor['’]?s\s+Rejoinder)\s*:?$/i.test(t);
+  const recommendation = t => /^(?:We\s+(?:also\s+|further\s+|likewise\s+|strongly\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i.test(t);
+  const itemLabel = t => /^([a-z]\.|[a-z]\)|\(?\d+\))\s+/i.test(t);
+  for (const p of ps) {
     const t = p.t;
-    if (!t) return;
-    (t.match(/December 31, (20\d\d)/g) || []).forEach((m) => { const y = m.slice(-4); years[y] = (years[y] || 0) + 1; });
-    if (!started) { if (/^OBSERVATIONS AND RECOMMENDATIONS$/i.test(t) && p.bold) started = true; return; }
-    const s = SEC.exec(t);
-    if (s && p.bold) { sec = /FAVORABLE/i.test(s[1]) ? 'fav' : 'x'; mode = 'title'; return; }
-    if (sec === 'fav') return;
-    if (/^(Management['’]?s?\s+Comments?(\/s)?|Auditor['’]?s\s+Rejoinder)\s*:?$/i.test(t)) { mode = 'title'; return; }
-    if (mode === 'title' && p.ital && !p.bold) { title = t; mode = 'obs'; return; }
-    if ((mode === 'obs' || mode === 'title') && p.bold) { obs = { no: ++n, title, text: t, lead: '' }; mode = 'body'; return; }
-    if (!obs || !p.bold) return;
-    if (mode === 'body' && !/^We\s+recommend/i.test(t)) return;   // bold sub-headings in the body
-    if (mode === 'body') {
-      mode = 'recs'; colonItem = null;
-      if (/:\s*$/.test(t)) { obs.lead = past(t); return; }
+    if (!t) continue;
+    (t.match(/December 31, (20\d\d)/g) || []).forEach(m => { const y = m.slice(-4); years[y] = (years[y] || 0) + 1; });
+    if (!started) {
+      if (heading(t) || /^A\.\s*FINANCIAL AUDIT$/i.test(t) || /^B\.\s*OTHER FINANCIAL RELATED ISSUES$/i.test(t)) started = true;
+      else continue;
     }
-    // Sub-items of an item that ends with ":" (a deeper or a different list) stay with that item.
-    if (colonItem && (p.ilvl === null || colonItem.ilvl === null || p.ilvl > colonItem.ilvl || p.numId !== colonItem.numId)) { colonItem.rec.text += '\n' + t; return; }
-    const rec = { id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text, lead: obs.lead, text: past(t), status: '', action: '', reason: '', src: 'import' };
-    recs.push(rec);
-    colonItem = /:\s*$/.test(t) ? { rec, ilvl: p.ilvl, numId: p.numId } : null;
-  });
+    if (section(t)) { sec = /FAVORABLE/i.test(t) ? 'fav' : 'x'; mode = 'title'; obs = null; lastRec = null; continue; }
+    if (sec === 'fav') continue;
+    if (management(t)) { mode = 'comments'; lastRec = null; continue; }
+    if (mode === 'comments') {
+      if (p.ital && !p.bold) { title = t; mode = 'obs'; obs = null; }
+      else continue;
+    }
+    if (p.ital && !p.bold && !recommendation(t)) { title = t; mode = 'obs'; obs = null; lead = ''; lastRec = null; continue; }
+    // The numbered observation is generally bold, but is not always bold in externally supplied Word files.
+    const obsStart = /^(?:\d+\.\s+)(?!\d)/.test(t);
+    if (!obs && (obsStart || (mode === 'obs' && p.bold)) && !recommendation(t)) {
+      obs = { no: ++n, title, text: t.replace(/^\d+\.\s+/, ''), lead: '' };
+      mode = 'body'; continue;
+    }
+    if (!obs) continue;
+    if (recommendation(t)) {
+      mode = 'recs';
+      if (/:\s*$/.test(t)) { lead = past(t); obs.lead = lead; lastRec = null; continue; }
+      const rec = { id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text, lead, text: past(t), status: '', action: '', reason: '', src: 'import' };
+      recs.push(rec); lastRec = rec; continue;
+    }
+    if (mode !== 'recs') continue;
+    if (itemLabel(t) || p.bold) {
+      const rec = { id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text, lead, text: t.replace(/^[a-z][.)]\s+/i, ''), status: '', action: '', reason: '', src: 'import' };
+      recs.push(rec); lastRec = rec;
+    } else if (lastRec) {
+      lastRec.text += '\n' + t;
+    }
+  }
   const year = Object.entries(years).sort((a, b) => b[1] - a[1])[0];
   return { year: year ? Number(year[0]) : null, recs };
 }
