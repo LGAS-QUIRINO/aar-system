@@ -50,44 +50,53 @@ export async function readPart2(file) {
   const ps = await docxParas(file);
   const recs = [];
   const years = {};
-  let started = false, sec = '', mode = 'title', title = '', obs = null, n = 0, lead = '';
+  let started = false, sec = '', title = '', obs = null, n = 0, pendingTitle = false;
+  let collectingItems = false, currentLead = '';
   const heading = t => /^(?:(?:PART II\s*[-–—]\s*)?(?:DETAILED\s+)?(?:AUDIT\s+)?OBSERVATIONS AND RECOMMENDATIONS|DETAILED AUDIT OBSERVATIONS(?:\s+AND RECOMMENDATIONS)?)$/i.test(t);
-  const section = t => SEC.test(t);
-  const management = t => /^(?:Management['’]?s?\s+Comments?(?:\/s)?|Auditor['’]?s\s+Rejoinder)\s*:?$/i.test(t);
-  const recommendation = t => /^(?:We\s+(?:also\s+|further\s+|likewise\s+|strongly\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i.test(t);
+  const recommendation = t => /^(?:We\s+(?:(?:also|further|likewise|strongly)\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i.test(t);
+  const stop = t => /^(?:Management['’]?s?\s+Comments?(?:\/s)?|Auditor['’]?s\s+Rejoinder)\s*:?$/i.test(t)
+    || /^Man(?:a|g)gement\s+(?:committed|informed|assured|took note|admitted|promised)\b/i.test(t);
   for (const p of ps) {
     const t = p.t;
     if (!t) continue;
     (t.match(/December 31, (20\d\d)/g) || []).forEach(m => { const y = m.slice(-4); years[y] = (years[y] || 0) + 1; });
-    if (!started) {
-      if (heading(t) || section(t)) started = true;
-      else continue;
-    }
-    if (section(t)) { sec = /FAVORABLE/i.test(t) ? 'fav' : 'x'; mode = 'title'; obs = null; continue; }
+    if (!started) { if (heading(t)) started = true; continue; }
+    if (SEC.test(t)) { sec = /FAVORABLE/i.test(t) ? 'fav' : 'x'; pendingTitle = false; obs = null; collectingItems = false; continue; }
     if (sec === 'fav') continue;
-    if (management(t) || /^Management (?:committed|informed|assured|took note|admitted|promised)\b/i.test(t)) {
-      mode = 'comments'; continue;
-    }
-    if (p.ital && !p.bold && !recommendation(t) && !/^(?:Section\s+\d|Due to LGUs\.|\d+(?:\.\d+)*\s)/i.test(t) && (mode === 'title' || mode === 'comments' || (mode === 'body' && t.length < 95))) {
-      title = t; mode = 'obs'; obs = null; lead = ''; continue;
-    }
-    if (mode === 'comments') continue;
-    const obsStart = /^\d+\.\s+(?!\d)/.test(t);
-    if (!obs && (obsStart || (mode === 'obs' && p.bold)) && !recommendation(t)) {
-      obs = { no: ++n, title, text: t.replace(/^\d+\.\s+/, ''), lead: '' };
-      mode = 'body'; continue;
-    }
-    if (!obs) continue;
-    if (recommendation(t)) {
-      mode = 'recs';
-      if (/:\s*$/.test(t)) { lead = past(t); obs.lead = lead; continue; }
-      recs.push({ id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text, lead: '', text: past(t), status: '', action: '', reason: '', src: 'import' });
+    // Finding titles are separate italic paragraphs. They are NOT part of the italic
+    // legislative quotations inside the finding. Detect them only before a new topic.
+    if (p.ital && !p.bold && !pendingTitle && (!obs || !collectingItems)
+      && !/^(?:["“]|Section\s+\d|Due to LGUs\.|\d+(?:\.\d+)+\s)/i.test(t)
+      && t.length < 105 && !/^(?:The|No|All|Any|A\s|An\s|Moreover|Likewise)\b/i.test(t)) {
+      title = t; pendingTitle = true; obs = null; collectingItems = false; currentLead = '';
       continue;
     }
-    // Word's automatic a./b. list labels are stored in numbering.xml, not paragraph text.
-    // In a recommendation block, the next bold paragraphs represent separate actions.
-    if (mode === 'recs' && lead && p.bold) {
-      recs.push({ id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text, lead, text: t.replace(/^[a-z][.)]\s+/i, ''), status: '', action: '', reason: '', src: 'import' });
+    if (pendingTitle) {
+      if (p.bold && !recommendation(t)) {
+        obs = { no: ++n, title, text: t.replace(/^\d+\.\s+/, '') };
+        pendingTitle = false; collectingItems = false; currentLead = '';
+      }
+      continue;
+    }
+    if (!obs) continue;
+    if (stop(t)) { collectingItems = false; currentLead = ''; continue; }
+    if (recommendation(t)) {
+      if (/:\s*$/.test(t)) {
+        currentLead = past(t); collectingItems = true;
+      } else {
+        recs.push({ id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text,
+          lead: '', text: past(t), status: '', action: '', reason: '', src: 'import' });
+        collectingItems = false; currentLead = '';
+      }
+      continue;
+    }
+    // Word uses automatic paragraph numbering for a./b.; those labels are absent
+    // from document.xml. The consecutive bold paragraphs following the lead
+    // are the recommendation items, even when their text has no visible prefix.
+    if (collectingItems && p.bold) {
+      recs.push({ id: uid(), obsNo: obs.no, title: obs.title, obs: obs.text,
+        lead: currentLead, text: t.replace(/^[a-z][.)]\s+/i, ''),
+        status: '', action: '', reason: '', src: 'import' });
     }
   }
   const year = Object.entries(years).sort((a, b) => b[1] - a[1])[0];
