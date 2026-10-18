@@ -24,6 +24,20 @@ export function p2List(ctx) {
   return { A: by('A'), B: by('B'), notFinal: ctx.aoms.filter((a) => a.data.status !== ST.FINAL) };
 }
 
+// Part II describes recommendations previously issued; the original AOM stays unchanged.
+export function partIIPastRecommendations(aom) {
+  const past = value => String(value || '')
+    .replace(/\b(We\s+(?:(?:also|further|likewise|strongly)\s+)?)recommend\b/gi,
+      (_match, prefix) => prefix + 'recommended')
+    .replace(/\bIt\s+is\s+recommended\b/gi, 'It was recommended');
+  return {
+    ...aom,
+    blocks: (aom.blocks || []).map(block => block.type === 'recommendation'
+      ? { ...block, lead: past(block.lead), text: past(block.text) }
+      : block)
+  };
+}
+
 /** Part II as paragraphs: { paras, checks, count }. */
 export function buildP2(ctx) {
   const L = p2List(ctx);
@@ -41,7 +55,7 @@ export function buildP2(ctx) {
       const title = fillText(a.data.title || '', topicVars(vars)) + (amt !== null && amt !== undefined && a.data.titleShow !== false && !titleHasAmount(a.data.title) ? ` - ${titleAmount(amt)}` : '');
       paras.push(P(title, { italic: true, keep: true }), BL());
       // The AOM's own paragraphs, without its "AOM No." and title lines, numbered as in Balligui.
-      const body = findingParas(a.data, { vars, num: `${k}.` }).slice(4);   // without the AOM No., its blank line, the title and the blank line after it
+      const body = findingParas(partIIPastRecommendations(a.data), { vars, num: `${k}.` }).slice(4);   // without the AOM No., its blank line, the title and the blank line after it
       let j = 0;
       body.forEach((p) => {
         if (p.kind !== 'p' || p.blank) { paras.push(p); return; }
