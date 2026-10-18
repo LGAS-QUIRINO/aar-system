@@ -56,8 +56,9 @@ export async function readPart2(file) {
   const recommendation = t => /^(?:We\s+(?:(?:also|further|likewise|strongly)\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i.test(t);
   const stop = t => /^(?:Management['’]?s?\s+Comments?(?:\/s)?|Auditor['’]?s\s+Rejoinder)\s*:?$/i.test(t)
     || /^Man(?:a|g)gement\s+(?:committed|informed|assured|took note|admitted|promised)\b/i.test(t);
-  for (const p of ps) {
-    const t = p.t;
+  for (let pi = 0; pi < ps.length; pi++) {
+    const p = ps[pi], t = p.t;
+    const next = ps.slice(pi + 1).find(x => x.t);
     if (!t) continue;
     (t.match(/December 31, (20\d\d)/g) || []).forEach(m => { const y = m.slice(-4); years[y] = (years[y] || 0) + 1; });
     if (!started) { if (heading(t)) started = true; continue; }
@@ -65,7 +66,7 @@ export async function readPart2(file) {
     if (sec === 'fav') continue;
     // Finding titles are separate italic paragraphs. They are NOT part of the italic
     // legislative quotations inside the finding. Detect them only before a new topic.
-    if (p.ital && !p.bold && !pendingTitle && (!obs || !collectingItems)
+    if (p.ital && !p.bold && next && next.bold && !next.ital && !pendingTitle && (!obs || !collectingItems)
       && !/^(?:["“]|Section\s+\d|Due to LGUs\.|\d+(?:\.\d+)+\s)/i.test(t)
       && t.length < 105 && !/^(?:The|No|All|Any|A\s|An\s|Moreover|Likewise)\b/i.test(t)) {
       title = t; pendingTitle = true; obs = null; collectingItems = false; currentLead = '';
