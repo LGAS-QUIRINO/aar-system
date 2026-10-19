@@ -270,7 +270,8 @@ export async function p3Sections(d, start) {
       W.map((_, col) => cell([new Paragraph({ keepNext: true, children: [R('')] })], col, { top: NONE, bottom: NONE })) }));
     recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360, right: 0 } })));
-    rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
+    // Keep the whole recommendation and its three implementation fields on one Word page when possible.
+    rows.push(new TableRow({ cantSplit: true, children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
   });
   const margin = { top: 1440, right: 720, bottom: 1440, left: 1800, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
