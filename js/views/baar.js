@@ -991,7 +991,7 @@ export async function p3Part({ ctx, me, refs, L, st }) {
   const { audit, lgu, mun } = ctx;
   const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '09');
   const dis = canEdit ? '' : 'disabled';
-  const saved = L.B.p3 && (L.B.p3.recs || []).length ? clone(L.B.p3) : null;
+  const saved = L.B.p3 && Array.isArray(L.B.p3.recs) ? clone(L.B.p3) : null;
   let carried = null;
   if (!saved) carried = await previousBAAR(refs, ctx).catch(() => null);
   const P = saved || (carried ? { recs: carried.recs, year: carried.year, src: { kind: 'app', year: carried.year } } : { recs: [], year: Number(audit.periodFrom) - 1, src: null });
