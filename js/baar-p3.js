@@ -170,10 +170,10 @@ export const P3_CSS = `${IAR_CSS}
 .p3d p{margin:0}\n.bpage.p3page{padding:1in .5in 1in 1.25in}\n.bpage.p3page .pno{left:1.25in;right:.5in}
 .p3d .ttl{font-weight:700;text-align:center;font-size:12pt}
 .p3d .open{text-align:justify;text-indent:.5in;margin:12pt 0}
-.p3d{width:6.75in}.p3t{border-collapse:collapse;width:6.75in;table-layout:fixed;margin:0 auto}
-.p3t th,.p3t td{border:1px solid #000;padding:3pt 4pt;vertical-align:top;text-align:left}
+.p3d{width:6.75in}.p3t{border-collapse:collapse;width:6.75in;table-layout:fixed;margin:0 auto;font-family:'Times New Roman',Tinos,Times,serif;font-size:11pt}
+.p3t th,.p3t td{border:1px solid #000;padding:3pt 4pt;vertical-align:top;text-align:justify}
 .p3t th{text-align:center;vertical-align:middle;font-weight:700;padding:8pt 3pt;font-size:11pt}
-.p3t th.sm{font-size:8pt}
+.p3t th.sm{font-size:11pt}
 .p3t td.ref{text-align:center}
 .p3t td.ob{font-weight:700;text-align:justify}
 .p3t td.j{text-align:justify}
@@ -236,14 +236,14 @@ export async function p3Sections(d, start) {
   const D = await loadScript('lib/docx.min.js', 'docx');
   const { Paragraph, TextRun, Table, TableRow, TableCell, WidthType, AlignmentType, Footer, PageNumber, BorderStyle, VerticalAlign, TableLayoutType } = D;
   const F = 'Times New Roman';
-  const R = (t, o = {}) => new TextRun({ text: String(t ?? ''), bold: !!o.b, font: F, size: o.size || 24 });
-  const P = (t, o = {}) => new Paragraph({ alignment: o.al || AlignmentType.LEFT, keepNext: !!o.keep, spacing: { after: o.after || 0 }, indent: o.ind, children: [R(t, o)] });
+  const R = (t, o = {}) => new TextRun({ text: String(t ?? ''), bold: !!o.b, font: F, size: o.size || 22 });
+  const P = (t, o = {}) => new Paragraph({ alignment: o.al || AlignmentType.JUSTIFIED, keepNext: !!o.keep, spacing: { after: o.after || 0 }, indent: o.ind, children: [R(t, o)] });
   const ps = (t, o = {}) => { const l = String(t || '').split('\n').filter((x) => x.trim()); return l.length ? l.map((x) => P(x, o)) : [P('')]; };
   const W = W_IN.map((w) => Math.round(w * 1440));
   const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
   const cell = (kids, i, bd, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids, borders: bd, verticalAlign: o.va, margins: { top: 40, bottom: 40, left: 70, right: 70 } });
   const rows = [new TableRow({ cantSplit: true, children: ['Reference', 'Observations and Recommendations', 'Status of Implementation', 'Management Action', 'Reason for Partial/Non – Implementation']
-    .map((h, i) => cell([P(h, { b: true, al: AlignmentType.CENTER, size: i === 4 ? 16 : 22 })], i, undefined, { va: VerticalAlign.CENTER })) })];
+    .map((h, i) => cell([P(h, { b: true, al: AlignmentType.CENTER, size: 22 })], i, undefined, { va: VerticalAlign.CENTER })) })];
   const J = AlignmentType.JUSTIFIED;
   d.rows.forEach((r, i) => {
     const prev = d.rows[i - 1], next = d.rows[i + 1];
@@ -252,23 +252,23 @@ export async function p3Sections(d, start) {
       const bd = { bottom: NONE };
       // The observation (topic sentence) row is never split: if it does not fit, it starts on the next page.
       rows.push(new TableRow({ cantSplit: true, children: [cell([P(`BAAR CY ${r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`Observation No. ${r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
-        cell(ps(r.obs, { b: true, al: AlignmentType.LEFT }), 1, bd), cell([P('')], 2, bd), cell([P('')], 3, bd), cell([P('')], 4, bd)] }));
+        cell(ps(r.obs, { b: true, al: J }), 1, bd), cell([P('')], 2, bd), cell([P('')], 3, bd), cell([P('')], 4, bd)] }));
     }
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
     const [t0, ...rest] = String(r.text || '').split('\n');
     const recKids = [];
     if (!same(prev, r) && r.lead) rows.push(new TableRow({ cantSplit: true, children: [
       cell([new Paragraph({ alignment: J, keepNext: true, children: [R('')] })], 0, { top: NONE, bottom: NONE }),
-      cell([new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] })], 1, { top: NONE, bottom: NONE }),
+      cell([new Paragraph({ alignment: J, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] })], 1, { top: NONE, bottom: NONE }),
       ...[2, 3, 4].map(i => cell([P('')], i, { top: NONE, bottom: NONE }))
     ] }));
     // Insert a complete spacer row for first recommendations without a lead-in.
     // In Word, paragraph spacing inside only one cell shifts the text out of alignment.
     if (!same(prev, r) && !r.lead) rows.push(new TableRow({ cantSplit: true, children:
       W.map((_, col) => cell([new Paragraph({ keepNext: true, children: [R('')] })], col, { top: NONE, bottom: NONE })) }));
-    recKids.push(new Paragraph({ alignment: AlignmentType.LEFT, keepLines: true, spacing: { before: 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
-    rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: AlignmentType.LEFT, ind: { left: 360, right: 0 } })));
-    rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: AlignmentType.LEFT }), 3, bd), cell(ps(r.reason, { al: AlignmentType.LEFT }), 4, bd)] }));
+    recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
+    rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360, right: 0 } })));
+    rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
   });
   const margin = { top: 1440, right: 720, bottom: 1440, left: 1800, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
