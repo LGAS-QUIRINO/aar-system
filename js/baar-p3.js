@@ -262,7 +262,11 @@ export async function p3Sections(d, start) {
       cell([new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] })], 1, { top: NONE, bottom: NONE }),
       ...[2, 3, 4].map(i => cell([P('')], i, { top: NONE, bottom: NONE }))
     ] }));
-    recKids.push(new Paragraph({ alignment: AlignmentType.LEFT, keepLines: true, spacing: { before: (!same(prev, r) && !r.lead) ? 240 : 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
+    // Insert a complete spacer row for first recommendations without a lead-in.
+    // In Word, paragraph spacing inside only one cell shifts the text out of alignment.
+    if (!same(prev, r) && !r.lead) rows.push(new TableRow({ cantSplit: true, children:
+      W.map((_, col) => cell([new Paragraph({ keepNext: true, children: [R('')] })], col, { top: NONE, bottom: NONE })) }));
+    recKids.push(new Paragraph({ alignment: AlignmentType.LEFT, keepLines: true, spacing: { before: 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: AlignmentType.LEFT, ind: { left: 360, right: 0 } })));
     rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: AlignmentType.LEFT }), 3, bd), cell(ps(r.reason, { al: AlignmentType.LEFT }), 4, bd)] }));
   });
