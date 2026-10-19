@@ -196,9 +196,10 @@ function rowsHTML(d) {
     const prev = d.rows[i - 1], next = d.rows[i + 1];
     const same = (a, b) => a && b && a.year === b.year && a.obsNo === b.obsNo;
     if (!same(prev, r)) out.push({ obs: true, html: `<tr class="o"><td class="ref"><p>BAAR CY ${escH(r.year)}</p><p>Observation No. ${escH(r.obsNo)}</p></td><td class="ob">${lines(r.obs)}</td><td></td><td></td><td></td></tr>` });
-    const lead = !same(prev, r) && r.lead ? `<p class="lead">${escH(r.lead)}</p>` : '';
+    const hasLead = !same(prev, r) && !!r.lead;
+    if (hasLead) out.push({ lead: true, html: `<tr class="lead-row"><td></td><td class="j">${escH(r.lead)}</td><td></td><td></td><td></td></tr>` });
     const [t0, ...rest] = String(r.text || '').split('\n');
-    out.push({ obs: false, html: `<tr class="r${same(r, next) ? ' more' : ''}"><td></td><td class="j">${lead}<div class="rc">${escH(r.n)}.&nbsp;&nbsp;${escH(t0)}${rest.filter((x) => x.trim()).map((x) => `<p>${escH(x)}</p>`).join('')}</div></td><td>${escH(P3_STATUS[r.status] || '')}</td><td class="j">${lines(r.action)}</td><td class="j">${lines(r.reason)}</td></tr>` });
+    out.push({ obs: false, html: `<tr class="r${same(r, next) ? ' more' : ''}"><td></td><td class="j"><div class="rc">${escH(r.n)}.&nbsp;&nbsp;${escH(t0)}${rest.filter((x) => x.trim()).map((x) => `<p>${escH(x)}</p>`).join('')}</div></td><td>${escH(P3_STATUS[r.status] || '')}</td><td class="j">${lines(r.action)}</td><td class="j">${lines(r.reason)}</td></tr>` });
   });
   return out;
 }
@@ -215,7 +216,7 @@ export function paginateP3(d, box) {
   const max = 9 * 96, pages = [[]];
   let h = hH;
   rs.forEach((x, i) => {
-    const need = hs[i]; // An observation may finish on a separate page from its recommendation.
+    const need = x.lead && rs[i + 1] ? hs[i] + hs[i + 1] : hs[i]; // Keep lead-in with its first recommendation.
     if (h + need > max && pages[pages.length - 1].length) { pages.push([]); h = 0; }
     pages[pages.length - 1].push(x); h += hs[i];
   });
@@ -256,7 +257,11 @@ export async function p3Sections(d, start) {
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
     const [t0, ...rest] = String(r.text || '').split('\n');
     const recKids = [];
-    if (!same(prev, r) && r.lead) recKids.push(new Paragraph({ alignment: J, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] }));
+    if (!same(prev, r) && r.lead) rows.push(new TableRow({ cantSplit: true, children: [
+      cell([new Paragraph({ alignment: J, keepNext: true, children: [R('')] })], 0, { top: NONE, bottom: NONE }),
+      cell([new Paragraph({ alignment: J, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] })], 1, { top: NONE, bottom: NONE }),
+      ...[2, 3, 4].map(i => cell([P('')], i, { top: NONE, bottom: NONE }))
+    ] }));
     recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: (!same(prev, r) && !r.lead) ? 240 : 0 }, indent: { left: 360, hanging: 360 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360 } })));
     rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
