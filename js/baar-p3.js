@@ -162,22 +162,22 @@ export function buildP3(p3) {
 }
 
 /* ── Pages ── */
-const W_IN = [0.95, 1.5, 1.25, 1.2, 1.1];   // inches; the issued BAAR's widths fitted to 6"
+const W_IN = [0.95, 2.35, 1.15, 1.15, 1.15];   // inches; the issued BAAR's widths fitted to 6"
 const escH = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const lines = (t) => String(t || '').split('\n').filter((x) => x.trim()).map((x) => `<p>${escH(x)}</p>`).join('');
 export const P3_CSS = `${IAR_CSS}
 .p3d{font-family:'Times New Roman',Tinos,Times,serif;font-size:12pt;line-height:1.15;color:#000}
-.p3d p{margin:0}
+.p3d p{margin:0}\n.bpage.p3page{padding:1in .5in 1in 1.25in}\n.bpage.p3page .pno{left:1.25in;right:.5in}
 .p3d .ttl{font-weight:700;text-align:center;font-size:12pt}
 .p3d .open{text-align:justify;text-indent:.5in;margin:12pt 0}
-.p3t{border-collapse:collapse;width:6in;table-layout:fixed}
+.p3d{width:6.75in}.p3t{border-collapse:collapse;width:6.75in;table-layout:fixed;margin:0 auto}
 .p3t th,.p3t td{border:1px solid #000;padding:3pt 4pt;vertical-align:top;text-align:left}
 .p3t th{text-align:center;vertical-align:middle;font-weight:700;padding:8pt 3pt;font-size:11pt}
 .p3t th.sm{font-size:8pt}
 .p3t td.ref{text-align:center}
 .p3t td.ob{font-weight:700;text-align:justify}
 .p3t td.j{text-align:justify}
-.p3t tr.r td{border-top:0}
+.p3t tr.r td{border-top:0}\n.p3t tr.r td{padding-top:12pt}\n.p3t tr.r.more td{padding-top:3pt}
 .p3t td{overflow-wrap:break-word}
 .p3t tbody tr:first-child td{border-top:1px solid #000}
 .p3t tbody tr:last-child td{border-bottom:1px solid #000}
@@ -206,7 +206,7 @@ const head = (d) => `<p class="ttl">STATUS OF IMPLEMENTATION OF PRIOR YEARS’ A
 // Splits the table into Letter pages (9" of text each), keeping an observation with its first recommendation.
 export function paginateP3(d, box) {
   box.className = 'p3d';
-  box.style.cssText = 'position:absolute;left:-9999px;top:0;width:6in;visibility:hidden';
+  box.style.cssText = 'position:absolute;left:-9999px;top:0;width:6.75in;visibility:hidden';
   const rs = rowsHTML(d);
   box.innerHTML = `<div id="p3h">${head(d)}</div><table class="p3t">${colgroup}${THEAD}<tbody>${rs.map((x) => x.html).join('')}</tbody></table>`;
   const hH = box.querySelector('#p3h').offsetHeight + box.querySelector('thead').offsetHeight;
@@ -215,7 +215,7 @@ export function paginateP3(d, box) {
   const max = 9 * 96, pages = [[]];
   let h = hH;
   rs.forEach((x, i) => {
-    const need = x.obs && rs[i + 1] ? hs[i] + hs[i + 1] : hs[i];
+    const need = hs[i]; // An observation may finish on a separate page from its recommendation.
     if (h + need > max && pages[pages.length - 1].length) { pages.push([]); h = 0; }
     pages[pages.length - 1].push(x); h += hs[i];
   });
@@ -223,7 +223,7 @@ export function paginateP3(d, box) {
 }
 export function p3PagesHTML(d, pages, start) {
   const div = `<div class="bpage"><div class="p1"><div>PART III – STATUS OF PRIOR</div><div style="margin-top:-.3in">YEARS’ AUDIT RECOMMENDATIONS</div></div></div>`;
-  return [div, ...pages.map((rs, i) => `<div class="bpage"><div class="p3d">${i ? '' : head(d)}<table class="p3t">${colgroup}${i ? '' : THEAD}<tbody>${rs.map((x) => x.html).join('')}</tbody></table></div>${start ? `<div class="pno">${start + i}</div>` : ''}</div>`)];
+  return [div, ...pages.map((rs, i) => `<div class="bpage p3page"><div class="p3d">${i ? '' : head(d)}<table class="p3t">${colgroup}${i ? '' : THEAD}<tbody>${rs.map((x) => x.html).join('')}</tbody></table></div>${start ? `<div class="pno">${start + i}</div>` : ''}</div>`)];
 }
 export function p3Print(d, pages, start) {
   return { css: `${P3_CSS} @page p3 { size: 8.5in 11in; margin: 0; } .pg-p3 { page: p3; }`, html: p3PagesHTML(d, pages, start).map((x) => `<div class="pg pg-p3">${x}</div>`).join('') };
@@ -256,12 +256,12 @@ export async function p3Sections(d, start) {
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
     const [t0, ...rest] = String(r.text || '').split('\n');
     const recKids = [];
-    if (!same(prev, r) && r.lead) recKids.push(P(r.lead, { al: J, after: 120 }));
-    recKids.push(new Paragraph({ alignment: J, indent: { left: 360, hanging: 360 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
+    if (!same(prev, r) && r.lead) recKids.push(new Paragraph({ alignment: J, keepNext: true, spacing: { before: 120, after: 120 }, children: [R(r.lead)] }));
+    recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: (!same(prev, r) && !r.lead) ? 120 : 0 }, indent: { left: 360, hanging: 360 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360 } })));
     rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
   });
-  const margin = { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 0, footer: 720 };
+  const margin = { top: 1440, right: 720, bottom: 1440, left: 1800, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
   const footer = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: F, size: 22 })] })] });
   return [
