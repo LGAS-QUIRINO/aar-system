@@ -256,8 +256,8 @@ export async function p3Sections(d, start) {
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
     const [t0, ...rest] = String(r.text || '').split('\n');
     const recKids = [];
-    if (!same(prev, r) && r.lead) recKids.push(new Paragraph({ alignment: J, keepNext: true, spacing: { before: 120, after: 120 }, children: [R(r.lead)] }));
-    recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: (!same(prev, r) && !r.lead) ? 120 : 0 }, indent: { left: 360, hanging: 360 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
+    if (!same(prev, r) && r.lead) recKids.push(new Paragraph({ alignment: J, keepNext: true, spacing: { before: 240, after: 120 }, children: [R(r.lead)] }));
+    recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: (!same(prev, r) && !r.lead) ? 240 : 0 }, indent: { left: 360, hanging: 360 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360 } })));
     rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
   });
