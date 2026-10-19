@@ -19,7 +19,7 @@ import { loadFS, fsPart, fsPill, fsDoc, fsPageCount } from './baarfs.js';
 import { fsPrint, fsSections } from '../baar-fs.js';
 import { amtText } from '../fs.js';
 import { buildP2, paginateP2, p2PagesHTML, p2Print, p2Sections, p2FileName, P2_CSS, p2List } from '../baar-p2.js';
-import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, ppeSchedule, sanggunian } from '../baar-notes.js';
+import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, notesFileName, NOTES_CSS, KM, kmOfficials, ppeSchedule, sanggunian } from '../baar-notes.js';
 import { aomAmount, peso } from '../saor.js';
 import { annexLetter, excelSheets, cleanRows, annexPagesHTML, annexPrint, annexToc, annexFileName, annexSections, ANNEX_CSS } from '../baar-annex.js';
 import { reviewStrip, wireReviewStrip, partLocked, slimReview } from './baarreview.js';
@@ -829,7 +829,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
   const canEdit = canWork(me) && myTeamIds(me, refs.teams).includes(ctx.teamId) && !partLocked(L.B, '07');
   const dis = canEdit ? '' : 'disabled';
   const N = clone(L.B.notes || {});
-  N.km = N.km || {}; N.inv = N.inv || {}; N.ppe = N.ppe || {};
+  N.km = N.km || {}; N.kmExtra = N.kmExtra || []; N.inv = N.inv || {}; N.ppe = N.ppe || {};
   const pages = baarPages(ctx, L);
   const doc0 = notesOf(ctx, L, N);
   const y = F.y, yp = F.yp;
@@ -838,7 +838,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
   const ppeCols = ppeSchedule(F, N.ppe);
   const v = (o, k) => esc((o || {})[k] ?? '');
   const amtIn = (path, val, label) => `<input class="input amt-in" data-n="${path}" value="${esc(amtText(val ?? ''))}" aria-label="${esc(label)}" ${dis}>`;
-  const kmRows = KM.map(([k, label]) => `<tr><td>${esc(label)}</td><td>${amtIn(`km.${k}.cy`, (N.km[k] || {}).cy, `${label} CY ${y}`)}</td><td>${amtIn(`km.${k}.py`, (N.km[k] || {}).py, `${label} CY ${yp}`)}</td></tr>`).join('');
+  const kmRows = kmOfficials(N).map(([k, label]) => `<tr><td>${esc(label)}</td><td>${amtIn(`km.${k}.cy`, (N.km[k] || {}).cy, `${label} CY ${y}`)}</td><td>${amtIn(`km.${k}.py`, (N.km[k] || {}).py, `${label} CY ${yp}`)}</td></tr>`).join('');
   const ppeTable = (yr, fields) => `<table class="pgt nt-ppe"><thead><tr><th>CY ${yr}</th>${fields.map(([, t]) => `<th>${t}</th>`).join('')}</tr></thead><tbody>
       ${ppeCols.map((c) => `<tr><td>${esc(c.label)}</td>${fields.map(([f, t]) => `<td>${amtIn(`ppe.${c.k}.${f}`, (N.ppe[c.k] || {})[f], `${c.label} ${t} ${yr}`)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
   const crumbs = `<a href="#/baar">BAAR Reports</a> / <a href="#/baar/${ctx.rec.id}">${esc(ctx.title)}</a> / <b>07 · Notes to FS</b>`;
@@ -855,7 +855,7 @@ export function notesPart({ ctx, me, refs, L, st }) {
           <tr><td>Headed by</td><td>${esc([pbN.title, pbN.name].filter(Boolean).join(' ')) || '<span class="hint">Not yet in Setup</span>'}</td></tr>
           <tr><td>Sanggunian</td><td>${sgN.length} member${sgN.length === 1 ? '' : 's'}</td></tr></tbody></table></div></details>
       ${hasPs ? `<details class="panel acc" data-acc="km" ${OPEN07.has('km') ? 'open' : ''}><summary class="panel-head"><h2>Remuneration of Key Management Personnel</h2><span class="acc-st" data-st="km"></span></summary><div class="panel-body">
-        <table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></details>` : ''}
+        ${canEdit ? `<div class="lr-row"><button class="btn sm ghost" id="n-km-add" type="button">+ Add Key Official</button></div>` : ''}<table class="pgt nt-km"><thead><tr><th></th><th>CY ${y}</th><th>CY ${yp}</th></tr></thead><tbody>${kmRows}</tbody></table></div></details>` : ''}
       ${hasInv ? `<details class="panel acc" data-acc="inv" ${OPEN07.has('inv') ? 'open' : ''}><summary class="panel-head"><h2>Inventories</h2><span class="acc-st" data-st="inv"></span></summary><div class="panel-body">
         <div class="lr-row"><label class="label" for="n-inv-rec" style="margin:0">Inventories recognized during the period</label>${amtIn('inv.rec', N.inv.rec, 'Inventories recognized').replace('class="input amt-in"', 'id="n-inv-rec" class="input amt-in"')}</div>
         <div class="lr-row"><label class="label" for="n-inv-wd" style="margin:0">Write-down recognized as an expense</label>${amtIn('inv.wd', N.inv.wd, 'Write-down').replace('class="input amt-in"', 'id="n-inv-wd" class="input amt-in"')}</div>
@@ -888,8 +888,8 @@ export function notesPart({ ctx, me, refs, L, st }) {
         const st = (k, ok, t) => { const el = $(`[data-st="${k}"]`, root); if (el) el.innerHTML = `<span class="${ok ? 'ok' : 'warn'}">${ok ? '✓ ' : ''}${esc(t)}</span>`; };
         const ni = audit.notesInfo || {};
         st('n1', !!(ni.loc && ni.issued), ni.loc && ni.issued ? 'Complete' : 'Not yet in Setup');
-        const kmN = KM.filter(([k]) => String((N.km[k] || {}).cy || '').trim()).length;
-        st('km', kmN === KM.length, `${kmN} of ${KM.length} typed for CY ${y}`);
+        const officials = kmOfficials(N), kmN = officials.filter(([k]) => String((N.km[k] || {}).cy || '').trim()).length;
+        st('km', kmN === officials.length, `${kmN} of ${officials.length} typed for CY ${y}`);
         st('inv', true, [N.inv.rec, N.inv.wd].filter((x) => String(x || '').trim()).length ? 'Typed' : 'Optional');
         const ppeW = d.checks.filter((c) => c.st === 'warn' && /unexplained/.test(c.t)).length;
         st('ppe', !ppeW, ppeW ? `${ppeW} unexplained` : 'Explained');
@@ -905,6 +905,20 @@ export function notesPart({ ctx, me, refs, L, st }) {
       const changed = () => { if (!canEdit) return; setDirty(true, save); clearTimeout(timer); timer = setTimeout(draw, 150); };
       root.querySelector('.xform').addEventListener('input', changed);
       $$('details.acc', root).forEach((d) => { d.addEventListener('toggle', () => { if (d.open) OPEN07.add(d.dataset.acc); else OPEN07.delete(d.dataset.acc); }); });
+      const addOfficial = $('#n-km-add', root);
+      if (addOfficial) addOfficial.onclick = async () => {
+        const result = await modal({ title: 'Add Key Management Official',
+          body: '<label class="field"><span class="label">Position / Designation</span><input class="input" id="km-title" placeholder="e.g. IPMR"></label>',
+          buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Add', cls: 'primary', value: 'ok',
+            check: bg => { N._newKmLabel = $('#km-title', bg).value.trim(); return !!N._newKmLabel; } }] });
+        if (result !== 'ok') return;
+        const label = N._newKmLabel; delete N._newKmLabel;
+        collect();
+        const id = 'extra_' + Date.now().toString(36);
+        N.kmExtra.push({ id, label });
+        await save();
+        location.hash = '#/baar/' + ctx.rec.id + '?p=07&kmAdded=' + id;
+      };
       const sv = $('#n-save', root); if (sv) sv.onclick = save;
       const fileName = notesFileName(audit, lgu, mun);
       $('#n-print', root).onclick = () => { const p = notesPrint(notesOf(ctx, L, collect()), pages.notes); printPages(p.css, p.html, fileName); };
