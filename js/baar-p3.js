@@ -104,68 +104,6 @@ export async function readPart2(file) {
   return { year: year ? Number(year[0]) : null, recs };
 }
 
-/* ── Prior AOM Word import (separate from legacy Part II) ── */
-export async function readPreviousAom(file) {
-  const ps = await docxParas(file);
-  const fileRef = /(?:AOM[-_ ]*)?(\d{4}[-–]\d{1,4})/i.exec(file.name);
-  const headerRef = /\bAOM\s*(?:No\.?\s*)?[:#-]?\s*(\d{4}[-–]\d{1,4})/i;
-  const leadPattern = /^(?:We\s+(?:(?:also|further|likewise)\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i;
-  const endSection = /^(?:Management['’]?s?\s+Comments?(?:\/s)?|Auditor['’]?s?\s+Rejoinder|Reply\s+of\s+Management|Very truly yours|Respectfully yours)\s*:?/i;
-  const stripLabel = t => t.replace(/^\s*(?:[a-z][.)]|\d+[.)])\s+/i, '').trim();
-  // A Word file may contain many AOMs. Each numbered AOM header starts a new record.
-  const groups = []; let current = { ref: fileRef ? fileRef[1].replace('–','-') : '', ps: [] };
-  for (const p of ps) {
-    const match = headerRef.exec(p.t);
-    if (match && (current.ps.length || current.ref !== match[1])) {
-      if (current.ps.length) groups.push(current);
-      current = { ref: match[1].replace('–','-'), ps: [] };
-    } else if (match) current.ref = match[1].replace('–','-');
-    current.ps.push(p);
-  }
-  if (current.ps.length) groups.push(current);
-  const recs = [], warnings = [];
-  let firstYear = null, firstObs = '', firstRef = '';
-  for (const [gi, group] of groups.entries()) {
-    const paragraphs = group.ps.filter(p => p.t);
-    const all = paragraphs.map(p => p.t).join('\n');
-    const ref = group.ref;
-    const yearMatch = /(?:Audit\s*Year|CY|Calendar\s*Year)\s*[: ]\s*(20\d\d)/i.exec(all);
-    const year = yearMatch ? +yearMatch[1] : ref ? +ref.slice(0,4) : null;
-    const leadAt = paragraphs.findIndex(p => leadPattern.test(p.t));
-    if (leadAt < 0) { warnings.push((ref || 'Document section ' + (gi+1)) + ': no recommendation lead-in found'); continue; }
-    // Topic sentence: first bold substantive paragraph preceding the recommendation.
-    // Never substitute the recommendation or another AOM's topic sentence.
-    const before = paragraphs.slice(0, leadAt);
-    const topic = before.find(p => p.bold && p.t.length >= 65 && !headerRef.test(p.t) && !/^(?:Section|Chapter|Article)\b/i.test(p.t));
-    const observation = topic ? topic.t.replace(/^\d+[.)]\s+/, '') : '';
-    if (!observation) warnings.push((ref || 'Document section ' + (gi+1)) + ': topic sentence needs verification');
-    if (!firstRef) { firstRef = ref; firstYear = year; firstObs = observation; }
-    const base = { year, obsNo: ref || file.name.replace(/\.docx$/i,'') + (groups.length > 1 ? ' #' + (gi+1) : ''),
-      obs: observation, aomRef: ref, sourceKind: 'aom', sourceFile: file.name,
-      status: '', action: '', reason: '', src: 'aom-import' };
-    let lead = '', capturing = false, count = 0;
-    for (let i = leadAt; i < paragraphs.length; i++) {
-      const p = paragraphs[i], t = p.t;
-      if (endSection.test(t) || (i > leadAt && headerRef.test(t))) break;
-      if (leadPattern.test(t)) {
-        if (/:$/.test(t)) { lead = past(t); capturing = true; continue; }
-        recs.push({ ...base, lead: '', text: past(t) }); count++; capturing = false; continue;
-      }
-      if (!capturing) continue;
-      // Only explicitly lettered recommendation items qualify. Bold discussion
-      // paragraphs must not be turned into recommendations.
-      if (/^\s*[a-z][.)]\s+\S/i.test(t)) {
-        recs.push({ ...base, lead, text: stripLabel(t) }); count++;
-      } else if (count && !p.bold && !/^\d+(?:\.\d+)*[.)]?\s/.test(t)) {
-        // Wrapped continuation of the last recommendation, not a new one.
-        recs[recs.length-1].text += '\n' + t;
-      }
-    }
-    if (!count) warnings.push((ref || 'Document section ' + (gi+1)) + ': no individually identifiable recommendations');
-  }
-  return { file: file.name, ref: firstRef, year: firstYear, observation: firstObs, recs, warnings, groups: groups.length };
-}
-
 /* ── Carried over from the previous BAAR in the app ── */
 // prev: the previous audit's context (loadAudit) and its BAAR record data. The recommendations of its Final AOMs,
 // in Part II order, after those of its own Part III that were still Not Implemented.
