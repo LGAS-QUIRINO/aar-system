@@ -1131,10 +1131,12 @@ export async function p3Part({ ctx, me, refs, L, st }) {
           try {
             const results = await Promise.all(files.map(f => readPreviousAom(f)));
             const found = results.flatMap(x => x.recs);
+            const warnings = results.flatMap(x => x.warnings || []);
             if (!found.length) { toast('No AOM recommendations recognized. Check the document wording or upload a different Word file.', 'bad'); return; }
             let selected = [];
             const result = await modal({ title: 'Review Previous AOM Recommendations', wide: true,
-              body: '<p class="hint">Select the extracted recommendations to add. Verify the observation, AOM number, audit year and wording before confirming. Existing Part III entries will not be replaced.</p>' +
+              body: '<p class="hint">Select only verified recommendations. Check each topic sentence, AOM number, year, and wording. Existing Part III entries are preserved.</p>' +
+                (warnings.length ? '<div class="note warn">Needs manual verification:<ul>' + warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul></div>' : '') +
                 results.map((res, fi) => '<section class="panel" style="padding:12px;margin-bottom:10px"><b>' + esc(res.file) + '</b><p class="hint">AOM No. ' + esc(res.ref || 'Not detected — check manually after import') + ' · Year ' + esc(res.year || 'Not detected') + '</p>' +
                   '<p>' + esc(res.observation || 'Observation text not detected — edit after import') + '</p>' +
                   res.recs.map((rec, ri) => '<label style="display:block;margin:10px 0"><input type="checkbox" data-import-rec="' + fi + ':' + ri + '" checked> ' + esc((rec.lead ? rec.lead + ' ' : '') + rec.text) + '</label>').join('') + '</section>').join(''),
