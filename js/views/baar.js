@@ -47,11 +47,21 @@ function partsStrip(auditId, active, st = {}) {
 }
 const p01Pill = (miss) => (miss.length ? pill('In Progress', 'warn') : pill('Ready to Print', 'ok'));
 
+// Only IAR Bases for Opinion topic sentences omit a terminal legal/criteria citation.
+// Preserve the full AOM in the source and leave bespoke IAR edits untouched.
+function iarTopicWithoutCriteria(text) {
+  const original = String(text || '').trim();
+  const match = /(?:,?\s+)(?:contrary to|in violation of|inconsistent with|not in accordance with|not in conformity with|as required (?:under|by)|in noncompliance with)\s+(?:Section|Sections|Chapter|Item|Paragraph|Article|Republic Act|RA\b|R\.A\.|P\.D\.|PD\b|COA\b|IPSAS\b|the\s+(?:Manual|provisions|requirements)|[A-Z][a-z]+\s+(?:Circular|Memorandum))[^.;]*(?:[.;]|$)/i.exec(original);
+  if (!match) return original;
+  const before = original.slice(0, match.index).trim().replace(/[,;\s]+$/, '');
+  return before ? before.replace(/[.;\s]+$/, '') + '.' : original;
+}
+
 // The Final AOMs of the audit as possible bases: Section A (Financial Audit) ticked unless changed; text from the AOM's own observation.
 function basesList(ctx, I) {
   return ctx.aoms.filter((a) => a.data.status === ST.FINAL).sort((a, b) => ctx.nums[a.id].n - ctx.nums[b.id].n).map((a) => {
     const v = ctx.varsFor(a), sv = I.bases[a.id] || {};
-    const own = fillText(blockPlain((a.data.blocks || []).find((b) => b.type === 'topic') || {}), topicVars(v)).trim().replace(/[.;\s]+$/, '');
+    const own = iarTopicWithoutCriteria(fillText(blockPlain((a.data.blocks || []).find((b) => b.type === 'topic') || {}), topicVars(v)).trim().replace(/[.;\s]+$/, ''));
     const amt = aomAmount(a.data);
     return { id: a.id, sec: a.data.section || 'B', no: aomNo(ctx.audit.auditYear, ctx.nums[a.id].n, ctx.audit.periodFrom, ctx.audit.periodTo),
       title: fillText(a.data.title || '', topicVars(v)), amount: amt, own, on: sv.on !== undefined ? !!sv.on : (a.data.section || 'B') === 'A', text: sv.text !== undefined ? sv.text : own };
@@ -596,7 +606,7 @@ function iarPart({ ctx, me, refs, L, st }) {
         <div class="field"><label class="label" for="i-op">Opinion Paragraph</label><textarea class="input be-text" id="i-op" rows="5" ${dis}></textarea></div>
         <span class="hint" id="i-ophint"></span></div></section>
       <section class="panel" id="i-bases"><div class="panel-head"><h2 id="i-bhead"></h2><span class="pill violet" id="i-bcount" style="margin-left:auto"></span></div>
-        <div class="panel-body" style="padding-top:4px">${basesHTML}</div></section>
+        <div class="panel-body" style="padding-top:4px"><p class="hint">For Bases for Opinion only: state the audit finding, amount and financial statement effect. Do not include legal citations or criteria in the topic sentence. Edit each basis as needed; original AOMs are unchanged.</p>${basesHTML}</div></section>
       <section class="panel"><div class="panel-head"><h2>Report Date</h2></div><div class="panel-body"><div class="grid-2">
         <div class="field"><label class="label" for="i-date">Date of the Report</label><input class="input" type="date" id="i-date" value="${esc(I.date || '')}" ${dis}></div>
         <div class="field"><span class="label">Signed By</span><div class="bval">${atlLine}</div></div></div></div></section>
