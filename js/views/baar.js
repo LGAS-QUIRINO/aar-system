@@ -1077,13 +1077,27 @@ export async function p3Part({ ctx, me, refs, L, st }) {
         const r = P.recs.find((x) => x.id === t.dataset.id); if (r) r[t.dataset.f] = t.value;
         changed(false);
       });
+      // Split only clearly marked recommendation items; continuation lines stay with their item.
+      const splitRecommendations = (input) => {
+        const lines = String(input || '').replace(/\r\n?/g, '\n').split('\n');
+        const marker = /^\s*(?:([a-z])|([1-9]\d*))[.)]\s+(\S.*)$/i;
+        const starts = lines.map((line, i) => marker.test(line) ? i : -1).filter(i => i >= 0);
+        if (starts.length < 2 || lines.slice(0, starts[0]).some(line => line.trim())) return [String(input || '').trim()];
+        const items = [];
+        for (let j = 0; j < starts.length; j++) {
+          const start = starts[j], end = starts[j + 1] ?? lines.length;
+          const match = lines[start].match(marker);
+          items.push([match[3], ...lines.slice(start + 1, end)].join('\n').trim());
+        }
+        return items.filter(Boolean);
+      };
       // Add or edit one recommendation by hand.
       const recModal = (r) => modal({ title: r ? 'Edit Recommendation' : 'Add Recommendation', wide: true,
         body: `<div class="p3m"><label class="field"><span class="label">BAAR CY</span><input class="input" id="m-yr" value="${esc(r ? r.year : P.year || '')}"></label>
           <label class="field"><span class="label">Observation No.</span><input class="input" id="m-no" value="${esc(r ? r.obsNo : '')}"></label></div>
           <label class="field"><span class="label">Observation</span><textarea class="input" id="m-obs" rows="4">${esc(r ? r.obs : '')}</textarea></label>
           <label class="field"><span class="label">Opening line before the recommendations (optional)</span><input class="input" id="m-lead" value="${esc(r ? r.lead || '' : '')}" placeholder="We recommended that Management:"></label>
-          <label class="field"><span class="label">Recommendation</span><textarea class="input" id="m-rec" rows="3">${esc(r ? r.text : '')}</textarea></label>`,
+          <label class="field"><span class="label">Recommendation${r ? "" : " (paste a., b., c. or 1., 2., 3. to add several at once)"}</span><textarea class="input" id="m-rec" rows="5">${esc(r ? r.text : '')}</textarea></label>`,
         buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: r ? 'Save Changes' : 'Add Recommendation', cls: 'primary', value: 'ok',
           check: (bg) => { const ok = $('#m-yr', bg).value.trim() && $('#m-no', bg).value.trim() && $('#m-obs', bg).value.trim() && $('#m-rec', bg).value.trim(); if (!ok) toast('Fill in the year, observation number, observation and recommendation.', 'bad'); return !!ok; } }],
         onOpen: (bg) => { read = () => ({ year: Number($('#m-yr', bg).value) || $('#m-yr', bg).value.trim(), obsNo: Number($('#m-no', bg).value) || $('#m-no', bg).value.trim(), obs: $('#m-obs', bg).value.trim(), lead: $('#m-lead', bg).value.trim(), text: $('#m-rec', bg).value.trim() }); }
@@ -1093,10 +1107,11 @@ export async function p3Part({ ctx, me, refs, L, st }) {
       if (ad) ad.onclick = async () => {
         const out = await recModal(null);
         if (!out) return;
-        const rec = { id: 'r' + Math.random().toString(36).slice(2, 10), title: '', status: '', action: '', reason: '', src: 'manual', ...out };
-        // Placed after the last recommendation of the same year and observation, or at the end.
-        let at = -1; P.recs.forEach((x, i) => { if (String(x.year) === String(rec.year) && String(x.obsNo) === String(rec.obsNo)) at = i; });
-        if (at >= 0) P.recs.splice(at + 1, 0, rec); else P.recs.push(rec);
+        const items = splitRecommendations(out.text);
+        const newRecs = items.map(text => ({ id: 'r' + Math.random().toString(36).slice(2, 10), title: '', status: '', action: '', reason: '', src: 'manual', ...out, text }));
+        // Keep the recommendations together under the same observation, in the pasted order.
+        let at = -1; P.recs.forEach((x, i) => { if (String(x.year) === String(out.year) && String(x.obsNo) === String(out.obsNo)) at = i; });
+        P.recs.splice(at >= 0 ? at + 1 : P.recs.length, 0, ...newRecs);
         if (!P.src) P.src = { kind: 'manual' };
         changed();
       };
