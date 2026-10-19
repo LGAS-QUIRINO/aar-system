@@ -84,6 +84,7 @@ const FIRST = POLICIES.length + 1;     // the first account note is 7)
 
 // Key management personnel (Note on Salaries and Wages, b.)
 export const KM = [['pb', 'Punong Barangay'], ['kag', 'Barangay Kagawads'], ['sk', 'SK Representative'], ['treas', 'Barangay Treasurer'], ['sec', 'Barangay Secretary']];
+export const kmOfficials = (N) => [...KM, ...((N && N.kmExtra) || []).filter(x => x && x.id && String(x.label || '').trim()).map(x => [x.id, x.label.trim()])];
 
 /* ── PPE classes (columns of the movement schedule) ── */
 export const PPE_CLS = [['land', 'Land'], ['li', 'Land Improvements'], ['infra', 'Infrastructure Assets'], ['bldg', 'Buildings and Other Structures'], ['me', 'Machinery and Equipment'],
@@ -233,7 +234,7 @@ export function buildNotes(F, N = {}, { lgu, mun, audit }) {
       blocks.push({ k: 'pi2', t: 'b. Remuneration of key management personnel', keep: true });
       blocks.push({ k: 'p', t: "This represents the honoraria, year-end bonus, cash gift, Other Bonuses and Allowances and Terminal Leave Benefits of the agency's key management personnel.", keep: true });
       const km = N.km || {};
-      blocks.push(tbl(KM.map(([k, label]) => ({ t: label, v: [amtOf((km[k] || {}).cy), amtOf((km[k] || {}).py)] })), true));
+      blocks.push(tbl(kmOfficials(N).map(([k, label]) => ({ t: label, v: [amtOf((km[k] || {}).cy), amtOf((km[k] || {}).py)] })), true));
       return;
     }
     blocks.push(tbl(acctRows(xs), true));
@@ -252,8 +253,8 @@ export function buildNotes(F, N = {}, { lgu, mun, audit }) {
     checks.push(pbName && pb.name ? { st: 'ok', t: `Note 1: headed by ${pbName} (from Setup)` } : { st: 'warn', t: 'Note 1: no Punong Barangay in Setup' });
     checks.push(sg.length ? { st: 'ok', t: `Note 1: ${sg.length} members of the Sanggunian (from Setup)` } : { st: 'warn', t: 'Note 1: no Kagawads in Setup' });
     if (by.ps.length) {
-      const km = N.km || {}, filled = KM.filter(([k]) => amtOf((km[k] || {}).cy) !== null).length;
-      checks.push(filled === KM.length ? { st: 'ok', t: `Note ${num.ps} b: remuneration of key management personnel` } : { st: 'warn', t: `Note ${num.ps} b: remuneration of key management personnel, ${KM.length - filled} of ${KM.length} not yet typed for CY ${y}` });
+      const km = N.km || {}, officials = kmOfficials(N), filled = officials.filter(([k]) => amtOf((km[k] || {}).cy) !== null).length;
+      checks.push(filled === officials.length ? { st: 'ok', t: `Note ${num.ps} b: remuneration of key management personnel` } : { st: 'warn', t: `Note ${num.ps} b: remuneration of key management personnel, ${officials.length - filled} of ${officials.length} not yet typed for CY ${y}` });
     }
     if (ppe) {
       ppe.cols.forEach((c) => {
