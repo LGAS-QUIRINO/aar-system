@@ -23,7 +23,7 @@ import { buildNotes, notesPagesHTML, notesPageCount, notesPrint, notesSections, 
 import { aomAmount, peso } from '../saor.js';
 import { annexLetter, excelSheets, cleanRows, annexPagesHTML, annexPrint, annexToc, annexFileName, annexSections, ANNEX_CSS } from '../baar-annex.js';
 import { reviewStrip, wireReviewStrip, partLocked, slimReview } from './baarreview.js';
-import { P3_STATUS, readPart2, readPreviousAom, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
+import { P3_STATUS, readPart2, carryOver, buildP3, paginateP3, p3PagesHTML, p3Print, p3Sections, p3FileName, P3_CSS } from '../baar-p3.js';
 import { gaaFor, gaaComplete, gaaText, TYPED_GAA, TR_STANDARD, TR_KEYS, OPINIONS, OPINION_STANDARD, periodEnded, pbSalutation, punongBarangay, buildTransmittal, docHTML, paginate, printTransmittal, transmittalWord, transmittalPrint, transmittalSections } from '../baar-transmittal.js';
 
 export const PARTS = [
@@ -1002,8 +1002,8 @@ export async function p3Part({ ctx, me, refs, L, st }) {
     <section class="panel" style="padding:10px 12px">${partsStrip(ctx.rec.id, '09', st)}</section>
     <div class="topnote">Each recommendation is counted separately. Choose its status and type the management action; the reason is needed for those Not Implemented.</div>
     <section class="panel p3src"><span class="p3src-ic" aria-hidden="true">✓</span><div class="p3src-t" id="p3-src"></div>
-      ${canEdit ? `<span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="p3-imp">Import Part II</button><button class="btn sm ghost" type="button" id="p3-aomimp">Import Previous AOMs</button><button class="btn sm ghost" type="button" id="p3-add">+ Add Recommendation</button></span>` : ''}
-      <input type="file" id="p3-file" accept=".docx" hidden><input type="file" id="p3-aomfile" accept=".docx" multiple hidden></section>
+      ${canEdit ? `<span class="btn-row" style="margin-left:auto"><button class="btn sm ghost" type="button" id="p3-imp">Import Part II</button><button class="btn sm ghost" type="button" id="p3-add">+ Add Recommendation</button></span>` : ''}
+      <input type="file" id="p3-file" accept=".docx" hidden></section>
     <div class="p3cols">
       <section class="panel"><div class="panel-head"><h2 id="p3-count">Recommendations</h2></div><div id="p3-list"></div></section>
       <div class="p3side">
@@ -1122,41 +1122,6 @@ export async function p3Part({ ctx, me, refs, L, st }) {
           changed(); toast(`${out.recs.length} recommendations found. Check the year, then Save.`, 'ok');
         } catch (e) { toast('Could not read the file: ' + e.message, 'bad'); }
       };
-      const aomBtn = $('#p3-aomimp', root), aomFiles = $('#p3-aomfile', root);
-      if (aomBtn && aomFiles) {
-        aomBtn.onclick = () => aomFiles.click();
-        aomFiles.onchange = async () => {
-          const files = Array.from(aomFiles.files || []); aomFiles.value = '';
-          if (!files.length) return;
-          try {
-            const results = await Promise.all(files.map(f => readPreviousAom(f)));
-            const found = results.flatMap(x => x.recs);
-            const warnings = results.flatMap(x => x.warnings || []);
-            if (!found.length) { toast('No AOM recommendations recognized. Check the document wording or upload a different Word file.', 'bad'); return; }
-            let selected = [];
-            const result = await modal({ title: 'Review Previous AOM Recommendations', wide: true,
-              body: '<p class="hint">Select only verified recommendations. Check each topic sentence, AOM number, year, and wording. Existing Part III entries are preserved.</p>' +
-                (warnings.length ? '<div class="note warn">Needs manual verification:<ul>' + warnings.map(w => '<li>' + esc(w) + '</li>').join('') + '</ul></div>' : '') +
-                results.map((res, fi) => '<section class="panel" style="padding:12px;margin-bottom:10px"><b>' + esc(res.file) + '</b><p class="hint">AOM No. ' + esc(res.ref || 'Not detected — check manually after import') + ' · Year ' + esc(res.year || 'Not detected') + '</p>' +
-                  '<p>' + esc(res.observation || 'Observation text not detected — edit after import') + '</p>' +
-                  res.recs.map((rec, ri) => '<label style="display:block;margin:10px 0"><input type="checkbox" data-import-rec="' + fi + ':' + ri + '" checked> ' + esc((rec.lead ? rec.lead + ' ' : '') + rec.text) + '</label>').join('') + '</section>').join(''),
-              buttons: [{ label: 'Cancel', cls: 'ghost', value: null }, { label: 'Add Selected', cls: 'primary', value: 'add',
-                check: bg => { selected = Array.from(bg.querySelectorAll('[data-import-rec]:checked')).map(el => el.dataset.importRec); return selected.length > 0; } }]
-            });
-            if (result !== 'add') return;
-            const existing = new Set(P.recs.filter(r => r.sourceKind === 'aom').map(r => [r.aomRef, r.text].join('|')));
-            let added = 0;
-            for (const key of selected) {
-              const [fi, ri] = key.split(':').map(Number), rec = results[fi].recs[ri];
-              if (!rec || existing.has([rec.aomRef, rec.text].join('|'))) continue;
-              P.recs.push({ ...rec, id: 'r' + Math.random().toString(36).slice(2, 10) });
-              existing.add([rec.aomRef, rec.text].join('|')); added++;
-            }
-            if (added) { if (!P.src) P.src = { kind: 'aom' }; changed(); await save(); }
-            toast(added + ' previous AOM recommendation' + (added === 1 ? '' : 's') + ' added. Review any missing references or observation text.', 'ok');
-          } catch (e) { toast('Could not read previous AOMs: ' + e.message, 'bad'); }
-        };
-      }
       const sv = $('#p3-save', root); if (sv) sv.onclick = save;
       const fileName = p3FileName(audit, lgu, mun);
       const doc = () => buildP3(P);
