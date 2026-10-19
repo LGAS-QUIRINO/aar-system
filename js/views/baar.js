@@ -51,10 +51,16 @@ const p01Pill = (miss) => (miss.length ? pill('In Progress', 'warn') : pill('Rea
 // Preserve the full AOM in the source and leave bespoke IAR edits untouched.
 function iarTopicWithoutCriteria(text) {
   const original = String(text || '').trim();
-  const match = /(?:,?\s+)(?:contrary to|in violation of|inconsistent with|not in accordance with|not in conformity with|as required (?:under|by)|in noncompliance with)\s+(?:Section|Sections|Chapter|Item|Paragraph|Article|Republic Act|RA\b|R\.A\.|P\.D\.|PD\b|COA\b|IPSAS\b|the\s+(?:Manual|provisions|requirements)|[A-Z][a-z]+\s+(?:Circular|Memorandum))[^.;]*(?:[.;]|$)/i.exec(original);
-  if (!match) return original;
-  const before = original.slice(0, match.index).trim().replace(/[,;\s]+$/, '');
-  return before ? before.replace(/[.;\s]+$/, '') + '.' : original;
+  // Edit only a trailing criteria clause. A criterion embedded in the middle of a
+  // finding must remain for manual review rather than losing a later financial effect.
+  const clause = /(?:,\s*|\s+)(?:contrary to|in violation of|inconsistent with|not in accordance with|not in conformity with|as required (?:under|by)|in noncompliance with|pursuant to)\s+(?:(?:the\s+)?(?:provisions|requirements)\s+of\s+)?(?:Section(?:s)?|Chapter|Item|Paragraph|Article|Republic Act|RA\b|R\.A\.|P\.D\.|PD\b|COA\b|IPSAS\b|Manual\b|[A-Z][a-z]+\s+(?:Circular|Memorandum))[\s\S]*$/i;
+  const found = clause.exec(original);
+  if (!found) return original;
+  const kept = original.slice(0, found.index).trim().replace(/[,;\s]+$/, '');
+  if (!kept) return original;
+  // Keep monetary expressions and the underlying finding text completely unchanged.
+  const punctuation = /[.;]$/.test(original) ? original.slice(-1) : '';
+  return kept.replace(/[.;]$/, '') + punctuation;
 }
 
 // The Final AOMs of the audit as possible bases: Section A (Financial Audit) ticked unless changed; text from the AOM's own observation.
