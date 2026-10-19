@@ -104,6 +104,37 @@ export async function readPart2(file) {
   return { year: year ? Number(year[0]) : null, recs };
 }
 
+/* ── Prior AOM Word import (separate from legacy Part II) ── */
+export async function readPreviousAom(file) {
+  const ps = await docxParas(file);
+  const paragraphs = ps.map(x => x.t).filter(Boolean);
+  const all = paragraphs.join('\n');
+  const refMatch = /\bAOM\s*(?:No\.?\s*)?[:#-]?\s*(\d{4}[-–]\d{1,4})(?:\s*\(([^)]+)\))?/i.exec(all);
+  const fileRef = /(?:AOM[-_ ]*)?(\d{4}[-–]\d{1,4})/i.exec(file.name);
+  const ref = refMatch ? refMatch[1].replace('–','-') : fileRef ? fileRef[1].replace('–','-') : '';
+  const yearMatch = /(?:Audit\s*Year|CY|Calendar\s*Year)\s*[: ]\s*(20\d\d)/i.exec(all);
+  const year = yearMatch ? +yearMatch[1] : ref ? +ref.slice(0,4) : null;
+  const leadPattern = /^(?:We\s+(?:(?:also|further|likewise)\s+)?recommend(?:ed)?\b|It\s+(?:is|was)\s+recommended\b)/i;
+  const management = /^(?:Management['’]?s?\s+Comments?|Auditor['’]?s?\s+Rejoinder|Reply\s+of\s+Management)\s*:?$/i;
+  const observation = paragraphs.find(t => /^(?:\d+[.)]\s*)?(?!.{0,30}recommend)(?:The |Cash |Property |Non-|Failure |Disbursements |Unliquidated |Funds |The Barangay )/i.test(t) && t.length > 75) || '';
+  const recs = [];
+  let capturing = false, lead = '';
+  for (const p of ps) {
+    const t = p.t;
+    if (!t) continue;
+    if (management.test(t)) { capturing = false; continue; }
+    if (leadPattern.test(t)) {
+      if (/:$/.test(t)) { lead = past(t); capturing = true; }
+      else { recs.push({ text: past(t), lead: '', year, obsNo: ref || file.name.replace(/\.docx$/i,''), obs: observation, aomRef: ref, sourceKind:'aom', sourceFile:file.name, status:'', action:'', reason:'', src:'aom-import' }); capturing = false; }
+      continue;
+    }
+    if (capturing && (/^[a-z][.)]\s+/i.test(t) || p.bold)) {
+      recs.push({ text: t.replace(/^[a-z][.)]\s+/i, ''), lead, year, obsNo: ref || file.name.replace(/\.docx$/i,''), obs: observation, aomRef: ref, sourceKind:'aom', sourceFile:file.name, status:'', action:'', reason:'', src:'aom-import' });
+    }
+  }
+  return { file:file.name, ref, year, observation, recs };
+}
+
 /* ── Carried over from the previous BAAR in the app ── */
 // prev: the previous audit's context (loadAudit) and its BAAR record data. The recommendations of its Final AOMs,
 // in Part II order, after those of its own Part III that were still Not Implemented.
@@ -142,13 +173,15 @@ export function buildP3(p3) {
   const full = rows.filter((r) => r.status === 'full').length, not = rows.filter((r) => r.status === 'not').length;
   const none = rows.length - full - not, total = rows.length;
   const years = [...new Set(rows.map((r) => r.year).filter(Boolean))].sort();
+  const fromAoms = rows.some(r => r.sourceKind === 'aom');
+  const fromBaar = rows.some(r => r.sourceKind !== 'aom');
   let opening = '';
   if (total) {
     const parts = [];
     if (full) parts.push(`${words(full)} (${full}) or ${pct(full, total)} ${full === 1 ? 'was' : 'were'} fully implemented`);
     if (not) parts.push(`${words(not)} (${not}) or ${pct(not, total)} ${not === 1 ? 'was' : 'were'} not implemented`);
     if (none) parts.push(`${words(none)} (${none}) [no status yet]`);
-    opening = `Of the ${words(total)} (${total}) audit recommendation${total === 1 ? '' : 's'} embodied in the ${yearsText(years)} Barangay Annual Audit Report${years.length > 1 ? 's' : ''}, ${parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]}, as shown below:`;
+    opening = `Of the ${words(total)} (${total}) audit recommendation${total === 1 ? '' : 's'} contained in the ${fromAoms && fromBaar ? 'prior Barangay Annual Audit Reports and Audit Observation Memoranda' : fromAoms ? 'prior Audit Observation Memoranda' : yearsText(years) + ' Barangay Annual Audit Report' + (years.length > 1 ? 's' : '')}, ${parts.length > 1 ? parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1] : parts[0]}, as shown below:`;
   }
   const checks = [];
   if (!total) checks.push({ st: 'wait', t: 'Runs once the prior year’s recommendations are in' });
@@ -195,7 +228,7 @@ function rowsHTML(d) {
   d.rows.forEach((r, i) => {
     const prev = d.rows[i - 1], next = d.rows[i + 1];
     const same = (a, b) => a && b && a.year === b.year && a.obsNo === b.obsNo;
-    if (!same(prev, r)) out.push({ obs: true, html: `<tr class="o"><td class="ref"><p>BAAR CY ${escH(r.year)}</p><p>Observation No. ${escH(r.obsNo)}</p></td><td class="ob">${lines(r.obs)}</td><td></td><td></td><td></td></tr>` });
+    if (!same(prev, r)) out.push({ obs: true, html: `<tr class="o"><td class="ref"><p>${escH(r.sourceKind === 'aom' ? 'AOM No. ' + (r.aomRef || r.obsNo) : 'BAAR CY ' + r.year)}</p><p>${r.sourceKind === 'aom' ? '' : 'Observation No. ' + escH(r.obsNo)}</p></td><td class="ob">${lines(r.obs)}</td><td></td><td></td><td></td></tr>` });
     const hasLead = !same(prev, r) && !!r.lead;
     if (hasLead) out.push({ lead: true, html: `<tr class="lead-row"><td></td><td class="j">${escH(r.lead)}</td><td></td><td></td><td></td></tr>` });
     const [t0, ...rest] = String(r.text || '').split('\n');
@@ -251,7 +284,7 @@ export async function p3Sections(d, start) {
     if (!same(prev, r)) {
       const bd = { bottom: NONE };
       // The observation (topic sentence) row is never split: if it does not fit, it starts on the next page.
-      rows.push(new TableRow({ cantSplit: true, children: [cell([P(`BAAR CY ${r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`Observation No. ${r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
+      rows.push(new TableRow({ cantSplit: true, children: [cell([P(`${r.sourceKind === 'aom' ? 'AOM No. ' + (r.aomRef || r.obsNo) : 'BAAR CY ' + r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`${r.sourceKind === 'aom' ? '' : 'Observation No. ' + r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
         cell(ps(r.obs, { b: true, al: J }), 1, bd), cell([P('')], 2, bd), cell([P('')], 3, bd), cell([P('')], 4, bd)] }));
     }
     const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
