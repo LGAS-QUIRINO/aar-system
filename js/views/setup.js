@@ -151,7 +151,7 @@ export async function setup(refs, params) {
         ${editable ? '<div class="panel-body" style="padding-top:12px"><div><button class="btn dashed sm" id="add-off">+ Add Official</button></div></div>' : ''}
       </section>
       <section class="panel"><div class="panel-head"><div class="step-title"><span class="step-num">4</span><h2>Sangguniang Barangay Members</h2></div><span class="hint">For the General Information in the Notes to Financial Statements</span></div>
-        <div class="panel-body"><div class="grid-2" id="kagawads">${s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos)}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}></div>`).join('')}</div>
+        <div class="panel-body"><div class="grid-2" id="kagawads"></div>${editable ? '<div style="margin-top:12px"><button type="button" class="btn dashed sm" id="add-kag">+ Add Official</button></div>' : ''}
           <div class="grid-2" id="ninfo" style="margin-top:14px;border-top:1px solid var(--line-2);padding-top:14px">
             <div class="field"><label class="label" for="ni-loc">Location of the Barangay</label><input class="input" id="ni-loc" data-ni="loc" value="${esc((s.notesInfo || {}).loc || '')}" placeholder="e.g. Western part of Maddela" ${dis}></div>
             <div class="field"><label class="label" for="ni-issued">Date the Financial Statements Were Issued</label><input type="date" class="input" id="ni-issued" data-ni="issued" value="${esc((s.notesInfo || {}).issued || '')}" ${dis}></div>
@@ -216,7 +216,23 @@ export async function setup(refs, params) {
       offBox.addEventListener('click', (e) => { const b = e.target.closest('[data-del]'); if (!b) return; s.officials.splice(+b.dataset.del, 1); redrawOfficials(); dirty(); });
       const add = $('#add-off', root); if (add) add.onclick = () => { s.officials.push({ title: 'Mr.', name: '', pos: '', acting: false, role: 'Attention' }); redrawOfficials(); dirty(); offBox.querySelector(`[data-o="${s.officials.length - 1}"][data-k="name"]`).focus(); };
       $('#ninfo', root).addEventListener('input', (e) => { const k = e.target.dataset.ni; if (!k) return; s.notesInfo = { ...(s.notesInfo || {}), [k]: e.target.value }; dirty(); });
-      $('#kagawads', root).addEventListener('input', (e) => { const i = e.target.dataset.kg; if (i === undefined) return; s.kagawads[+i].name = e.target.value; e.target.classList.toggle('changed', !!chK(+i)); dirty(); });
+      const kagBox = $('#kagawads', root);
+      const redrawKagawads = () => {
+        kagBox.innerHTML = s.kagawads.map((k, i) => `<div class="field"><label class="label" for="kg${i}">${i + 1}. ${esc(k.pos || 'Barangay Official')}</label><input class="input ${chK(i)}" id="kg${i}" data-kg="${i}" value="${esc(k.name)}" ${dis}>${i >= 8 && editable ? `<div style="display:flex;gap:8px;align-items:center;margin-top:6px"><input class="input" aria-label="Position of additional official ${i+1}" data-kgpos="${i}" value="${esc(k.pos || '')}" placeholder="Position"><button class="btn sm ghost" type="button" data-kgdel="${i}">Remove</button></div>` : ''}</div>`).join('');
+      };
+      redrawKagawads();
+      kagBox.addEventListener('input', (e) => {
+        const i = e.target.dataset.kg, p = e.target.dataset.kgpos;
+        if (i !== undefined) { s.kagawads[+i].name = e.target.value; e.target.classList.toggle('changed', !!chK(+i)); dirty(); }
+        if (p !== undefined) { s.kagawads[+p].pos = e.target.value; dirty(); }
+      });
+      kagBox.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-kgdel]'); if (!b) return;
+        const i = Number(b.dataset.kgdel); if (i < 8) return;
+        s.kagawads.splice(i, 1); redrawKagawads(); dirty();
+      });
+      const addKag = $('#add-kag', root);
+      if (addKag) addKag.onclick = () => { s.kagawads.push({ name: '', pos: 'Barangay Kagawad' }); redrawKagawads(); dirty(); kagBox.querySelector('[data-kg="' + (s.kagawads.length - 1) + '"]').focus(); };
       const wireMember = () => {
         const m = $('#member', root); if (m) m.onchange = () => { s.memberId = m.value; dirty(); };
         const c = $('#chg-aud', root); if (c) c.onclick = changeAuditor;
