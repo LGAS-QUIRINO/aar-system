@@ -138,7 +138,18 @@ const yearsText = (ys) => { const l = ys.map((y) => `CY ${y}`); return l.length 
 /** Part III: { rows (numbered), counts, opening, checks, years }. p3: the saved { recs, year }. */
 export function buildP3(p3) {
   const recs = (p3 && p3.recs) || [];
-  const rows = recs.map((r, i) => ({ ...r, n: i + 1, year: r.year || p3.year || '' }));
+  // Always order by audit year, then observation number; keep recommendations
+  // within the same observation in their original relative order.
+  const sorted = recs.map((r, i) => ({ r, i })).sort((a, b) => {
+    const ay = Number(a.r.year || p3.year || 0), by = Number(b.r.year || p3.year || 0);
+    if (ay !== by) return ay - by;
+    const av = String(a.r.obsNo ?? '').trim(), bv = String(b.r.obsNo ?? '').trim();
+    const an = /^\\d+$/.test(av), bn = /^\\d+$/.test(bv);
+    if (an && bn && Number(av) !== Number(bv)) return Number(av) - Number(bv);
+    const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+    return cmp || a.i - b.i;
+  });
+  const rows = sorted.map(({ r }, i) => ({ ...r, n: i + 1, year: r.year || p3.year || '' }));
   const full = rows.filter((r) => r.status === 'full').length, not = rows.filter((r) => r.status === 'not').length;
   const none = rows.length - full - not, total = rows.length;
   const years = [...new Set(rows.map((r) => r.year).filter(Boolean))].sort();
