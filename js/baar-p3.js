@@ -144,7 +144,7 @@ export function buildP3(p3) {
     const ay = Number(a.r.year || p3.year || 0), by = Number(b.r.year || p3.year || 0);
     if (ay !== by) return ay - by;
     const av = String(a.r.obsNo ?? '').trim(), bv = String(b.r.obsNo ?? '').trim();
-    const an = /^\\d+$/.test(av), bn = /^\\d+$/.test(bv);
+    const an = /^\d+$/.test(av), bn = /^\d+$/.test(bv);
     if (an && bn && Number(av) !== Number(bv)) return Number(av) - Number(bv);
     const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
     return cmp || a.i - b.i;
