@@ -163,7 +163,7 @@ export async function pool(refs, params, q) {
         const fresh = (active.blocks || []).filter(b => b.type === 'criteria');
         if (!fresh.length) { toast('The Active template has no Criteria block.', 'bad'); return; }
         const linked = (await store.list('aoms')).filter(a =>
-          !a.deleted && a.data.poolCode === active.code && a.data.status !== 'Withdrawn');
+          !a.deleted && String(a.data.poolCode || '').trim().toUpperCase() === String(active.code || '').trim().toUpperCase() && a.data.status !== 'Withdrawn');
         const updates = [];
         const sameCriteria = (a, b) => JSON.stringify((a || []).map(x => ({
           lead:x.lead || '', text:x.text || '', quoted:!!x.quoted
@@ -181,10 +181,11 @@ export async function pool(refs, params, q) {
             ...b, id: prior[i]?.id || b.id || ('criteria-' + i)
           }));
           const nextBlocks = old.filter(b => b.type !== 'criteria');
-          nextBlocks.splice(first, 0, ...replacements);
+          const insertAt = old.slice(0, first).filter(b => b.type !== 'criteria').length;
+          nextBlocks.splice(insertAt, 0, ...replacements);
           updates.push({ record:a, blocks:nextBlocks });
         }
-        if (!updates.length) { toast('No linked AOM criteria require updating.', 'ok'); return; }
+        if (!updates.length) { toast(linked.length ? linked.length + ' linked AOM(s) found, but none has replaceable Criteria differences.' : 'No AOMs have this Library code. Check the AOM’s Library code in Findings; unlinked AOMs cannot be matched safely.', 'bad'); return; }
         const finals = updates.filter(u => u.record.data.status === 'Final').length;
         const yes = await confirmBox('Replace Linked AOM Criteria',
           'Replace the Criteria in ' + updates.length + ' linked AOM(s) with Active Library Version ' + active.version +
