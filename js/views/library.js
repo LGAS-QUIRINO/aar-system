@@ -162,40 +162,48 @@ export async function pool(refs, params, q) {
         if (!active || rec.data.status !== 'Active') return;
         const fresh = (active.blocks || []).filter(b => b.type === 'criteria');
         if (!fresh.length) { toast('The Active template has no Criteria block.', 'bad'); return; }
-        const versions = new Map(g.versions.map(v => [Number(v.data.version), v.data]));
-        const linked = (await store.list('aoms')).filter(a => !a.deleted && a.data.poolCode === active.code);
-        const updates = [], skipped = [];
-        const equivalent = b => JSON.stringify({ lead:b?.lead || '', text:b?.text || '', quoted:!!b?.quoted });
+        const linked = (await store.list('aoms')).filter(a =>
+          !a.deleted && a.data.poolCode === active.code && a.data.status !== 'Withdrawn');
+        const updates = [];
+        const sameCriteria = (a, b) => JSON.stringify((a || []).map(x => ({
+          lead:x.lead || '', text:x.text || '', quoted:!!x.quoted
+        }))) === JSON.stringify((b || []).map(x => ({
+          lead:x.lead || '', text:x.text || '', quoted:!!x.quoted
+        })));
         for (const a of linked) {
-          const previous = versions.get(Number(a.data.poolVersion));
-          const oldCriteria = (previous?.blocks || []).filter(b => b.type === 'criteria');
-          const current = (a.data.blocks || []).filter(b => b.type === 'criteria');
-          if (!previous || oldCriteria.length !== fresh.length || current.length !== fresh.length ||
-              current.some((b,i) => equivalent(b) !== equivalent(oldCriteria[i]))) {
-            skipped.push(a); continue;
-          }
-          if (current.every((b,i) => equivalent(b) === equivalent(fresh[i]))) continue;
-          let n = 0;
-          const blocks = a.data.blocks.map(b => b.type === 'criteria' ?
-            { ...b, lead: fresh[n].lead || '', text: fresh[n].text || '', quoted: !!fresh[n++].quoted } : b);
-          updates.push({ record:a, blocks });
+          const old = a.data.blocks || [], prior = old.filter(b => b.type === 'criteria');
+          if (sameCriteria(prior, fresh)) continue;
+          // A Criteria section may have been expanded or contracted in the Library.
+          // Replace only Criteria blocks, retaining each unrelated AOM block and its data.
+          let first = old.findIndex(b => b.type === 'criteria');
+          if (first < 0) continue;
+          const replacements = fresh.map((b, i) => ({
+            ...b, id: prior[i]?.id || b.id || ('criteria-' + i)
+          }));
+          const nextBlocks = old.filter(b => b.type !== 'criteria');
+          nextBlocks.splice(first, 0, ...replacements);
+          updates.push({ record:a, blocks:nextBlocks });
         }
-        if (!updates.length) { toast('No unchanged older criteria found to update. ' + skipped.length + ' customized/unmatched AOM(s) left untouched.', 'ok'); return; }
-        const yes = await confirmBox('Update Linked AOM Criteria',
-          'Update the Criteria only in ' + updates.length + ' linked AOM(s) to Active Library Version ' + active.version +
-          '? Their BAAR Part II reports will then use the corrected criteria. ' + skipped.length +
-          ' customized or unmatched AOM(s) will be left unchanged. Previously issued document files are not rewritten.', 'Update Criteria');
+        if (!updates.length) { toast('No linked AOM criteria require updating.', 'ok'); return; }
+        const finals = updates.filter(u => u.record.data.status === 'Final').length;
+        const yes = await confirmBox('Replace Linked AOM Criteria',
+          'Replace the Criteria in ' + updates.length + ' linked AOM(s) with Active Library Version ' + active.version +
+          '? ' + finals + ' Final AOM(s) will be affected. This overwrites any customized Criteria text, but preserves other AOM sections, review history and prior snapshots. ' +
+          'BAAR Part II will reflect the corrected wording after reopening. Previously issued signed/downloaded files are unchanged.',
+          'Replace Criteria');
         if (!yes) return;
         let done = 0;
         for (const u of updates) {
           const d = u.record.data, at = new Date().toISOString();
           await store.save('aoms', u.record.id, { ...d, blocks:u.blocks,
-            history:[...(d.history || []), { at, by:refs.me.email, action:'Criteria corrected from Active AOM Library Version ' + active.version }],
-            criteriaLibraryVersion:active.version }, { silent:true }); done++;
+            history:[...(d.history || []), { at, by:refs.me.email,
+              action:'Criteria replaced from Active AOM Library Version ' + active.version }],
+            criteriaLibraryVersion:active.version }, { silent:true });
+          done++;
         }
-        await store.log('updated AOM criteria from Library', active.code + ' · ' + done + ' AOM(s)', '', refs.me.email);
+        await store.log('replaced AOM criteria from Library', active.code + ' · ' + done + ' AOM(s)', '', refs.me.email);
         emitChange('local');
-        toast(done + ' AOM criteria updated. Reopen AOMs and BAAR Part II to view changes.', 'ok');
+        toast(done + ' AOM criteria updated. Reload AOMs and BAAR Part II.', 'ok');
       };
       if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
