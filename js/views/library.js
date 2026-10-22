@@ -86,7 +86,7 @@ export async function pool(refs, params, q) {
         <span><b>Version ${v.data.version}</b> · ${esc(v.data.note || '')}<br><small class="hint">${v.data.approvedAt ? 'Approved by ' + esc(userName(v.data.approvedBy)) + ' · ' + esc(longDate(v.data.approvedAt.slice(0, 10))) : 'Saved by ' + esc(userName(v.updatedBy))}</small></span>
         ${pill(v.data.status, STATUS_KIND[v.data.status])}</a>`).join('')}
       <div class="panel-body"><span class="hint">Used in ${usage[g.code] || 0} AOM${usage[g.code] === 1 ? '' : 's'}.</span>
-      ${canManage ? '<div class="btn-row"><button class="btn sm ghost" id="p-linkvariant">Set Variant Of…</button>' + (rec.data.status === 'Active' ? '<button class="btn sm ghost" id="p-variant">+ Make a Variant</button><button class="btn sm ghost" id="p-retire">Retire Template</button>' : '') + '</div>' : ''}</div>
+      ${canManage ? '<div class="btn-row"><button class="btn sm ghost" id="p-linkvariant">Set Variant Of…</button>' + (rec.data.status === 'Active' ? '<button class="btn sm ghost" id="p-variant">+ Make a Variant</button><button class="btn sm ghost" id="p-retire">Retire Template</button><button class="btn sm primary" id="p-sync-criteria">Update Linked AOM Criteria</button>' : '') + '</div>' : ''}</div>
     </section>` : '<section class="panel"><div class="empty">No templates yet.</div></section>';
 
   const body = `<div class="page-head"><div><h1>AOM Library</h1><p>The team's library of AOM templates. Only Active templates appear when selecting findings.</p></div>
@@ -155,6 +155,47 @@ export async function pool(refs, params, q) {
         await saveActiveVersion(g, { ...clone(rec.data), note: `Version ${rec.data.version} wording used again` }, refs);
         toast(`${rec.data.code} Version ${top + 1} is now Active.`, 'ok');
         location.hash = go(g.code, `obs-${g.code}-v${top + 1}`);
+      };
+      const syncCriteria = $('#p-sync-criteria', root);
+      if (syncCriteria) syncCriteria.onclick = async () => {
+        const active = g.active?.data;
+        if (!active || rec.data.status !== 'Active') return;
+        const fresh = (active.blocks || []).filter(b => b.type === 'criteria');
+        if (!fresh.length) { toast('The Active template has no Criteria block.', 'bad'); return; }
+        const versions = new Map(g.versions.map(v => [Number(v.data.version), v.data]));
+        const linked = (await store.list('aoms')).filter(a => !a.deleted && a.data.poolCode === active.code);
+        const updates = [], skipped = [];
+        const equivalent = b => JSON.stringify({ lead:b?.lead || '', text:b?.text || '', quoted:!!b?.quoted });
+        for (const a of linked) {
+          const previous = versions.get(Number(a.data.poolVersion));
+          const oldCriteria = (previous?.blocks || []).filter(b => b.type === 'criteria');
+          const current = (a.data.blocks || []).filter(b => b.type === 'criteria');
+          if (!previous || oldCriteria.length !== fresh.length || current.length !== fresh.length ||
+              current.some((b,i) => equivalent(b) !== equivalent(oldCriteria[i]))) {
+            skipped.push(a); continue;
+          }
+          if (current.every((b,i) => equivalent(b) === equivalent(fresh[i]))) continue;
+          let n = 0;
+          const blocks = a.data.blocks.map(b => b.type === 'criteria' ?
+            { ...b, lead: fresh[n].lead || '', text: fresh[n].text || '', quoted: !!fresh[n++].quoted } : b);
+          updates.push({ record:a, blocks });
+        }
+        if (!updates.length) { toast('No unchanged older criteria found to update. ' + skipped.length + ' customized/unmatched AOM(s) left untouched.', 'ok'); return; }
+        const yes = await confirmBox('Update Linked AOM Criteria',
+          'Update the Criteria only in ' + updates.length + ' linked AOM(s) to Active Library Version ' + active.version +
+          '? Their BAAR Part II reports will then use the corrected criteria. ' + skipped.length +
+          ' customized or unmatched AOM(s) will be left unchanged. Previously issued document files are not rewritten.', 'Update Criteria');
+        if (!yes) return;
+        let done = 0;
+        for (const u of updates) {
+          const d = u.record.data, at = new Date().toISOString();
+          await store.save('aoms', u.record.id, { ...d, blocks:u.blocks,
+            history:[...(d.history || []), { at, by:refs.me.email, action:'Criteria corrected from Active AOM Library Version ' + active.version }],
+            criteriaLibraryVersion:active.version }, { silent:true }); done++;
+        }
+        await store.log('updated AOM criteria from Library', active.code + ' · ' + done + ' AOM(s)', '', refs.me.email);
+        emitChange('local');
+        toast(done + ' AOM criteria updated. Reopen AOMs and BAAR Part II to view changes.', 'ok');
       };
       if (!editable) return;
       const dirty = () => setDirty(true, () => save(false));
