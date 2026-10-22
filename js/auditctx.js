@@ -39,8 +39,17 @@ export async function loadAudit(refs, auditId) {
     await compactActiveAomNumbers(auditId, refs.me.email);
   }
   const auditAoms = (await store.list('aoms')).filter((a) => a.data.auditId === auditId).sort((a, b) => (a.data.seq || 0) - (b.data.seq || 0));
+  // Use the currently approved Library Part II section across existing audit reports.
+  // This updates classification in all consumers of loadAudit without rewriting
+  // the historical, issued AOM wording or stored signed records.
+  const activeSections = new Map((await store.list('aom_library'))
+    .filter(t => !t.deleted && t.data.status === 'Active' && t.data.code && t.data.section)
+    .map(t => [String(t.data.code), t.data.section]));
   // Withdrawn findings are hidden from reports, but their locked AOM numbers remain reserved.
-  const aoms = auditAoms.filter((a) => a.data.status !== ST.WITHDRAWN);
+  const aoms = auditAoms.filter((a) => a.data.status !== ST.WITHDRAWN).map(a => {
+    const section = activeSections.get(String(a.data.poolCode || ''));
+    return section && section !== a.data.section ? { ...a, data: { ...a.data, section } } : a;
+  });
   const nums = numberAoms(aoms);
   const base = setupVars(audit, lgu, mun);
   const varsFor = (a) => {
