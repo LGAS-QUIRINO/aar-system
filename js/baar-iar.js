@@ -119,11 +119,10 @@ export function iarPrint(r, pages, startPage = 1) {
 /* ── Word: the Part I page, then the report with page numbers from page 2 ── */
 export async function iarSections(r, startPage = 1) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, AlignmentType, Footer, PageNumber, TabStopType } = D;
+  const { Paragraph, TextRun, ImageRun, Header, AlignmentType, Footer, PageNumber, TabStopType } = D;
   const F = 'Times New Roman';
   const load = async (src) => { try { return await (await fetch(src)).arrayBuffer(); } catch (e) { return null; } };
-  const seal = await load('img/lh-seal.jpg');
-  const nameplate = await load('img/lh-name.jpg');
+  const lh = await load('img/lh-central.png');
   const runs = (t, b) => {
     const out = []; let s = String(t || '');
     if (b) return [new TextRun({ text: s, font: F, size: 24, bold: true })];   // headings are never in italics
@@ -139,30 +138,7 @@ export async function iarSections(r, startPage = 1) {
   };
   const al = (a) => ({ c: AlignmentType.CENTER, j: AlignmentType.JUSTIFIED }[a] || AlignmentType.LEFT);
   const children = r.items.map((it) => {
-    if (it.k === 'lh') {
-      // Non-floating, side-by-side COA letterhead in the IAR itself.
-      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
-      const logoCell = (data, w, h, colWidth) => new TableCell({
-        width: { size: colWidth, type: WidthType.DXA },
-        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
-        verticalAlign: VerticalAlign.CENTER,
-        margins: { top: 0, bottom: 0, left: 0, right: 0 },
-        children: [new Paragraph({
-          alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 },
-          children: data ? [new ImageRun({ type: 'jpg', data, transformation: { width: w, height: h } })] : []
-        })]
-      });
-      return new Table({
-        width: { size: 6300, type: WidthType.DXA },
-        indent: { size: 950, type: WidthType.DXA },
-        columnWidths: [1600, 4700],
-        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideVertical: noBorder, insideHorizontal: noBorder },
-        rows: [new TableRow({ cantSplit: true, children: [
-          logoCell(seal, Math.round(1.1 * 96), Math.round(1.1 * 96), 1600),
-          logoCell(nameplate, Math.round(3.0 * 96), Math.round(.434 * 96), 4700)
-        ] })]
-      });
-    }
+    if (it.k === 'lh') return new Paragraph({ spacing: { after: 0 }, children: [] });
     if (it.k === 'bl') return new Paragraph({ spacing: { after: 0 }, keepNext: !!it.keep, children: [] });
     if (it.k === 'li') return new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 0 }, indent: { left: 360, hanging: 360 }, tabStops: [{ type: TabStopType.LEFT, position: 360 }], children: runs(`${it.n}.\t${it.t}`) });
     return new Paragraph({ alignment: al(it.al), spacing: { after: 0 }, keepNext: !!it.keep, keepLines: !!it.keep, children: runs(it.t, it.b) });
@@ -170,8 +146,15 @@ export async function iarSections(r, startPage = 1) {
   const page = { size: { width: 12240, height: 15840 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 2160, header: 720, footer: 720 } };
   const p1 = [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 4600, after: 480 }, children: [new TextRun({ text: r.part1[0].t, font: F, size: 48, bold: true })] }),
     new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: r.part1[1].t, font: F, size: 48, bold: true })] })];
+  // The original three-line COA artwork belongs to the first-page HEADER,
+  // not to the report body. It includes the address under the agency name.
+  const firstHeader = new Header({ children: [new Paragraph({
+    alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 },
+    children: lh ? [new ImageRun({ type: 'png', data: lh,
+      transformation: { width: Math.round(4 * 96), height: Math.round(1.2 * 96) } })] : []
+  })] });
   const num = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: F, size: 22 })] })] });
   return [{ properties: { page }, children: p1 },
-    { properties: { page: { ...page, pageNumbers: { start: startPage } }, titlePage: true }, footers: { default: num, first: new Footer({ children: [new Paragraph({ children: [] })] }) }, children }];
+    { properties: { page: { ...page, margin: { ...page.margin, header: 360, top: 1980 }, pageNumbers: { start: startPage } }, titlePage: true }, headers: { first: firstHeader }, footers: { default: num, first: new Footer({ children: [new Paragraph({ children: [] })] }) }, children }];
 }
 export async function iarWord(r) { await saveDocx(await iarSections(r), r.fileName, 'BAAR Independent Auditor’s Report'); }
