@@ -238,12 +238,25 @@ export async function transmittalSections(d, which) {
     const out = [];
     doc.items.forEach((it) => {
       if (it.k === 'lh') {
-        const k = [];
-        // The seal sits just left of the 3" name block, centered on the 6" text width (as on the AOM).
-        if (seal) k.push(new ImageRun({ type: 'jpg', data: seal, transformation: { width: Math.round(1.1 * 96), height: Math.round(1.1 * 96) },
-          floating: { horizontalPosition: { relative: HorizontalPositionRelativeFrom.MARGIN, offset: Math.round(0.28 * EMU) }, verticalPosition: { relative: VerticalPositionRelativeFrom.PARAGRAPH, offset: Math.round(-0.16 * EMU) }, wrap: { type: TextWrappingType.NONE }, allowOverlap: true, behindDocument: true } }));
-        if (name) k.push(new ImageRun({ type: 'jpg', data: name, transformation: { width: Math.round(3.0 * 96), height: Math.round(0.434 * 96) } }));
-        out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 230, after: 0 }, children: k }));
+        // Keep the seal and nameplate in the text flow, side by side.
+        // A floating image behind text can drift and overlap when Word repaginates.
+        const logoCell = (data, width, height, colWidth) => new TableCell({
+          width: { size: colWidth, type: WidthType.DXA },
+          borders: { top: none, bottom: none, left: none, right: none },
+          verticalAlign: VerticalAlign.CENTER,
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          children: [new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 },
+            children: data ? [new ImageRun({ type: 'jpg', data, transformation: { width, height } })] : [] })]
+        });
+        out.push(new Table({
+          width: { size: 6050, type: WidthType.DXA }, indent: { size: 1250, type: WidthType.DXA },
+          columnWidths: [1640, 4410],
+          borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+          rows: [new TableRow({ cantSplit: true, children: [
+            logoCell(seal, Math.round(1.1 * 96), Math.round(1.1 * 96), 1640),
+            logoCell(name, Math.round(3.0 * 96), Math.round(0.434 * 96), 4410)
+          ] })]
+        }));
       } else if (it.k === 'bl') out.push(P('', { keep: it.keep }));
       else if (it.k === 'aapsi') out.push(aapsi(it.rows));
       else if (it.k === 'sign') out.push(sign());
