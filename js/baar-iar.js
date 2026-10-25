@@ -119,10 +119,11 @@ export function iarPrint(r, pages, startPage = 1) {
 /* ── Word: the Part I page, then the report with page numbers from page 2 ── */
 export async function iarSections(r, startPage = 1) {
   const D = await loadScript('lib/docx.min.js', 'docx');
-  const { Paragraph, TextRun, ImageRun, AlignmentType, Footer, PageNumber, TabStopType } = D;
+  const { Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, BorderStyle, VerticalAlign, AlignmentType, Footer, PageNumber, TabStopType } = D;
   const F = 'Times New Roman';
   const load = async (src) => { try { return await (await fetch(src)).arrayBuffer(); } catch (e) { return null; } };
-  const lh = await load('img/lh-central.png');
+  const seal = await load('img/lh-seal.jpg');
+  const nameplate = await load('img/lh-name.jpg');
   const runs = (t, b) => {
     const out = []; let s = String(t || '');
     if (b) return [new TextRun({ text: s, font: F, size: 24, bold: true })];   // headings are never in italics
@@ -138,7 +139,30 @@ export async function iarSections(r, startPage = 1) {
   };
   const al = (a) => ({ c: AlignmentType.CENTER, j: AlignmentType.JUSTIFIED }[a] || AlignmentType.LEFT);
   const children = r.items.map((it) => {
-    if (it.k === 'lh') return new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: lh ? [new ImageRun({ type: 'png', data: lh, transformation: { width: 4 * 96, height: 1.2 * 96 } })] : [] });
+    if (it.k === 'lh') {
+      // Non-floating, side-by-side COA letterhead in the IAR itself.
+      const noBorder = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+      const logoCell = (data, w, h, colWidth) => new TableCell({
+        width: { size: colWidth, type: WidthType.DXA },
+        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        children: [new Paragraph({
+          alignment: AlignmentType.CENTER, spacing: { before: 0, after: 0 },
+          children: data ? [new ImageRun({ type: 'jpg', data, transformation: { width: w, height: h } })] : []
+        })]
+      });
+      return new Table({
+        width: { size: 6300, type: WidthType.DXA },
+        indent: { size: 950, type: WidthType.DXA },
+        columnWidths: [1600, 4700],
+        borders: { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder, insideVertical: noBorder, insideHorizontal: noBorder },
+        rows: [new TableRow({ cantSplit: true, children: [
+          logoCell(seal, Math.round(1.1 * 96), Math.round(1.1 * 96), 1600),
+          logoCell(nameplate, Math.round(3.0 * 96), Math.round(.434 * 96), 4700)
+        ] })]
+      });
+    }
     if (it.k === 'bl') return new Paragraph({ spacing: { after: 0 }, keepNext: !!it.keep, children: [] });
     if (it.k === 'li') return new Paragraph({ alignment: AlignmentType.JUSTIFIED, spacing: { after: 0 }, indent: { left: 360, hanging: 360 }, tabStops: [{ type: TabStopType.LEFT, position: 360 }], children: runs(`${it.n}.\t${it.t}`) });
     return new Paragraph({ alignment: al(it.al), spacing: { after: 0 }, keepNext: !!it.keep, keepLines: !!it.keep, children: runs(it.t, it.b) });
