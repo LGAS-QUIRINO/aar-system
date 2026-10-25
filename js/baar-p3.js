@@ -255,9 +255,9 @@ export async function p3Sections(d, start) {
   const W = W_IN.map((w) => Math.round(w * 1440));
   const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
   const RULE = { style: BorderStyle.SINGLE, size: 6, color: '000000' };
-  const cell = (kids, i, bd, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids, borders: bd && Object.fromEntries(Object.entries(bd).filter(([edge]) => edge !== 'top' && edge !== 'bottom')), verticalAlign: o.va, margins: { top: 40, bottom: 40, left: 70, right: 70 } });
+  const cell = (kids, i, bd, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids, borders: bd && Object.fromEntries(Object.entries(bd).filter(([edge]) => edge === 'bottom' && bd.bottom === RULE)), verticalAlign: o.va, margins: { top: 40, bottom: 40, left: 70, right: 70 } });
   const rows = [new TableRow({ cantSplit: true, tableHeader: true, children: ['Reference', 'Observations and Recommendations', 'Status of Implementation', 'Management Action', 'Reason for Partial/Non – Implementation']
-    .map((h, i) => cell([P(h, { b: true, al: AlignmentType.CENTER, size: 22 })], i, undefined, { va: VerticalAlign.CENTER })) })];
+    .map((h, i) => cell([P(h, { b: true, al: AlignmentType.CENTER, size: 22 })], i, { bottom: RULE }, { va: VerticalAlign.CENTER })) })];
   const J = AlignmentType.JUSTIFIED;
   d.rows.forEach((r, i) => {
     const prev = d.rows[i - 1], next = d.rows[i + 1];
