@@ -256,7 +256,7 @@ export async function p3Sections(d, start) {
   const NONE = { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
   const RULE = { style: BorderStyle.SINGLE, size: 6, color: '000000' };
   const cell = (kids, i, bd, o = {}) => new TableCell({ width: { size: W[i], type: WidthType.DXA }, children: kids, borders: bd && Object.fromEntries(Object.entries(bd).filter(([edge]) => edge !== 'top' && edge !== 'bottom')), verticalAlign: o.va, margins: { top: 40, bottom: 40, left: 70, right: 70 } });
-  const rows = [new TableRow({ cantSplit: true, children: ['Reference', 'Observations and Recommendations', 'Status of Implementation', 'Management Action', 'Reason for Partial/Non – Implementation']
+  const rows = [new TableRow({ cantSplit: true, tableHeader: true, children: ['Reference', 'Observations and Recommendations', 'Status of Implementation', 'Management Action', 'Reason for Partial/Non – Implementation']
     .map((h, i) => cell([P(h, { b: true, al: AlignmentType.CENTER, size: 22 })], i, undefined, { va: VerticalAlign.CENTER })) })];
   const J = AlignmentType.JUSTIFIED;
   d.rows.forEach((r, i) => {
@@ -282,8 +282,8 @@ export async function p3Sections(d, start) {
       W.map((_, col) => cell([new Paragraph({ keepNext: true, children: [R('')] })], col, { top: NONE, bottom: NONE })) }));
     recKids.push(new Paragraph({ alignment: J, keepLines: true, spacing: { before: 0 }, indent: { left: 360, hanging: 360, right: 0 }, children: [R(`${r.n}.\t${t0}`)], tabStops: [{ type: 'left', position: 360 }] }));
     rest.filter((x) => x.trim()).forEach((x) => recKids.push(P(x, { al: J, ind: { left: 360, right: 0 } })));
-    // Keep the whole recommendation and its three implementation fields on one Word page when possible.
-    rows.push(new TableRow({ cantSplit: true, children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
+    // Allow lengthy recommendation/action rows to flow to the next page; topic sentences remain unsplit.
+    rows.push(new TableRow({ children: [cell([P('')], 0, bd), cell(recKids, 1, bd), cell([P(P3_STATUS[r.status] || '')], 2, bd), cell(ps(r.action, { al: J }), 3, bd), cell(ps(r.reason, { al: J }), 4, bd)] }));
   });
   const margin = { top: 1440, right: 720, bottom: 1440, left: 1800, header: 0, footer: 720 };
   const size = { width: 12240, height: 15840 };
@@ -293,6 +293,6 @@ export async function p3Sections(d, start) {
     { properties: { page: { size, margin, pageNumbers: start ? { start } : undefined } }, footers: start ? { default: footer } : undefined,
       children: [P('STATUS OF IMPLEMENTATION OF PRIOR YEARS’ AUDIT', { b: true, al: AlignmentType.CENTER }), P('RECOMMENDATIONS', { b: true, al: AlignmentType.CENTER, after: 240 }),
         new Paragraph({ alignment: J, indent: { firstLine: 720 }, spacing: { after: 240 }, children: [R(d.opening)] }),
-        new Table({ layout: TableLayoutType.FIXED, indent: { size: 0, type: WidthType.DXA }, width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { top: RULE, bottom: RULE, left: RULE, right: RULE, insideVertical: RULE, insideHorizontal: NONE }, rows })] }
+        new Table({ layout: TableLayoutType.FIXED, indent: { size: 0, type: WidthType.DXA }, width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { top: RULE, bottom: RULE, left: RULE, right: RULE, insideVertical: RULE, insideHorizontal: RULE }, rows })] }
   ];
 }
