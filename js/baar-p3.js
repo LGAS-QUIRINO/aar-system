@@ -293,6 +293,6 @@ export async function p3Sections(d, start) {
     { properties: { page: { size, margin, pageNumbers: start ? { start } : undefined } }, footers: start ? { default: footer } : undefined,
       children: [P('STATUS OF IMPLEMENTATION OF PRIOR YEARS’ AUDIT', { b: true, al: AlignmentType.CENTER }), P('RECOMMENDATIONS', { b: true, al: AlignmentType.CENTER, after: 240 }),
         new Paragraph({ alignment: J, indent: { firstLine: 720 }, spacing: { after: 240 }, children: [R(d.opening)] }),
-        new Table({ layout: TableLayoutType.FIXED, indent: { size: 0, type: WidthType.DXA }, width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { top: RULE, bottom: RULE, left: RULE, right: RULE, insideVertical: RULE, insideHorizontal: RULE }, rows })] }
+        new Table({ layout: TableLayoutType.FIXED, indent: { size: 0, type: WidthType.DXA }, width: { size: W.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: W, borders: { top: RULE, bottom: RULE, left: RULE, right: RULE, insideVertical: RULE, insideHorizontal: NONE }, rows })] }
   ];
 }
