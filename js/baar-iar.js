@@ -155,6 +155,6 @@ export async function iarSections(r, startPage = 1) {
   })] });
   const num = new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: [PageNumber.CURRENT], font: F, size: 22 })] })] });
   return [{ properties: { page }, children: p1 },
-    { properties: { page: { ...page, margin: { ...page.margin, header: 360, top: 1980 }, pageNumbers: { start: startPage } }, titlePage: true }, headers: { first: firstHeader }, footers: { default: num, first: new Footer({ children: [new Paragraph({ children: [] })] }) }, children }];
+    { properties: { page: { ...page, margin: page.margin, pageNumbers: { start: startPage } }, titlePage: true }, headers: { first: firstHeader }, footers: { default: num, first: new Footer({ children: [new Paragraph({ children: [] })] }) }, children }];
 }
 export async function iarWord(r) { await saveDocx(await iarSections(r), r.fileName, 'BAAR Independent Auditor’s Report'); }
