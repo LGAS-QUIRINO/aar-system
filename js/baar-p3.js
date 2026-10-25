@@ -268,7 +268,7 @@ export async function p3Sections(d, start) {
       rows.push(new TableRow({ cantSplit: true, children: [cell([P(`${r.sourceKind === 'aom' ? 'AOM No. ' + (r.aomRef || r.obsNo) : 'BAAR CY ' + r.year}`, { al: AlignmentType.CENTER, keep: true }), P(`${r.sourceKind === 'aom' ? '' : 'Observation No. ' + r.obsNo}`, { al: AlignmentType.CENTER, keep: true })], 0, bd),
         cell(ps(r.obs, { b: true, al: J }), 1, bd), cell([P('')], 2, bd), cell([P('')], 3, bd), cell([P('')], 4, bd)] }));
     }
-    const bd = same(r, next) ? { top: NONE, bottom: NONE } : { top: NONE };
+    const bd = same(r, next) ? { top: NONE, bottom: NONE } : { bottom: RULE }; // Close each completed observation/AOM set.
     const [t0, ...rest] = String(r.text || '').split('\n');
     const recKids = [];
     if (!same(prev, r) && r.lead) rows.push(new TableRow({ cantSplit: true, children: [
